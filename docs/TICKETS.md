@@ -426,4 +426,13 @@ Every staff screen is now a real one. The holding page is gone.
 
 The engine's log lines use several retired words ("quiet hours", "queue", "handoff", "outreach", "review"). The Hound screen and the client page show them in the product's vocabulary; the engine text is unchanged.
 
+### Step 12: getting ready to deploy (same day)
+
+| Ticket | State |
+|---|---|
+| Hand-off with no storage connected | Done. "Hand off files" saves a zip of the accepted documents under their filed names, with a plain list of what is in it and what is still missing. Building the zip is the hand-off: it starts the keep-for clock and is in the audit trail. Before this the button listed the files and gave the firm nothing |
+| T-11 File storage | The bucket adapter is written (`apps/server/src/bucket.ts`, any S3-compatible store) and tested against a stand-in. Production refuses to start without `S3_BUCKET`. Not run against a real bucket |
+| T-02 Hosting | `Dockerfile` and `docs/DEPLOY.md` written. The image's steps were rehearsed by hand (clean install, build, prune, start in production mode on an empty Postgres) and pass. The image itself has not been built and nothing is hosted |
+| Found by the rehearsal | `pg` was a development-only package, so a production install could not start. Moved to runtime dependencies |
+
 Home's buttons for adding a client, the check-in for everyone, a checklist for everyone and starting are now live. Still left out: text registration, the heads-up wording, storage. Next in order: Clients list and add one client (T-16, T-38, T-56), the client page (T-16), the document viewer (T-17), conversation and approvals (T-18).

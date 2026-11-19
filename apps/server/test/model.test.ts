@@ -138,3 +138,13 @@ test("T-10: with the API key pulled, messages still go out, in the standard word
   assert.ok(T.S.msgs.filter((m: { dir: string }) => m.dir === "out").every((m: { ai?: boolean }) => !m.ai), "none of it was written by the model");
   assert.ok(T.S.hlog.some((h: { text?: string; what?: string }) => /standard wording/.test(JSON.stringify(h))), "and the log says why");
 });
+
+test("T-11: the bucket adapter puts sealed bytes with encryption asked for, returns null for a missing file, and deletes", async () => {
+  const { s3Bucket } = await import("../src/bucket.ts"); const held = new Map<string, Buffer>(), seen: { name: string; input: Record<string, unknown> }[] = [];
+  const client = { async send(cmd: unknown) { const c = cmd as { constructor: { name: string }; input: Record<string, unknown> }, k = String(c.input.Key); seen.push({ name: c.constructor.name, input: c.input });
+    if (c.constructor.name === "PutObjectCommand") { held.set(k, c.input.Body as Buffer); return {}; } if (c.constructor.name === "DeleteObjectCommand") { held.delete(k); return {}; }
+    if (!held.has(k)) throw Object.assign(new Error("gone"), { name: "NoSuchKey" }); return { Body: { transformToByteArray: async () => new Uint8Array(held.get(k)!) } }; } };
+  const b = s3Bucket({ bucket: "th-files", client }); await b.put("f1/abc", Buffer.from("sealed"), "image/jpeg");
+  assert.equal(seen[0]!.input.Bucket, "th-files"); assert.equal(seen[0]!.input.ServerSideEncryption, "AES256"); assert.equal(seen[0]!.input.ContentType, "application/octet-stream", "the real type is kept in the database, not on the object");
+  assert.equal((await b.get("f1/abc"))!.toString(), "sealed"); assert.equal(await b.get("f1/missing"), null); await b.del("f1/abc"); assert.equal(await b.get("f1/abc"), null); await b.del("f1/abc");
+});

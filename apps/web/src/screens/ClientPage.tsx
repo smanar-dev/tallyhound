@@ -232,7 +232,7 @@ function Details({ T, c }: Ctx) {
 }
 
 export function ClientPage() {
-  const { T, can, act, toast } = useFirm(), { id } = useParams(), [params, setParams] = useSearchParams(), e = id ? T.eng(id) : null, c = e ? T.client(e.clientId) : null;
+  const { T, can, act, toast, reload } = useFirm(), { id } = useParams(), [params, setParams] = useSearchParams(), e = id ? T.eng(id) : null, c = e ? T.client(e.clientId) : null;
   const [handOff, setHandOff] = useState<{ folder: string; files: string[]; missing: string[] } | null>(null), [purge, setPurge] = useState(false), [typed, setTyped] = useState("");
   if (!e || !c) return <Page title="Client"><div className="card"><Empty><b>That client is not on your list.</b><br />They may have been removed, or the address is wrong.<br /><Link className="btn" style={{ marginTop: 12 }} to="/clients">Back to Clients</Link></Empty></div></Page>;
   const s = T.S, p = T.progress(e.id), u = s.users.find((x: Row) => x.id === c.preparer), docs = s.docs.filter((d: Row) => d.engId === e.id).length, msgs = s.msgs.filter((m: Row) => m.engId === e.id && m.status !== "discarded").length, rc = T.recommend(e.id).add.length;
@@ -241,7 +241,12 @@ export function ClientPage() {
   // The viewer opens over the page and its address says which document, so a link to it can be shared with a colleague at the firm.
   const docIds: string[] = s.docs.filter((d: Row) => d.engId === e.id).sort((a: Row, b: Row) => a.at - b.at).map((d: Row) => d.id), viewing = params.get("doc");
   const openDoc = (did: string | null) => { const n = new URLSearchParams(params); if (did) n.set("doc", did); else n.delete("doc"); setParams(n); };
-  const doHandOff = async () => { try { setHandOff((await act("deliver", e.id)) as { folder: string; files: string[]; missing: string[] }); } catch { /* said */ } };
+  // With storage connected the files are filed there. Without it, the hand-off is a zip saved to this computer.
+  const zip = !s.firm.delivery || !s.firm.delivery.provider || s.firm.delivery.provider === "Download";
+  const doHandOff = async () => {
+    try { if (zip) { const r = await api.handOffZip(e.id); await reload(); toast(r.files ? plural(r.files, "file") + " saved as a zip." + (r.missing ? " " + plural(r.missing, "document") + " still missing: the list is inside." : "") + " Tallyhound's copies are deleted " + (T.retain().afterDelivery ? "in " + T.retain().afterDelivery + " days." : "now.") : "No accepted documents yet, so there is nothing to hand off."); }
+      else setHandOff((await act("deliver", e.id)) as { folder: string; files: string[]; missing: string[] }); } catch (err) { if (zip) toast((err as Error).message); }
+  };
   const consent = ({ given: ["Texts on", "good"], invited: ["Invited", "info"], withdrawn: ["Opted out", "bad"], none: ["Not OK to text yet", ""] } as Record<string, [string, string]>)[c.textConsent] || ["", ""];
   return <Page title={cname(c)}>
     <div><Link className="btn ghost sm" to="/clients"><Icon name="l" small />Clients</Link></div>

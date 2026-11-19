@@ -32,6 +32,16 @@ export const api = {
     if (!res.ok) throw new ApiError(res.status, j.error || "error", j.message || "That file could not be added.");
     return { ok: true, docs: j.docs || [] };
   },
+  /** Hands off one client's finished files as a zip and saves it. Resolves with how many files it held and how many documents are still missing. */
+  async handOffZip(engId: string): Promise<{ files: number; missing: number }> {
+    let res: Response;
+    try { res = await fetch("/api/clients/" + encodeURIComponent(engId) + "/files.zip", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-tallyhound": "1" }, body: "{}" }); }
+    catch { throw new ApiError(0, "offline", "Tallyhound could not be reached. Check your connection and try again."); }
+    if (!res.ok) { const j = (await res.json().catch(() => ({}))) as { error?: string; message?: string }; throw new ApiError(res.status, j.error || "error", j.message || "The files could not be handed off."); }
+    const blob = await res.blob(), name = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") || "")?.[1] || "files.zip", url = URL.createObjectURL(blob), a = document.createElement("a");
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 10000);
+    return { files: +(res.headers.get("x-tallyhound-files") || 0), missing: +(res.headers.get("x-tallyhound-missing") || 0) };
+  },
   post: <T,>(path: string, body?: unknown) => call<T>("POST", path, body),
   get: <T,>(path: string) => call<T>("GET", path),
   del: <T,>(path: string) => call<T>("DELETE", path)

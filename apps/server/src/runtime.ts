@@ -12,6 +12,7 @@ import { createFirms } from "./firms.ts";
 import { createInbox, postgresQueue } from "./queue.ts";
 import { handlers } from "./hooks.ts";
 import { prepareOpts } from "./files.ts";
+import { s3Bucket } from "./bucket.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const env = (k: string) => (process.env[k] || "").trim();
@@ -29,7 +30,10 @@ export function runtime() {
   const production = env("NODE_ENV") === "production", appUrl = env("APP_URL") || "http://localhost:" + (env("PORT") || "3000");
   const pool = new pg.Pool({ connectionString: need("DATABASE_URL"), max: 10 });
   const keyring = kitCrypto.localKeyring(need("TH_MASTER_KEY"));   // T-102 replaces this with the cloud key service
-  const store = trackFirm(kitCrypto.encryptedStore(kitPostgres.postgresStore(pool, diskBucket(env("TH_FILES_DIR") || join(ROOT, ".data/files"))), keyring));
+  // Files: a private S3-compatible bucket when S3_BUCKET is set. Local disk otherwise, which production refuses.
+  if (production && !env("S3_BUCKET")) throw new Error("Set S3_BUCKET: production keeps files in a private bucket, not on the server's disk");
+  const bucket = env("S3_BUCKET") ? s3Bucket({ bucket: env("S3_BUCKET"), region: env("S3_REGION") || undefined, endpoint: env("S3_ENDPOINT") || undefined }) : diskBucket(env("TH_FILES_DIR") || join(ROOT, ".data/files"));
+  const store = trackFirm(kitCrypto.encryptedStore(kitPostgres.postgresStore(pool, bucket), keyring));
   const auth = postgresAuthStore(pool), clock = () => new Date();
   // Ids and outcomes only. The kit names an unconfirmed sender when it logs one; an address never reaches the log.
   const log = (event: string, ...ids: unknown[]) => console.log(JSON.stringify({ at: new Date().toISOString(), event, ids: ids.map((v) => (typeof v === "string" && v.includes("@") ? "[address]" : v)) }));

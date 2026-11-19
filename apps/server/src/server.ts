@@ -3,9 +3,10 @@
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import cookie from "@fastify/cookie";
 import QRCode from "qrcode";
+import { strToU8, zipSync } from "fflate";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { extname, join } from "node:path";
-import type { App, Engine, Role } from "./kit.ts";
+import { createEngine, type App, type Engine, type Role } from "./kit.ts";
 import type { AuthStore, Session, User } from "./authstore.ts";
 import { SignInError, type SignIn } from "./signin.ts";
 import { FirmError, type Firms } from "./firms.ts";
@@ -18,6 +19,7 @@ import type { PrepareOpts } from "./kit.ts";
 export interface ServerDeps {
   app: App; auth: AuthStore; signIn: SignIn; firms: Firms;
   readState(firmId: string): Promise<string | null>;
+  getFile(firmId: string, key: string): Promise<{ bytes: Buffer; contentType: string } | null>;
   appUrl: string; secureCookies: boolean; webDir: string; prepare?: PrepareOpts;
   /** The client's own pages. Present whenever there is a queue to put uploads on. */
   clientPages?: Omit<PublicDeps, "app" | "auth" | "log">;
@@ -133,6 +135,24 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
     if (!file) return reply.code(404).send({ error: "no_file", message: "Tallyhound no longer holds a copy of that document." });
     const shown = SHOWN.includes(file.contentType);
     return reply.header("content-security-policy", "default-src 'none'; sandbox").header("content-disposition", shown ? "inline" : "attachment").type(shown ? file.contentType : "application/octet-stream").send(file.bytes);
+  });
+
+  // Hand off one client's finished files as a zip, for a firm with no storage connected. Building the zip IS the hand-off: the
+  // documents are marked as handed off (which starts the keep-for clock) and the audit trail says who took them. A POST from our
+  // own page, never a link, so another site cannot set that clock running.
+  f.post("/api/clients/:id/files.zip", { preHandler: full }, async (req, reply) => {
+    const u = req.who!.user, eid = (req.params as { id: string }).id; if (u.role === "read_only") return reply.code(403).send({ error: "role", message: NO.read_only });
+    const json = await d.readState(u.firmId), T0 = createEngine(); if (!json) return reply.code(404).send({ error: "no_firm", message: "This firm's workspace could not be found." }); T0.load(json);
+    if (!T0.eng(eid)) return reply.code(404).send({ error: "no_client", message: "That client is not on your list." });
+    // The bytes are read first, while Tallyhound certainly still holds them; then the hand-off is recorded.
+    const held: Record<string, Buffer> = {}; for (const x of T0.S.docs.filter((x: { engId: string; state: string; fileKey?: string }) => x.engId === eid && x.state === "accepted" && x.fileKey && T0.hasContent(x))) { const got = await d.getFile(u.firmId, x.fileKey); if (got) held[x.id] = got.bytes; }
+    const r = await d.app.staff(u.firmId, u.id, (T: Engine) => { const docs = T.S.docs.filter((x: { engId: string; state: string }) => x.engId === eid && x.state === "accepted" && T.hasContent(x)), out = T.deliver(eid); return { ids: docs.map((x: { id: string }) => x.id), files: out.files as string[], manifest: out.manifest as string, missing: out.missing as string[], folder: out.folder as string }; });
+    const entries: Record<string, Uint8Array> = {}, lines: string[] = [];
+    r.ids.forEach((id: string, i: number) => { const b = held[id]; if (!b) return; const ext = b[0] === 0xff && b[1] === 0xd8 ? ".jpg" : b.subarray(0, 4).toString("latin1") === "\x89PNG" ? ".png" : ".pdf", name = r.files[i]!.replace(/\.pdf$/i, "").replace(/[\\/:*?"<>|]/g, " ").trim() + ext; entries[name] = new Uint8Array(b); lines.push(name); });
+    entries["What is in this folder.txt"] = strToU8("Handed off from Tallyhound\n" + r.folder + "\n\nFiles\n" + (lines.length ? lines.map((x) => "  " + x).join("\n") : "  None yet") + "\n\nStill missing\n" + (r.missing.length ? r.missing.map((x) => "  " + x).join("\n") : "  Nothing: every document is in or waived") + "\n");
+    entries["manifest.csv"] = strToU8(r.manifest + "\n");
+    const zip = Buffer.from(zipSync(entries, { level: 0 })), safe = r.folder.split("/").slice(-2).reverse().join(" ").replace(/[^A-Za-z0-9 ,._-]/g, "").trim() || "files";
+    return reply.header("content-disposition", 'attachment; filename="' + safe + '.zip"').header("x-tallyhound-files", String(lines.length)).header("x-tallyhound-missing", String(r.missing.length)).type("application/zip").send(zip);
   });
 
   // ---- people at the firm (owner only for changes) ----

@@ -11,7 +11,7 @@ const applied = await migrate(R.pool); if (applied.length) R.log("migrated", ...
 const worker = createWorker({ app: R.app, auth: R.auth, clock: R.clock, log: R.log, inbox: R.inbox });
 if (role !== "web") { worker.start(); worker.watchQueue(); }
 if (role !== "worker") {
-  const server = await buildServer({ app: R.app, auth: R.auth, signIn: R.signIn, firms: R.firms, readState: (id) => R.store.readState(id), appUrl: R.appUrl, secureCookies: R.appUrl.startsWith("https:"),
+  const server = await buildServer({ app: R.app, auth: R.auth, signIn: R.signIn, firms: R.firms, readState: (id) => R.store.readState(id), getFile: (id, key) => R.store.getFile(id, key), appUrl: R.appUrl, secureCookies: R.appUrl.startsWith("https:"),
     webDir: join(dirname(fileURLToPath(import.meta.url)), "../../web/dist"), log: R.log, hooks: R.hooks, prepare: R.prepare, clientPages: { store: R.store, inbox: R.inbox, clock: R.clock }, health: async () => ({ worker: role === "web" ? "separate" : worker.status, queue: await R.inbox.counts() }) });
   await server.listen({ port: +(process.env.PORT || 3000), host: "0.0.0.0" }); R.log("listening", R.appUrl);
 }

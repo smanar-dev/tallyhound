@@ -34,7 +34,8 @@ Every document must pass three checks, and `T.verdict(doc)` is the only place th
 - `apps/web` the staff web app (React, built with Vite into `apps/web/dist`, which the web service serves). The engine runs in the browser as a read-only model of the firm's state (`src/lib/firm.tsx`), so every status, count and check on screen is the engine's own; every change is one call to `/api/act`. Never set HTML from data and never add an inline script: `apps/web/e2e/rules.test.ts` plants a payload in every stored field and visits every screen. Add each new screen's address to `ROUTES` there. Words on screen follow the vocabulary in `docs/UX.md`; the same file checks them
 - `db/schema.sql` the Postgres schema; later changes go in `db/migrations`, applied by `npm run admin -- migrate`
 - `reference/artifact` the working demo: use it as the design and behavior reference for every screen
-- `docs` launch plan and tickets
+- `docs` launch plan and tickets. `docs/DEPLOY.md` lists every setting a host needs
+- `Dockerfile` one image for the web service and the timer
 
 ## Known gaps in the engine (each has a ticket)
 - Time: the engine reads hours off its own clock, which must be the firm's wall time. `pipeline.wallTime` converts when `firm.iana` is set. Set it for every production firm. Each client can have a US zone (`T.setZone`); sending hours are judged on the client's clock. Offsets are fixed hour differences, so Arizona and Hawaii are an hour off during daylight saving (T-47).

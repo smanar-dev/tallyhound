@@ -20,7 +20,7 @@ Working code and a plan to take Tallyhound from demo to pilot firms by January 1
 | Staff web app (`apps/web`) | Started in round 16, in React: sign-in, the shell and Home, with 8 browser tests that drive the real service, including an injection sweep and the vocabulary check on every screen. The other screens show a holding page. See `apps/web/README.md`. |
 | The rest of the screens, provider accounts, file bucket, hosting | Not built. See the tickets. |
 
-Run the tests: `npm install` once (one test-only package, an in-process Postgres emulator), then `npm test`. Node 22.18 or later. `npm run check` adds the type check, lint, the web build and 25 browser tests. 273 tests, plus thirty-two that run against a real Postgres when DATABASE_URL is set (the three kit ones passed on PostgreSQL 18 on November 19; all thirty-two passed on PostgreSQL 16 on November 19). `npm run fuzz` runs 200 random seasons; `npm run scale` prints size and timing at 150, 500 and 1,000 clients.
+Run the tests: `npm install` once (one test-only package, an in-process Postgres emulator), then `npm test`. Node 22.18 or later. `npm run check` adds the type check, lint, the web build and 30 browser tests. 276 tests, plus thirty-four that run against a real Postgres when DATABASE_URL is set (the three kit ones passed on PostgreSQL 18 on November 19; all thirty-four passed on PostgreSQL 16 on November 19). `npm run fuzz` runs 200 random seasons; `npm run scale` prints size and timing at 150, 500 and 1,000 clients.
 
 ## How it fits together
 

@@ -44,7 +44,7 @@ export async function build(kind: "memory" | "postgres" = "memory", opt: { ai?: 
   const links: { to: string; url: string }[] = [];
   const signIn = createSignIn({ auth, secrets: firmSecrets(store, keyring, kitCrypto), mailer: { async signInLink(to, url) { links.push({ to, url }); } }, linkSecret: "test-secret", appUrl: APP, clock });
   const firms = createFirms({ app, auth, linkHost: "go.tallyhound.test" }), worker = createWorker({ app, auth, clock, inbox });
-  const server = await buildServer({ app, auth, signIn, firms, readState: (id) => store.readState(id), appUrl: APP, secureCookies: APP.startsWith("https:"), webDir: join(HERE, "../../web/dist"), prepare: opt.prepare, clientPages: { store, inbox, clock }, hooks: { store, inbox, twilioAuthToken: TWILIO_TOKEN, postmarkHook: PM } });
+  const server = await buildServer({ app, auth, signIn, firms, readState: (id) => store.readState(id), getFile: (id, key) => store.getFile(id, key), appUrl: APP, secureCookies: APP.startsWith("https:"), webDir: join(HERE, "../../web/dist"), prepare: opt.prepare, clientPages: { store, inbox, clock }, hooks: { store, inbox, twilioAuthToken: TWILIO_TOKEN, postmarkHook: PM } });
 
   // A browser: keeps its cookie, sends the header our pages send.
   function browser() {

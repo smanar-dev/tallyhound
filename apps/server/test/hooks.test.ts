@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { build, KINDS, type Harness } from "./harness.ts";
 import { createEngine, kitMemory, type Engine, type PrepareOpts } from "../src/kit.ts";
 import { RETRY_AFTER_S } from "../src/queue.ts";
+import { strFromU8, unzipSync } from "fflate";
 
 const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(40000, 7)]), PDF = Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.alloc(30000, 32)]);
 const FIRM_NO = "+16155550101", JO = "+16155550111", INBOX = "test1@docs.tallyhound.test";
@@ -138,6 +139,19 @@ for (const kind of KINDS) {
     assert.equal((await H.server.inject({ method: "GET", url: "/api/documents/" + d.id + "/file", headers: { cookie: b.cookie() } })).statusCode, 404, "another firm's staff cannot open it");
     assert.equal((await H.server.inject({ method: "GET", url: "/api/documents/" + d.id + "/file" })).statusCode, 401);
     assert.ok((await H.state()).S.audit.some((x: { action: string }) => x.action === "doc.view"), "every view is in the firm's audit trail");
+    await H.close();
+  });
+
+  test(name("hand-off with no storage connected: the accepted files come as a zip with their filed names and a list of what is missing"), async () => {
+    const H = await firmWithJo(kind); await H.twilioPost("/hooks/twilio", mms(H, "MM1")); await H.inbox.drain(); const owner = await H.signInAs("pat1@firm1.test"), T0 = await H.state(), eid = T0.S.engs[0].id;
+    await owner.post("/api/users", { name: "Sam Reader", email: "sam@firm1.test", role: "read_only" }); const reader = await H.signInAs("sam@firm1.test");
+    const zip = (who: typeof owner, id = eid, headers: Record<string, string> = { "x-tallyhound": "1" }) => H.server.inject({ method: "POST", url: "/api/clients/" + id + "/files.zip", payload: "{}", headers: { "content-type": "application/json", cookie: who.cookie(), ...headers } });
+    assert.equal((await zip(reader)).statusCode, 403); assert.equal((await zip(owner, eid, {})).statusCode, 403, "not from a link on another site"); assert.equal((await zip(owner, "nobody")).statusCode, 404);
+    assert.equal((await H.state()).S.engs[0].delivered, undefined, "none of those handed anything off");
+    const r = await zip(owner); assert.equal(r.statusCode, 200); assert.equal(r.headers["content-type"], "application/zip"); assert.match(String(r.headers["content-disposition"]), /attachment; filename="Day, Jo 2026\.zip"/);
+    const files = unzipSync(new Uint8Array(r.rawPayload)), names = Object.keys(files).sort(); assert.deepEqual(names, ["Day_Jo_2026_W2_Acme-Logistics.jpg", "What is in this folder.txt", "manifest.csv"]);
+    assert.ok(Buffer.from(files["Day_Jo_2026_W2_Acme-Logistics.jpg"]!).equals(JPEG), "the file is the one the client sent, byte for byte"); assert.match(strFromU8(files["What is in this folder.txt"]!), /Still missing\n {2}mortgage interest statement/);
+    const T = await H.state(); assert.ok(T.S.engs[0].delivered); assert.ok(T.S.docs[0].deliveredAt, "the keep-for clock has started"); assert.ok(T.S.audit.some((a: { action: string; actor: string }) => a.action === "export.deliver" && a.actor === "Pat Owner"));
     await H.close();
   });
 
