@@ -436,3 +436,4 @@ The engine's log lines use several retired words ("quiet hours", "queue", "hando
 | Found by the rehearsal | `pg` was a development-only package, so a production install could not start. Moved to runtime dependencies |
 
 Home's buttons for adding a client, the check-in for everyone, a checklist for everyone and starting are now live. Still left out: text registration, the heads-up wording, storage. Next in order: Clients list and add one client (T-16, T-38, T-56), the client page (T-16), the document viewer (T-17), conversation and approvals (T-18).
+13. Settings: message wording (owner rewrites one message at a time; required-by-law wording locked; must keep every blank and pass `outputCheck`) and sending hours. Actions `setSchedule`, `saveWording`, `resetWording`. Browser test in `apps/web/e2e/hound.test.ts`. Still to come in Settings: storage connect, plan.

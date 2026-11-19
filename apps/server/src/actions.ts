@@ -67,6 +67,21 @@ export const ACTIONS: Record<string, Rule> = {
   // alerts: read marks, exactly as the demo's bell sets them
   alertRead: { role: "staff", n: 1, run: (T, [id]) => { const a = (T.S.alerts || []).find((x: { id: string }) => x.id === id); if (a) a.read = true; return !!a; } },
   alertsRead: { role: "staff", n: 0, run: (T) => { (T.S.alerts || []).forEach((a: { read?: boolean }) => { a.read = true; }); return true; } },
+  // When messages may go: the earliest and latest hour, and the hour used on a new day. Owner only.
+  setSchedule: { role: "owner", n: 1, run: (T, [v]) => { const f = T.S.firm, x = (v && typeof v === "object" ? v : {}) as Record<string, unknown>; if ([8, 9, 10].includes(x.quietStart as number)) f.quietStart = x.quietStart; if ([17, 18, 19, 20].includes(x.quietEnd as number)) f.quietEnd = x.quietEnd; if ([9, 10, 11, 12].includes(x.newDayHour as number)) f.newDayHour = x.newDayHour; T.audit("settings.schedule", "Sends " + f.quietStart + ":00 to " + f.quietEnd + ":00"); return null; } },
+  // A firm's own wording for one message. The wording the law requires cannot be changed. New wording must keep every blank the
+  // standard wording fills in, use no blank the engine does not know, and pass the engine's own message check when filled in.
+  saveWording: { role: "owner", n: 2, run: (T, [code, text]) => {
+    const k = String(code || ""), std = Object.hasOwn(T.TPL.en, k) ? String(T.TPL.en[k]) : null, body = String(text ?? "").replace(/[<>]/g, "").replace(/\s+/g, " ").trim(); if (!std) return "No such message"; if (T.COMPLIANCE.includes(k) || k === "M31") return "This wording is required by law and cannot be changed";
+    if (body.length < 10 || body.length > 600) return "Write between 10 and 600 characters";
+    const blanks = (t: string) => [...new Set(t.match(/\{\w+\}/g) || [])], need = blanks(std), lost = need.filter((b) => !body.includes(b)), odd = blanks(body).filter((b) => !need.includes(b) && !["{first}", "{firm}", "{preparer}", "{year}"].includes(b));
+    if (lost.length) return "It must keep " + lost.join(", "); if (odd.length) return "Tallyhound does not know " + odd.join(", ");
+    const c = T.S.clients[0] || { id: "", first: "Alex", last: "Sample", lang: "en", textConsent: "given", mobile: "6155550100", email: "alex@example.com", emailOk: true }, e = T.S.engs[0] || { id: "", year: T.S.firm.taxYear || 2026, clientId: "", status: "in_progress" };
+    const was = (T.S.firm.templates.en || {})[k]; (T.S.firm.templates.en = T.S.firm.templates.en || {})[k] = body;
+    const errs = T.outputCheck(T.fill(k, c, e, { item: { form: "W2", payer: "Acme Logistics" }, question: "Did you start a new job?", doc_year: 2025, summary: "We have your W-2.", missing: "the second page is missing", fix: "the second page", list: "your W-2", date: "March 1" }), "email", { year: e.year, doc_year: 2025 }).filter((x: string) => !x.startsWith("digit run"));
+    if (errs.length) { if (was === undefined) delete T.S.firm.templates.en[k]; else T.S.firm.templates.en[k] = was; return "It would not pass the message check: " + errs.join(", "); }
+    T.audit("settings.wording", k + " changed"); return null; } },
+  resetWording: { role: "owner", n: 1, run: (T, [code]) => { const k = String(code || ""); if (T.S.firm.templates.en && Object.hasOwn(T.S.firm.templates.en, k)) { delete T.S.firm.templates.en[k]; T.audit("settings.wording", k + " back to the standard wording"); } return null; } },
   // The emergency stop: every automated message is held until an owner lifts it. STOP and HELP replies still go (the engine sees to that).
   stopAll: { role: "owner", n: 0, run: (T) => { T.S.firm.stopped = true; T.audit("emergency.stop", "All automated messages held"); return true; } },
   // How long after a file is closed its documents and message text are deleted.

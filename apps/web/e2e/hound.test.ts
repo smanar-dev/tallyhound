@@ -69,3 +69,19 @@ scene("settings: an owner makes a ready-made checklist, sets how long copies are
   await page.getByRole("button", { name: "Hold all messages" }).click(); await page.getByRole("dialog").getByRole("button", { name: "Hold all messages" }).click(); await page.locator(".banner.bad").waitFor();
   assert.equal((await W.state(firmId)).S.firm.stopped, true); await page.locator(".banner.bad").getByRole("button", { name: "Resume messages" }).click(); await page.locator(".banner.bad").waitFor({ state: "detached" }); assert.equal((await W.state(firmId)).S.firm.stopped, false);
 });
+
+scene("settings: an owner rewrites a message within the rules, cannot break it, and sets the sending hours", async (W) => {
+  const { firmId } = await busyFirm(W), page = await W.signIn("pat1@firm1.test"); await page.goto(W.url + "/settings?tab=wording"); await page.getByRole("heading", { name: "Messages" }).waitFor();
+  let T: Engine = await W.state(firmId); const label = T.TPL_USE.M5; await page.getByRole("button", { name: label, exact: true }).click(); const box = page.getByLabel("Wording"); assert.equal(await box.inputValue(), T.TPL.en.M5);
+  // Advice words are refused by the engine's own check; so is dropping a blank Tallyhound fills in.
+  await box.fill(T.TPL.en.M5 + " You may get a refund."); await page.getByRole("button", { name: "Save", exact: true }).click(); await page.getByRole("alert").waitFor(); assert.match(text(await page.getByRole("alert").textContent()), /would not pass the message check: blocked word "refund"/);
+  await box.fill("Hi, we still need a document from you."); await page.getByRole("button", { name: "Save", exact: true }).click(); await page.getByText(/It must keep \{/).waitFor(); assert.equal((await W.state(firmId)).S.firm.templates.en.M5, undefined, "nothing was saved");
+  const mine = T.TPL.en.M5.replace(/\.$/, "") + ". Thank you for your help."; await box.fill(mine); await page.getByRole("button", { name: "Save", exact: true }).click(); await page.getByText(/^Saved\. It is used from the next message/).waitFor();
+  T = await W.state(firmId); assert.equal(T.S.firm.templates.en.M5, mine); assert.match(text(await page.locator(".bub.out").textContent()), /Thank you for your help\.$/); assert.match(text(await page.locator(".wpick.on").textContent()), /Yours/);
+  await page.getByRole("button", { name: "Use the standard wording" }).click(); await page.getByText("Back to the standard wording.").waitFor(); assert.equal((await W.state(firmId)).S.firm.templates.en.M5, undefined);
+  // What the law requires cannot be edited.
+  await page.getByRole("button", { name: T.TPL_USE.M16, exact: true }).click(); await page.getByText("This wording is required by law").waitFor(); assert.equal(await page.getByLabel("Wording").isDisabled(), true);
+  const refused = await page.request.post(W.url + "/api/act", { data: { fn: "saveWording", args: ["M16", "Texts stopped, sorry to see you go, reply START"] }, headers: { "x-tallyhound": "1" } }); assert.match((await refused.json()).result, /required by law/);
+  await page.getByRole("tab", { name: "Sending hours" }).click(); await page.getByLabel("Earliest a message goes").selectOption("9"); await page.getByLabel("Latest a message goes").selectOption("18"); await page.getByRole("button", { name: "Save", exact: true }).click(); await page.getByText("Saved.", { exact: true }).waitFor();
+  T = await W.state(firmId); assert.equal(T.S.firm.quietStart, 9); assert.equal(T.S.firm.quietEnd, 18); assert.equal(T.allowed(new Date(2027, 0, 26, 8, 30)), false, "the engine now holds a message at 8:30");
+});

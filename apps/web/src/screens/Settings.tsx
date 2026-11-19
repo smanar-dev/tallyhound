@@ -70,6 +70,43 @@ function ChecklistsTab() {
   </div>;
 }
 
+// The words Tallyhound uses. One message at a time: the standard wording, the firm's own if it has one, and what a client would see.
+const WORD_GROUPS: [string, string[]][] = [["Getting started", ["M1", "M1R", "M2", "M28", "M28R", "M29", "M27"]], ["Asking and reminding", ["M3", "M4", "M5", "M6", "M10", "M26", "M13"]], ["When a document has a problem", ["M7", "M8", "M8L", "M9", "M22", "M22R", "M11", "M30L", "M30T", "M30K"]], ["Answering the client", ["M15", "M19", "M19X", "M20", "M23"]], ["Passing to a person", ["M12", "M14", "M24", "M25", "M21"]], ["Required by law", ["M16", "M16H", "M31"]]];
+const BLANK: Record<string, string> = { "{first}": "Client's first name", "{firm}": "Firm name", "{n}": "How many documents", "{k}": "How many are still missing", "{year}": "Tax year", "{plain_name}": "Document name", "{from_payer}": "Who it comes from", "{where_hint}": "Where to find it", "{issuer}": "Who sends it", "{doc_year}": "Year on the document", "{question}": "The question", "{preparer}": "Preparer's name", "{link}": "The client's private link", "{missing}": "The missing part", "{fix}": "What to send", "{list}": "The list of documents", "{date}": "The date", "{summary}": "What was received", "{firm_phone}": "Office phone", "{firm_email}": "Your Tallyhound address", "{verify}": "How to check the message is real", "{for_entity}": "The business or trust name" };
+function WordingTab() {
+  const { T, act, toast } = useFirm(), f = T.S.firm, std: Record<string, string> = T.TPL.en, own: Record<string, string> = (f.templates && f.templates.en) || {}, known = new Set(Object.keys(std));
+  const groups = WORD_GROUPS.map((g) => [g[0], g[1].filter((k) => known.delete(k))] as [string, string[]]).filter((g) => g[1].length); if (known.size) groups.push(["Other", [...known]]);
+  const [code, setCode] = useState(groups[1]?.[1][0] || groups[0]![1][0]!), [draft, setDraft] = useState<string | null>(null), [why, setWhy] = useState("");
+  const locked = T.COMPLIANCE.includes(code) || code === "M31", current = own[code] ?? std[code]!, text = draft ?? current, blanks = [...new Set(std[code]!.match(/\{\w+\}/g) || [])];
+  const c0: Row = T.S.clients[0] || { id: "", first: "Alex", last: "Sample", lang: "en", preparer: (T.S.users[0] || {}).id, textConsent: "given", mobile: "6155550100", email: "alex@example.com", emailOk: true }, e0: Row = T.S.engs[0] || { id: "", year: f.taxYear || 2026, clientId: "", status: "in_progress" };
+  const pick = (k: string) => { setCode(k); setDraft(null); setWhy(""); };
+  const save = async () => { setWhy(""); try { const r = await act("saveWording", code, text); if (r) return setWhy(String(r) + "."); setDraft(null); toast("Saved. It is used from the next message."); } catch { /* said */ } };
+  return <div className="grid wording">
+    <div className="card"><div className="hd"><h2>Messages</h2></div>{groups.map((g) => <div key={g[0]}><div className="navsec dark">{g[0]}</div>{g[1].map((k) => <button key={k} className={"wpick" + (k === code ? " on" : "")} aria-current={k === code ? "true" : undefined} onClick={() => pick(k)}>{T.TPL_USE[k] || k}{own[k] ? <span className="chip plain info">Yours</span> : null}</button>)}</div>)}</div>
+    <div className="col" style={{ gap: 16 }}>
+      <div className="card pad col"><div className="row"><h2 className="grow">{T.TPL_USE[code] || code}</h2>{own[code] && !locked ? <button className="btn sm" onClick={() => void act("resetWording", code).then(() => { setDraft(null); toast("Back to the standard wording."); }, () => {})}>Use the standard wording</button> : null}</div>
+        {locked ? <div className="note info"><Icon name="lock" small /><span>This wording is required by law, so it cannot be changed here.</span></div> : null}
+        {why ? <div className="note bad" role="alert">{why}</div> : null}
+        <label className="f">Wording<textarea className="wbox" value={text} disabled={locked} onChange={(ev) => setDraft(ev.target.value)} /></label>
+        {blanks.length ? <div className="small muted">Tallyhound fills these in. Keep each one: {blanks.map((b) => <span key={b} className="blankchip"><span className="mono">{b}</span> {BLANK[b] || ""}</span>)}</div> : null}
+        {locked ? null : <div className="row"><button className="btn pri" disabled={draft === null || draft.trim() === current} onClick={save}>Save</button>{draft !== null ? <button className="btn" onClick={() => { setDraft(null); setWhy(""); }}>Undo changes</button> : null}</div>}</div>
+      <div className="card pad col"><h3>What a client sees now</h3><div className="bub out" style={{ maxWidth: "100%" }}>{T.fill(code, c0, e0, { item: { form: "W2", payer: "Acme Logistics" }, question: "Did you start a new job?", doc_year: 2025, summary: "We have your W-2.", missing: "the second page is missing", fix: "the second page", list: "your W-2", date: "March 1" })}</div>
+        <p className="small muted">{f.hound.aiWrite !== false ? "When Claude writes messages, it starts from this wording and must keep every request in it. A draft that strays falls back to exactly this." : "This is sent as it is."} No advice words, no numbers that are not in the standard wording: the same check runs on your wording when you save.</p></div>
+    </div></div>;
+}
+
+// When messages may go.
+function HoursTab() {
+  const { T, act, toast } = useFirm(), f = T.S.firm, [v, setV] = useState({ quietStart: f.quietStart, quietEnd: f.quietEnd, newDayHour: f.newDayHour }), days = [0, 2, 5, 9, 14];
+  const sel = (k: keyof typeof v, label: string, opts: number[]) => <label className="f">{label}<select value={v[k]} onChange={(ev) => setV({ ...v, [k]: +ev.target.value })}>{opts.map((x) => <option key={x} value={x}>{(x > 12 ? x - 12 : x) + ":00 " + (x >= 12 ? "pm" : "am")}</option>)}</select></label>;
+  return <div className="card pad col"><h2>Sending hours and reminders</h2><p className="small muted">Judged on each client's own clock when you have their state or time zone, otherwise on your firm's ({T.ZNAME[Object.keys(T.ZNAME).find((z) => T.ZNAME[z] === f.tz) || ""] || f.tz || "Central"} time).</p>
+    <div className="grid g3">{sel("quietStart", "Earliest a message goes", [8, 9, 10])}{sel("quietEnd", "Latest a message goes", [17, 18, 19, 20])}{sel("newDayHour", "When a message waits for the next day, it goes at", [9, 10, 11, 12])}</div>
+    <div><button className="btn pri" onClick={() => void act("setSchedule", v).then(() => toast("Saved."), () => {})}>Save</button></div>
+    <h4 style={{ marginTop: 8 }}>The rhythm when a client goes quiet</h4>
+    <ol className="rhythm">{days.map((d, i) => <li key={d}><b>Day {d}</b><span>{["First request", "Reminder", "Reminder", "Reminder", "Final note"][i]}</span></li>)}</ol>
+    <p className="small muted">Never on Sundays or federal holidays. At most one automated message a day, unless the client replied in the last {f.liveMin} minutes. After the final note Tallyhound asks you to call, if that is switched on under The Hound, Rules it follows.</p></div>;
+}
+
 // What Tallyhound holds, for how long, and what it never keeps (docs/SECURITY.md). The numbers are the engine's.
 function SecurityTab() {
   const { T, act, toast } = useFirm(), s = T.S, f = s.firm, M = T.dataMap(), L = T.RETAIN_LIMIT, [v, setV] = useState<Record<string, string>>({ afterDelivery: String(M.retain.afterDelivery), rejected: String(M.retain.rejected), unmatched: String(M.retain.unmatched), max: String(M.retain.max), close: String(f.retention) }), [stop, setStop] = useState(false), [copied, setCopied] = useState(false);
@@ -92,13 +129,13 @@ function SecurityTab() {
   </div>;
 }
 
-const TABS: [string, string][] = [["firm", "Your firm"], ["people", "People"], ["checklists", "Checklists"], ["security", "Security and data"]];
+const TABS: [string, string][] = [["firm", "Your firm"], ["people", "People"], ["checklists", "Checklists"], ["wording", "Message wording"], ["hours", "Sending hours"], ["security", "Security and data"]];
 export function Settings() {
   const { can } = useFirm(), [params, setParams] = useSearchParams(), tab = TABS.some((t) => t[0] === params.get("tab")) ? params.get("tab")! : "firm";
   if (!can("owner")) return <Page title="Settings"><div className="card pad"><p>Settings are for owners. Ask an owner at your firm if something here needs changing.</p></div></Page>;
   return <Page title="Settings">
     <div className="tabs" role="tablist">{TABS.map((t) => <button key={t[0]} role="tab" aria-selected={tab === t[0]} className={tab === t[0] ? "on" : ""} onClick={() => setParams(t[0] === "firm" ? {} : { tab: t[0] })}>{t[1]}</button>)}</div>
-    {tab === "firm" ? <FirmTab /> : tab === "people" ? <PeopleTab /> : tab === "checklists" ? <ChecklistsTab /> : <SecurityTab />}
-    <p className="small muted">More settings are being built: message wording, sending hours, where finished files go, and your plan.</p>
+    {tab === "firm" ? <FirmTab /> : tab === "people" ? <PeopleTab /> : tab === "checklists" ? <ChecklistsTab /> : tab === "wording" ? <WordingTab /> : tab === "hours" ? <HoursTab /> : <SecurityTab />}
+    <p className="small muted">Still to come here: connecting your firm's storage, and your plan.</p>
   </Page>;
 }
