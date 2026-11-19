@@ -156,10 +156,10 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
   });
 
   // ---- people at the firm (owner only for changes) ----
-  f.get("/api/users", { preHandler: full }, async (req, reply) => req.who!.user.role !== "owner" ? reply.code(403).send({ error: "role", message: "Only an owner can see who has access." }) : (await d.auth.usersOfFirm(req.who!.user.firmId)).map((u) => ({ ...me(u), twoStep: !!u.mfaSecret })));
+  f.get("/api/users", { preHandler: full }, async (req, reply) => req.who!.user.role !== "owner" ? reply.code(403).send({ error: "role", message: "Only an owner can see who has access." }) : (await d.auth.usersOfFirm(req.who!.user.firmId)).map((u) => ({ ...me(u), twoStep: !!u.mfaSecret, left: !!u.leftAt })));
   f.post("/api/users", { preHandler: full }, async (req) => { const b = body(req), u = req.who!.user; return { id: await d.firms.addUser(u.firmId, u, { email: str(b.email), name: str(b.name), role: str(b.role) as Role }) }; });
   f.post("/api/users/:id/role", { preHandler: full }, async (req) => { const u = req.who!.user; await d.firms.setRole(u.firmId, u, (req.params as { id: string }).id, str(body(req).role) as Role); return { ok: true }; });
-  f.delete("/api/users/:id", { preHandler: full }, async (req) => { const u = req.who!.user; await d.firms.removeUser(u.firmId, u, (req.params as { id: string }).id); return { ok: true }; });
+  f.delete("/api/users/:id", { preHandler: full }, async (req) => { const u = req.who!.user; return { ok: true, ...(await d.firms.removeUser(u.firmId, u, (req.params as { id: string }).id)) }; });
 
   // ---- the staff web app (apps/web, built by `npm run build`) ----
   // Files under /assets carry a fingerprint in their name, so a browser may keep them. Every other address gets the app's one page,

@@ -9,9 +9,11 @@ export const MAX_HOURS = 12;           // and after this long whatever happens
 export const PRE_MINUTES = 15;         // time allowed between opening the link and entering the code
 export const MAX_CODE_FAILS = 5;       // wrong codes before the half-open session is thrown away
 export const LINKS_PER_HOUR = 5;       // emailed links per address
+export const LOCK_FAILS = 5;           // wrong codes, across every attempt, inside LOCK_MINUTES
+export const LOCK_MINUTES = 15;        // then sign-in is locked for the same length of time and the person is emailed
 
 export interface Secrets { seal(firmId: string, plain: Buffer, label: string): Promise<Buffer>; open(firmId: string, sealed: Buffer, label: string): Promise<Buffer> }
-export interface Mailer { signInLink(to: string, url: string): Promise<void> }
+export interface Mailer { signInLink(to: string, url: string): Promise<void>; locked(to: string, minutes: number): Promise<void> }
 export interface SignInDeps { auth: AuthStore; secrets: Secrets; mailer: Mailer; linkSecret: string; appUrl: string; clock: () => Date; issuer?: string }
 
 export class SignInError extends Error {
@@ -24,7 +26,7 @@ const validEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) && e.leng
 
 export function createSignIn(d: SignInDeps) {
   const { auth, secrets, clock } = d, issuer = d.issuer || "Tallyhound";
-  const label = (u: User) => "mfa:" + u.id;
+  const label = (u: User) => "mfa:" + u.id, isLocked = (u: User) => !!u.lockedUntil && u.lockedUntil > clock();
 
   async function open(u: User, hash: string): Promise<Session> {
     const now = clock(), s: Session = { hash, userId: u.id, stage: "link", createdAt: now, expiresAt: new Date(now.getTime() + PRE_MINUTES * 60000), fails: 0 };
@@ -36,7 +38,13 @@ export function createSignIn(d: SignInDeps) {
   }
   // A wrong code. After a handful the half-open session is dropped and the person starts again from a new link.
   async function wrong(u: User, s: Session, what: string): Promise<never> {
-    const n = await auth.failSession(s.hash); await auth.audit(u.firmId, u.id, "signin.failed", what);
+    const n = await auth.failSession(s.hash), now = clock(); await auth.audit(u.firmId, u.id, "signin.failed", what); await auth.noteFail(u.id, now);
+    // Counted per person, not per attempt: asking for a fresh link does not buy more guesses.
+    if (await auth.failsSince(u.id, new Date(now.getTime() - LOCK_MINUTES * 60000)) >= LOCK_FAILS) {
+      await auth.lock(u.id, new Date(now.getTime() + LOCK_MINUTES * 60000)); await auth.deleteSession(s.hash); await auth.audit(u.firmId, u.id, "signin.locked", LOCK_MINUTES + " minutes");
+      try { await d.mailer.locked(u.email, LOCK_MINUTES); } catch { /* the lock stands whether or not the email goes */ }
+      throw bad("locked", "Too many wrong codes. Sign-in is locked for " + LOCK_MINUTES + " minutes, and we have emailed you.", 423);
+    }
     if (n >= MAX_CODE_FAILS) { await auth.deleteSession(s.hash); throw bad("too_many", "Too many wrong codes. Ask for a new sign-in link.", 401); }
     throw bad("wrong_code", "That code is not right. Check the app and try again.");
   }
@@ -48,15 +56,16 @@ export function createSignIn(d: SignInDeps) {
       const now = clock(), h = emailHash(email);
       if (await auth.linkRequestsSince(h, new Date(now.getTime() - 3600000)) >= LINKS_PER_HOUR) return;
       await auth.noteLinkRequest(h, now);
-      const u = await auth.userByEmail(email); if (!u) return;
+      const u = await auth.userByEmail(email); if (!u || u.leftAt || isLocked(u)) return;
       await d.mailer.signInLink(email, d.appUrl.replace(/\/$/, "") + "/signin/open#t=" + kitAuth.issueLink(d.linkSecret, email, now));
     },
     // Step 2. The link is opened. It works once. The answer says what the browser should ask for next.
     async openLink(token: string): Promise<{ sessionToken: string; expiresAt: Date; next: "setup" | "code" }> {
       const now = clock(), r = kitAuth.checkLink(d.linkSecret, token, now);
       if (!r.ok) throw bad("link_" + r.why, r.why === "expired" ? "That link has expired. Ask for a new one." : "That link is not valid. Ask for a new one.", 401);
+      const u = await auth.userByEmail(r.email); if (!u || u.leftAt) throw bad("link_invalid", "That link is not valid. Ask for a new one.", 401);
+      if (isLocked(u)) throw bad("locked", "Sign-in is locked after too many wrong codes. Try again in " + Math.max(1, Math.ceil((u.lockedUntil!.getTime() - now.getTime()) / 60000)) + " minutes.", 423);
       if (!(await auth.claimLink(r.jti, new Date(now.getTime() + kitAuth.LINK_MIN * 60000 * 2)))) throw bad("link_used", "That link has already been used. Ask for a new one.", 401);
-      const u = await auth.userByEmail(r.email); if (!u) throw bad("link_invalid", "That link is not valid. Ask for a new one.", 401);
       const t = kitAuth.newSession(now), s = await open(u, t.hash);
       return { sessionToken: t.token, expiresAt: s.expiresAt, next: u.mfaSecret ? "code" : "setup" };
     },
@@ -98,7 +107,7 @@ export function createSignIn(d: SignInDeps) {
       if (!sessionToken) return null;
       const hash = kitAuth.hashToken(sessionToken), s = await auth.session(hash), now = clock(); if (!s) return null;
       if (s.expiresAt <= now || now.getTime() - s.createdAt.getTime() > MAX_HOURS * 3600000) { await auth.deleteSession(hash); return null; }
-      const user = await auth.userById(s.userId); if (!user) return null;
+      const user = await auth.userById(s.userId); if (!user || user.leftAt) return null;
       // Slide the idle timeout, at most once every few minutes so a busy page is not one write per request.
       const fresh = new Date(now.getTime() + IDLE_HOURS * 3600000);
       if (s.stage === "full" && fresh.getTime() - s.expiresAt.getTime() > 5 * 60000) { await auth.updateSession(hash, { expiresAt: fresh }); s.expiresAt = fresh; }

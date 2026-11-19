@@ -44,8 +44,9 @@ export function runtime() {
   const app = createApp({ store, sms, email, ai, clock, log });
   if (production && !env("POSTMARK_TOKEN")) throw new Error("Set POSTMARK_TOKEN: without it nobody can be sent a sign-in link");
   const mailer: Mailer = env("POSTMARK_TOKEN")
-    ? { async signInLink(to, url) { await email.send({ from: need("TH_SIGNIN_FROM"), fromName: "Tallyhound", to, subject: "Your Tallyhound sign-in link", body: "Open this link to sign in to Tallyhound. It works once and expires in 15 minutes.\n\n" + url + "\n\nIf you did not ask for this, ignore this email." }); } }
-    : { async signInLink(to, url) { console.log("\n  Sign-in link for " + to + " (development only, no email service connected):\n  " + url + "\n"); } };
+    ? { async signInLink(to, url) { await email.send({ from: need("TH_SIGNIN_FROM"), fromName: "Tallyhound", to, subject: "Your Tallyhound sign-in link", body: "Open this link to sign in to Tallyhound. It works once and expires in 15 minutes.\n\n" + url + "\n\nIf you did not ask for this, ignore this email." }); },
+        async locked(to, minutes) { await email.send({ from: need("TH_SIGNIN_FROM"), fromName: "Tallyhound", to, subject: "Tallyhound sign-in is locked for " + minutes + " minutes", body: "Someone entered the wrong sign-in code for your Tallyhound account several times, so sign-in is locked for " + minutes + " minutes. Nothing else has changed.\n\nIf that was you, wait and then ask for a new sign-in link. If it was not you, tell your firm's owner: someone may have reached your email." }); } }
+    : { async signInLink(to, url) { console.log("\n  Sign-in link for " + to + " (development only, no email service connected):\n  " + url + "\n"); }, async locked(to, minutes) { console.log("  Sign-in locked for " + to + " for " + minutes + " minutes"); } };
   const signIn = createSignIn({ auth, secrets: firmSecrets(store, keyring, kitCrypto), mailer, linkSecret: need("TH_LINK_SECRET"), appUrl, clock });
   const firms = createFirms({ app, auth, linkHost: env("LINK_HOST") || new URL(appUrl).host });
   const prepare = prepareOpts({ clamav: env("CLAMAV_HOST") ? { host: env("CLAMAV_HOST"), port: +(env("CLAMAV_PORT") || 3310) } : undefined });

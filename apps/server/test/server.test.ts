@@ -40,15 +40,28 @@ for (const kind of KINDS) {
     await H.close();
   });
 
-  test(name("later sign-ins need the code; a code is never accepted twice; five wrong codes end the attempt"), async () => {
+  test(name("later sign-ins need the code; a code is never accepted twice; five wrong codes lock sign-in for 15 minutes and email the person"), async () => {
     const H = await build(kind); await H.newFirm(); await H.signInAs("pat1@firm1.test");
     const b = await H.signInAs("pat1@firm1.test"); assert.equal((await b.get("/api/me")).status, 200);
     // The code that just worked is replayed from another browser inside the same half minute.
     const used = H.codeFor("pat1@firm1.test"), c = H.browser(); await c.post("/auth/link", { email: "pat1@firm1.test" }); await c.post("/auth/open", { token: H.token(H.links.at(-1)!.url) });
     assert.equal((await c.post("/auth/code", { code: used })).status, 400, "a used code is refused");
     for (let i = 0; i < 3; i++) assert.equal((await c.post("/auth/code", { code: "123456" })).json.error, "wrong_code");
-    const last = await c.post("/auth/code", { code: "123456" }); assert.equal(last.status, 401); assert.equal(last.json.error, "too_many");
+    const last = await c.post("/auth/code", { code: "123456" }); assert.equal(last.status, 423); assert.equal(last.json.error, "locked"); assert.deepEqual(H.lockMails, [{ to: "pat1@firm1.test", minutes: 15 }]);
     H.advance(31); assert.equal((await c.post("/auth/code", { code: H.codeFor("pat1@firm1.test") })).status, 401, "the half-open session is gone");
+    // Locked: no new link is sent, and a link sent just before the lock does not open. Someone already signed in is not thrown out.
+    const n = H.links.length, early = H.links.at(-1)!.url; await H.browser().post("/auth/link", { email: "pat1@firm1.test" }); assert.equal(H.links.length, n);
+    assert.equal((await b.get("/api/me")).status, 200); void early;
+    H.advance(61 * 60); const again = await H.signInAs("pat1@firm1.test"); assert.equal((await again.get("/api/me")).status, 200, "after 15 minutes sign-in works again");
+    await H.close();
+  });
+
+  test(name("wrong codes spread over separate sign-in attempts count together towards the lock"), async () => {
+    const H = await build(kind); await H.newFirm(); await H.signInAs("pat1@firm1.test"); H.advance(61 * 60);   // an hour on, so the five links below are inside the hourly limit
+    // Wrong codes spread over separate attempts still count together.
+    for (let i = 0; i < 5; i++) { const x = H.browser(); await x.post("/auth/link", { email: "pat1@firm1.test" }); const o = await x.post("/auth/open", { token: H.token(H.links.at(-1)!.url) }); if (i < 4) assert.equal(o.status, 200); const r = await x.post("/auth/code", { code: "000000" }); assert.equal(r.json.error, i < 4 ? "wrong_code" : "locked"); }
+    const x = H.browser(), m = H.links.length; await x.post("/auth/link", { email: "pat1@firm1.test" }); assert.equal(H.links.length, m, "locked again");
+    assert.equal(H.lockMails.length, 1); assert.ok((await H.auditRows()).some((a) => a.action === "signin.locked"));
     await H.close();
   });
 
@@ -120,6 +133,14 @@ for (const kind of KINDS) {
     const back = await H.signInAs("alex@firm1.test"); assert.equal((await back.get("/api/me")).json.role, "read_only");
     assert.equal((await owner.del("/api/users/" + id)).status, 200); assert.equal((await back.get("/api/me")).status, 401);
     const n = H.links.length; await H.browser().post("/auth/link", { email: "alex@firm1.test" }); assert.equal(H.links.length, n, "a removed person gets no link");
+    // Removed is switched off, not deleted: the row and the name stay, the second factor goes, and coming back means setting it up again.
+    const gone = (await H.auth.usersOfFirm((await owner.get("/api/me")).json.firmId)).find((u) => u.id === id)!; assert.ok(gone.leftAt); assert.equal(gone.name, "Alex Staff"); assert.equal(gone.mfaSecret, null);
+    const list = (await owner.get("/api/users")).json as { id: string; left: boolean }[]; assert.equal(list.find((u) => u.id === id)!.left, true);
+    assert.equal((await owner.del("/api/users/" + id)).status, 404, "already gone"); assert.equal((await owner.post("/api/users/" + id + "/role", { role: "staff" })).status, 404);
+    const re = await owner.post("/api/users", { name: "Alex Staff", email: "alex@firm1.test", role: "staff" }); assert.equal(re.json.id, id, "the same person comes back as the same row");
+    const fid = (await owner.get("/api/me")).json.firmId, eng = async () => { const T = createEngine(); T.load(await H.store.readState(fid)); return T; }, st = await eng(); assert.equal(st.S.users.filter((u: { id: string }) => u.id === id).length, 1);
+    await owner.post("/api/act", { fn: "addClient", args: [{ first: "Cara", last: "Moved", email: "cara@x.example" }] }); const cid = (await eng()).S.clients.find((c: { last: string }) => c.last === "Moved").id; assert.equal((await owner.post("/api/act", { fn: "saveClient", args: [cid, { preparer: id }] })).status, 200); assert.equal((await eng()).client(cid).preparer, id);
+    const rm = await owner.del("/api/users/" + id); assert.equal(rm.json.moved, 1); assert.equal((await eng()).client(cid).preparer, ownerId, "their clients pass to the owner who removed them");
     H.advance(110 * 60); assert.equal((await owner.get("/api/me")).status, 200, "still in use: the idle clock restarts");
     H.advance(110 * 60); assert.equal((await owner.get("/api/me")).status, 200);
     H.advance(121 * 60); assert.equal((await owner.get("/api/me")).status, 401, "two idle hours end it");

@@ -18,7 +18,7 @@ try {
     console.log("Firm created: " + r.firmId + "\nOwner: " + need("owner-email") + " (" + r.ownerId + ")\n" + (o.checked === "true" ? "Checked: it can send." : "Not checked yet: nothing sends until you run firm-check.") + "\nThe owner signs in at " + R.appUrl + "/signin");
   }
   else if (cmd === "firm-check") { await R.firms.setVerified(need("firm"), o.suspend !== "true", need("by")); console.log(o.suspend === "true" ? "Suspended." : "Checked: the firm can send."); }
-  else if (cmd === "firms") { for (const id of await R.auth.activeFirmIds()) { const us = await R.auth.usersOfFirm(id); console.log(id + "  " + us.filter((u) => u.role === "owner").map((u) => u.email).join(", ") + "  (" + us.length + (us.length === 1 ? " person)" : " people)")); } }
+  else if (cmd === "firms") { for (const id of await R.auth.activeFirmIds()) { const us = (await R.auth.usersOfFirm(id)).filter((u) => !u.leftAt); console.log(id + "  " + us.filter((u) => u.role === "owner").map((u) => u.email).join(", ") + "  (" + us.length + (us.length === 1 ? " person)" : " people)")); } }
   else { console.log("Commands: migrate, create-firm, firm-check, firms. See the top of apps/server/src/admin.ts."); process.exitCode = 1; }
 } catch (err) { console.error((err as Error).message); process.exitCode = 1; }
 finally { await R.pool.end(); }

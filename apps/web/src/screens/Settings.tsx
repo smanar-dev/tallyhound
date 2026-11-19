@@ -10,7 +10,7 @@ import { Avatar, Chip, Icon } from "../components/ui";
 import type { Row } from "../lib/select";
 import { fmtDay, fname, plural, when } from "../lib/fmt";
 
-type Person = { id: string; name: string; email: string; role: "owner" | "staff" | "read_only"; twoStep: boolean };
+type Person = { id: string; name: string; email: string; role: "owner" | "staff" | "read_only"; twoStep: boolean; left?: boolean };
 const ROLE: Record<string, [string, string]> = { owner: ["Owner", "Everything, including settings, people and deleting documents"], staff: ["Staff", "Clients, checklists, messages, documents and handing off files"], read_only: ["Read-only", "Can look at clients and progress, and change nothing"] };
 
 function FirmTab() {
@@ -29,16 +29,17 @@ function PeopleTab() {
   const { me, toast, reload } = useFirm(), [people, setPeople] = useState<Person[] | null>(null), [add, setAdd] = useState(false), [v, setV] = useState({ name: "", email: "", role: "staff" }), [why, setWhy] = useState(""), [gone, setGone] = useState<Person | null>(null);
   const load = () => api.get<Person[]>("/api/users").then(setPeople, (e: Error) => toast(e.message));
   useEffect(() => { void load(); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
-  const owners = (people || []).filter((p) => p.role === "owner").length;
+  const owners = (people || []).filter((p) => p.role === "owner" && !p.left).length, former = (people || []).filter((p) => p.left);
   const invite = async () => { setWhy(""); try { await api.post("/api/users", v); setAdd(false); setV({ name: "", email: "", role: "staff" }); toast("Added. They sign in with their email at the usual address and set up two-step sign-in the first time."); await load(); await reload(); } catch (e) { setWhy((e as Error).message); } };
   const setRole = async (p: Person, role: string) => { try { await api.post("/api/users/" + p.id + "/role", { role }); toast(p.name + " is now " + ROLE[role]![0].toLowerCase() + " and has been signed out everywhere."); await load(); await reload(); } catch (e) { toast((e as Error).message); await load(); } };
-  const remove = async (p: Person) => { setGone(null); try { await api.del("/api/users/" + p.id); toast(p.name + " can no longer sign in."); await load(); await reload(); } catch (e) { toast((e as Error).message); } };
+  const remove = async (p: Person) => { setGone(null); try { const r = await api.del<{ moved?: number }>("/api/users/" + p.id); toast(p.name + " can no longer sign in." + (r && r.moved ? " Their " + (r.moved === 1 ? "client is" : r.moved + " clients are") + " now yours." : "")); await load(); await reload(); } catch (e) { toast((e as Error).message); } };
   return <div className="card"><div className="hd"><h2>People</h2><span className="sp" /><button className="btn sm" onClick={() => { setWhy(""); setAdd(true); }}><Icon name="plus" small />Add a person</button></div>
-    {people === null ? <div className="bd muted" role="status">Loading…</div> : <div className="tbl"><table><thead><tr><th>Name</th><th>Can do</th><th>Two-step sign-in</th><th></th></tr></thead><tbody>{people.map((p) => <tr key={p.id}>
+    {people === null ? <div className="bd muted" role="status">Loading…</div> : <div className="tbl"><table><thead><tr><th>Name</th><th>Can do</th><th>Two-step sign-in</th><th></th></tr></thead><tbody>{people.filter((p) => !p.left).map((p) => <tr key={p.id}>
       <td><span className="row" style={{ gap: 8, flexWrap: "nowrap" }}><Avatar first={p.name.split(" ")[0]} last={p.name.split(" ")[1] || " "} small /><span><b>{p.name}</b>{p.id === me.id ? <span className="small faint"> (you)</span> : null}<br /><span className="small faint">{p.email}</span></span></span></td>
       <td><select aria-label={"What " + p.name + " can do"} value={p.role} disabled={p.id === me.id} onChange={(ev) => void setRole(p, ev.target.value)}>{Object.keys(ROLE).map((r) => <option key={r} value={r}>{ROLE[r]![0]}</option>)}</select><div className="small muted">{ROLE[p.role]![1]}</div></td>
       <td>{p.twoStep ? <Chip tone="good">On</Chip> : <Chip tone="warn">Set up at first sign-in</Chip>}</td>
       <td>{p.id !== me.id ? <button className="btn sm ghost" onClick={() => setGone(p)}>Remove</button> : null}</td></tr>)}</tbody></table></div>}
+    {former.length ? <div className="bd small muted">No longer here: {former.map((p) => p.name).join(", ")}. Their names stay on the firm's history. Add one again with the same email to bring them back.</div> : null}
     {owners < 2 && people ? <div className="bd"><div className="note"><Icon name="alert" small /><span>You are the only owner. Add a second owner so the firm is never locked out if you lose your phone and your recovery codes.</span></div></div> : null}
     {add ? <Modal title="Add a person" onClose={() => setAdd(false)} footer={<><button className="btn" onClick={() => setAdd(false)}>Cancel</button><button className="btn pri" onClick={invite}>Add</button></>}>
       {why ? <div className="note bad" role="alert">{why}</div> : null}

@@ -19,7 +19,7 @@ const LETTERS = "abcdefghijkmnpqrstuvwxyz";
 export const slugOf = (name: string) => name.toLowerCase().replace(/&/g, " and ").replace(/\b(cpas?|llc|llp|pllc|pc|inc|and|the|co|company|associates|group)\b/g, " ").replace(/[^a-z]/g, "").slice(0, 24) || "firm";
 
 export function createFirms({ app, auth, linkHost }: { app: App; auth: AuthStore; linkHost?: string }) {
-  async function owners(firmId: string) { return (await auth.usersOfFirm(firmId)).filter((u) => u.role === "owner"); }
+  async function owners(firmId: string) { return (await auth.usersOfFirm(firmId)).filter((u) => u.role === "owner" && !u.leftAt); }
   return {
     // T-05. New firms start unchecked (T-116): nothing sends and nothing is read until the firm check is passed and setVerified is called.
     async create(o: NewFirm): Promise<{ firmId: string; ownerId: string; slug: string }> {
@@ -46,28 +46,32 @@ export function createFirms({ app, auth, linkHost }: { app: App; auth: AuthStore
       if (by.role !== "owner") throw new FirmError("Only an owner can add people", 403);
       if (!ROLES.includes(o.role)) throw new FirmError("Role must be owner, staff or read_only");
       const u = { id: newId("u_"), name: clean(o.name), email: email(o.email), role: o.role }; if (!u.name) throw new FirmError("Enter the person's name");
-      if (await auth.userByEmail(u.email)) throw new FirmError("That email address already has an account");
-      try { await auth.createUser({ ...u, firmId }); } catch (err) { throw new FirmError((err as Error).message); }   // two owners adding the same person at once
-      try { await app.staff(firmId, by.id, (T: Engine) => { T.S.users.push(engineUser(u)); T.audit("user.added", u.name + " added as " + u.role, by.name); }); }
-      catch (err) { await auth.removeUser(u.id); throw err; }
+      // Someone who left this firm and comes back keeps their old row, and sets up two-step sign-in again.
+      const old = await auth.userByEmail(u.email), back = !!old && !!old.leftAt && old.firmId === firmId; if (old && !back) throw new FirmError("That email address already has an account");
+      if (back) { u.id = old!.id; await auth.reactivateUser(u.id, { role: u.role, name: u.name }); }
+      else try { await auth.createUser({ ...u, firmId }); } catch (err) { throw new FirmError((err as Error).message); }   // two owners adding the same person at once
+      try { await app.staff(firmId, by.id, (T: Engine) => { T.S.users = T.S.users.filter((y: { id: string }) => y.id !== u.id); T.S.users.push(engineUser(u)); T.audit("user.added", u.name + " added as " + u.role, by.name); }); }
+      catch (err) { if (back) await auth.deactivateUser(u.id, new Date()); else await auth.removeUser(u.id); throw err; }
       await auth.audit(firmId, by.id, "user.added", u.id + " as " + u.role); return u.id;
     },
     // A role change signs the person out everywhere, so the old role cannot linger in an open tab.
     async setRole(firmId: string, by: User, userId: string, role: Role): Promise<void> {
       if (by.role !== "owner") throw new FirmError("Only an owner can change roles", 403);
       if (!ROLES.includes(role)) throw new FirmError("Role must be owner, staff or read_only");
-      const u = await auth.userById(userId); if (!u || u.firmId !== firmId) throw new FirmError("No such person", 404);
+      const u = await auth.userById(userId); if (!u || u.firmId !== firmId || u.leftAt) throw new FirmError("No such person", 404);
       if (u.role === "owner" && role !== "owner" && (await owners(firmId)).length < 2) throw new FirmError("A firm needs at least one owner. Make someone else an owner first.");
       await app.staff(firmId, by.id, (T: Engine) => { const x = T.S.users.find((y: { id: string }) => y.id === userId); if (x) x.role = role; T.audit("user.role", u.name + " is now " + role, by.name); });
       await auth.setRole(userId, role); await auth.deleteSessionsOf(userId); await auth.audit(firmId, by.id, "user.role", userId + " to " + role);
     },
-    async removeUser(firmId: string, by: User, userId: string): Promise<void> {
+    // Removing switches the person off. The row stays so their name stays on the firm's history. Their clients pass to whoever removed them.
+    async removeUser(firmId: string, by: User, userId: string): Promise<{ moved: number }> {
       if (by.role !== "owner") throw new FirmError("Only an owner can remove people", 403);
-      const u = await auth.userById(userId); if (!u || u.firmId !== firmId) throw new FirmError("No such person", 404);
+      const u = await auth.userById(userId); if (!u || u.firmId !== firmId || u.leftAt) throw new FirmError("No such person", 404);
       if (u.role === "owner" && (await owners(firmId)).length < 2) throw new FirmError("A firm needs at least one owner. Make someone else an owner first.");
-      await auth.removeUser(userId);   // sign-in goes first: from this line the person cannot get in
-      await app.staff(firmId, by.id, (T: Engine) => { T.S.users = T.S.users.filter((y: { id: string }) => y.id !== userId); T.audit("user.removed", u.name + " removed", by.name); });
-      await auth.audit(firmId, by.id, "user.removed", userId);
+      await auth.deactivateUser(userId, new Date());   // sign-in goes first: from this line the person cannot get in
+      let moved = 0;
+      await app.staff(firmId, by.id, (T: Engine) => { T.S.users = T.S.users.filter((y: { id: string }) => y.id !== userId); for (const c of T.S.clients) if (c.preparer === userId) { c.preparer = by.id; moved++; } T.audit("user.removed", u.name + " removed" + (moved ? ". " + moved + (moved === 1 ? " client" : " clients") + " passed to " + by.name : ""), by.name); });
+      await auth.audit(firmId, by.id, "user.removed", userId); return { moved };
     }
   };
 }

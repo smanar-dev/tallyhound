@@ -66,5 +66,6 @@ scene("settings: an owner changes the firm's details and manages who can sign in
   await page.getByLabel("What Alex Staff can do").selectOption("read_only"); await page.getByText(/Alex Staff is now read-only and has been signed out everywhere/).waitFor();
   await alex.goto(W.url + "/clients"); await alex.waitForURL("**/signin");
   await page.locator("tr", { hasText: "Alex Staff" }).getByRole("button", { name: "Remove" }).click(); await page.getByRole("dialog").getByRole("button", { name: "Remove" }).click(); await page.getByText("Alex Staff can no longer sign in.").waitFor();
-  assert.equal((await W.auth.usersOfFirm(firmId)).length, 1);
+  const us = await W.auth.usersOfFirm(firmId); assert.equal(us.filter((u) => !u.leftAt).length, 1); assert.equal(us.length, 2, "switched off, not deleted");
+  await page.getByText(/No longer here: Alex Staff\./).waitFor(); assert.equal(await page.locator("tr", { hasText: "Alex Staff" }).count(), 0);
 });

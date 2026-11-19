@@ -7,6 +7,8 @@ export interface User {
   mfaSecret: Buffer | null;    // sealed with the firm's key
   mfaPending: Buffer | null;   // sealed; shown at setup, not yet confirmed
   totpStep: number | null;
+  leftAt: Date | null;        // set when the person was removed: no sign-in, the name stays on history
+  lockedUntil: Date | null;   // too many wrong codes
 }
 export interface Session { hash: string; userId: string; stage: "link" | "full"; createdAt: Date; expiresAt: Date; fails: number }
 
@@ -17,6 +19,13 @@ export interface AuthStore {
   createUser(u: { id: string; firmId: string; email: string; role: Role; name: string }): Promise<void>;
   setRole(id: string, role: Role): Promise<void>;
   removeUser(id: string): Promise<void>;
+  /** The person can no longer sign in. Their sessions, second factor and recovery codes go; the row and the name stay. */
+  deactivateUser(id: string, at: Date): Promise<void>;
+  reactivateUser(id: string, o: { role: Role; name: string }): Promise<void>;
+  noteFail(userId: string, at: Date): Promise<void>;
+  failsSince(userId: string, since: Date): Promise<number>;
+  /** Locks sign-in until the given time and forgets the failures that led to it. */
+  lock(userId: string, until: Date): Promise<void>;
   setMfaPending(id: string, sealed: Buffer): Promise<void>;
   confirmMfa(id: string, sealed: Buffer, step: number): Promise<void>;
   /** Records the step of an accepted code. False when that step, or a later one, was already used. */
@@ -51,7 +60,7 @@ const lower = (s: string) => String(s || "").trim().toLowerCase();
 export function memoryAuthStore(firmIds: () => string[] = () => []): AuthStore & { auditRows: { firmId: string; actor: string; action: string; detail?: string }[] } {
   const users = new Map<string, User>(), sessions = new Map<string, Session>(), links = new Map<string, Date>();
   const recovery = new Map<string, Map<string, Date | null>>(), requests: { h: string; at: Date }[] = [];
-  const auditRows: { firmId: string; actor: string; action: string; detail?: string }[] = [], slugs = new Map<string, string>();
+  const auditRows: { firmId: string; actor: string; action: string; detail?: string }[] = [], slugs = new Map<string, string>(), fails: { u: string; at: Date }[] = [];
   const copy = <T>(v: T | undefined): T | null => (v ? { ...v } : null);
   return {
     auditRows,
@@ -60,10 +69,15 @@ export function memoryAuthStore(firmIds: () => string[] = () => []): AuthStore &
     async usersOfFirm(firmId) { return [...users.values()].filter((u) => u.firmId === firmId).map((u) => ({ ...u })); },
     async createUser(u) {
       const email = lower(u.email); if ([...users.values()].some((x) => x.email === email)) throw new Error("That email address already has an account");
-      users.set(u.id, { ...u, email, mfaSecret: null, mfaPending: null, totpStep: null });
+      users.set(u.id, { ...u, email, mfaSecret: null, mfaPending: null, totpStep: null, leftAt: null, lockedUntil: null });
     },
     async setRole(id, role) { const u = users.get(id); if (u) u.role = role; },
     async removeUser(id) { users.delete(id); recovery.delete(id); for (const [h, s] of sessions) if (s.userId === id) sessions.delete(h); },
+    async deactivateUser(id, at) { const u = users.get(id); if (!u) return; Object.assign(u, { leftAt: at, mfaSecret: null, mfaPending: null, totpStep: null, lockedUntil: null }); recovery.delete(id); for (const [h, s] of sessions) if (s.userId === id) sessions.delete(h); },
+    async reactivateUser(id, o) { const u = users.get(id); if (u) Object.assign(u, { leftAt: null, role: o.role, name: o.name }); },
+    async noteFail(userId, at) { fails.push({ u: userId, at }); },
+    async failsSince(userId, since) { return fails.filter((f) => f.u === userId && f.at >= since).length; },
+    async lock(userId, until) { const u = users.get(userId); if (u) u.lockedUntil = until; for (let i = fails.length - 1; i >= 0; i--) if (fails[i]!.u === userId) fails.splice(i, 1); },
     async setMfaPending(id, sealed) { const u = users.get(id); if (u) u.mfaPending = sealed; },
     async confirmMfa(id, sealed, step) { const u = users.get(id); if (u) { u.mfaSecret = sealed; u.mfaPending = null; u.totpStep = step; } },
     async advanceTotp(id, step) { const u = users.get(id); if (!u || (u.totpStep != null && step <= u.totpStep)) return false; u.totpStep = step; return true; },
@@ -87,6 +101,7 @@ export function memoryAuthStore(firmIds: () => string[] = () => []): AuthStore &
       for (const [h, s] of sessions) if (s.expiresAt <= now) sessions.delete(h);
       for (const [j, x] of links) if (x <= now) links.delete(j);
       const cut = now.getTime() - 86400000; for (let i = requests.length - 1; i >= 0; i--) if (requests[i]!.at.getTime() < cut) requests.splice(i, 1);
+      for (let i = fails.length - 1; i >= 0; i--) if (fails[i]!.at.getTime() < cut) fails.splice(i, 1);
     }
   };
 }
@@ -98,7 +113,8 @@ export function postgresAuthStore(pool: Db): AuthStore {
   const buf = (v: unknown) => (v ? Buffer.from(v as Buffer) : null);
   const toUser = (r: Record<string, unknown> | null): User | null => r && {
     id: r.id as string, firmId: r.firm_id as string, email: r.email as string, role: r.role as Role, name: (r.name as string) || "",
-    mfaSecret: buf(r.mfa_secret), mfaPending: buf(r.mfa_pending), totpStep: r.totp_step == null ? null : Number(r.totp_step)
+    mfaSecret: buf(r.mfa_secret), mfaPending: buf(r.mfa_pending), totpStep: r.totp_step == null ? null : Number(r.totp_step),
+    leftAt: (r.left_at as Date) || null, lockedUntil: (r.locked_until as Date) || null
   };
   const toSession = (r: Record<string, unknown> | null): Session | null => r && {
     hash: Buffer.from(r.token_hash as Buffer).toString("hex"), userId: r.user_id as string, stage: r.stage as "link" | "full",
@@ -115,6 +131,14 @@ export function postgresAuthStore(pool: Db): AuthStore {
     },
     async setRole(id, role) { await pool.query("update users set role = $2 where id = $1", [id, role]); },
     async removeUser(id) { await pool.query("delete from users where id = $1", [id]); },
+    async deactivateUser(id, at) {
+      await pool.query("update users set left_at = $2, mfa_secret = null, mfa_pending = null, totp_step = null, locked_until = null where id = $1", [id, at]);
+      await pool.query("delete from sessions where user_id = $1", [id]); await pool.query("delete from recovery_codes where user_id = $1", [id]); await pool.query("delete from signin_fails where user_id = $1", [id]);
+    },
+    async reactivateUser(id, o) { await pool.query("update users set left_at = null, role = $2, name = $3 where id = $1", [id, o.role, o.name]); },
+    async noteFail(userId, at) { await pool.query("insert into signin_fails (user_id, at) values ($1, $2)", [userId, at]); },
+    async failsSince(userId, since) { return Number((await one("select count(*)::int as n from signin_fails where user_id = $1 and at >= $2", [userId, since]))!.n); },
+    async lock(userId, until) { await pool.query("update users set locked_until = $2 where id = $1", [userId, until]); await pool.query("delete from signin_fails where user_id = $1", [userId]); },
     async setMfaPending(id, sealed) { await pool.query("update users set mfa_pending = $2 where id = $1", [id, sealed]); },
     async confirmMfa(id, sealed, step) { await pool.query("update users set mfa_secret = $2, mfa_pending = null, totp_step = $3 where id = $1", [id, sealed, step]); },
     async advanceTotp(id, step) { return ((await pool.query("update users set totp_step = $2 where id = $1 and (totp_step is null or totp_step < $2)", [id, step])).rowCount || 0) > 0; },
@@ -141,6 +165,7 @@ export function postgresAuthStore(pool: Db): AuthStore {
       await pool.query("delete from sessions where expires_at <= $1", [now]);
       await pool.query("delete from signin_links where expires_at <= $1", [now]);
       await pool.query("delete from signin_requests where at < $1", [new Date(now.getTime() - 86400000)]);
+      await pool.query("delete from signin_fails where at < $1", [new Date(now.getTime() - 86400000)]);
     }
   };
 }
