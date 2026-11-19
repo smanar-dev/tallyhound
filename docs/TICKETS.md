@@ -405,6 +405,9 @@ A client's link now leads somewhere. Written as React components, turned into pl
 | T-117, T-135 Firm page | Done: `/f/<firm>` serves the kit's `registration.firmPage` for each firm. The client pages link to it for privacy and terms. Not on its own domain yet |
 | T-128 Queue | Uploads go through it as a third kind (`db/migrations/005_upload_queue.sql`) |
 
+| T-68 Check-in page | Done: while a check-in is out, the client's link opens it. Ordinary checkboxes styled as large tiles, a count of employers, one optional note, and "Was this year about the same?" first for a returning client. Only taps, the count and the note cross over; what the note means is read on the server. English only. Not built: the optional "who are they with" step (T-72), and a first-time user has not been timed |
+| T-69 Check-in review | Done on the client page: the proposal card (add, remove, requests from the note, your own request), "Confirm and start collecting" or "Confirm only", and a card for something a client mentioned mid-collection. Bulk "Send check-in" is on the Clients list. A browser test runs the whole loop: firm sends, client ticks on a phone with no script, firm confirms, collecting starts |
+
 Engine additions, each with tests in `test/engine.test.js`: `consentFromPage`, `declineTexts`, `stopEmail`, `unsubscribeLink`. Pipeline: `clientUpload`, and the unsubscribe line and header on every email (`test/pipeline.test.js`).
 
 Home's buttons for adding a client, the check-in for everyone, a checklist for everyone and starting are now live. Still left out: text registration, the heads-up wording, storage. Next in order: Clients list and add one client (T-16, T-38, T-56), the client page (T-16), the document viewer (T-17), conversation and approvals (T-18).

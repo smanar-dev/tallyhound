@@ -36,3 +36,5 @@ button.dcard{display:block;width:100%;font:inherit;color:inherit;cursor:pointer}
 .tiles.srcs{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
 .steps-list{margin:0 0 0 20px;display:grid;gap:4px;padding:0}
 .pastebox{min-height:140px;width:100%;font:12px var(--mono)}
+.card.checkin{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink)}
+.ckrow{padding:5px 0;flex-wrap:nowrap;align-items:flex-start}

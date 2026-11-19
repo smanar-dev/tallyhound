@@ -19,3 +19,11 @@ input[type=tel],input[type=file]{width:100%;font:inherit;padding:12px;border:1px
 .ok{background:#E2F3EA;color:#0C5A39;border-radius:12px;padding:10px 12px;margin:0 0 14px;font-weight:600}
 input:focus,button:focus,a:focus{outline:3px solid #2358D1;outline-offset:2px}
 footer{margin-top:26px;font-size:13px;color:#56637A}footer a{color:inherit}
+/* the check-in: big tappable choices, made from ordinary checkboxes so they work with no script */
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 14px}
+.tile{position:relative;display:flex;align-items:center;min-height:56px;margin:0;font-weight:600;font-size:15px;background:#fff;border:1px solid #B9B2A2;border-radius:12px;padding:8px 10px 8px 40px;cursor:pointer}
+.tile input{position:absolute;left:12px;top:50%;margin-top:-10px;width:20px;height:20px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 16px;padding:0;list-style:none}.chips li{background:#fff;border:1px solid #E7E2D6;border-radius:99px;padding:4px 10px;font-size:14px}
+input[type=number],textarea{width:100%;font:inherit;padding:12px;border:1px solid #B9B2A2;border-radius:12px;background:#fff;color:inherit;min-height:48px}
+textarea{min-height:84px}
+.field{margin:0 0 14px}

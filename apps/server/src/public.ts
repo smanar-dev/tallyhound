@@ -69,12 +69,24 @@ export async function registerPublic(f: FastifyInstance, d: PublicDeps): Promise
     const ask = it ? "your " + (it.custom || (x.T.FORMS[it.form] || x.T.FORMS.OTHER).plain) + (it.payer ? " from " + it.payer : "") : null;
     return pages.uploadPage(x.firm, { action: "/u/" + t, ask, others: Math.max(0, open - (it ? 1 : 0)), done: done || (!it && open === 0), ...o });
   };
+  // While a check-in is out and unanswered, the client's link opens the check-in, not the upload page.
+  const checkinOpen = (x: Found) => !!(x.e && x.e.checkin && x.e.checkin.sentAt && !x.e.checkin.doneAt && !["complete", "closed"].includes(x.e.status));
+  const checkinView = (x: Found, t: string, changed: boolean, error?: string) => { const p = x.T.checkinPrefill(x.e.id), name = (i: { form: string; payer: string }) => (x.T.FORMS[i.form] || x.T.FORMS.OTHER).plain + (i.payer ? " from " + i.payer : "");
+    return pages.checkinPage(x.firm, { action: "/u/" + t, year: x.e.year, choices: x.T.CHECKQ.map((q: string[]) => [q[0], q[1]]), ticked: p.facts, employers: p.w2, last: p.last.map(name), returning: !!p.returning && p.last.length > 0, changed, error }); };
   f.get("/u/:t", { preHandler: brake }, async (req, reply) => {
     const x = await find(params(req).t, "u"); if (!x || !x.c) return gone(reply, x);
+    if (checkinOpen(x)) return html(reply, checkinView(x, params(req).t, !!(req.query as { changed?: string }).changed));
     const sent = Math.min(MAX_FILES, Math.max(0, +(req.query as { sent?: string }).sent! || 0)); return html(reply, uploadView(x, params(req).t, { sent: sent || undefined }));
   });
   f.post("/u/:t", { preHandler: brake }, async (req, reply) => {
     const t = params(req).t, x = await find(t, "u"); if (!x || !x.c) return gone(reply, x);
+    if (!req.isMultipart() && fields(req).form === "checkin") {
+      if (!checkinOpen(x)) return reply.redirect("/u/" + t, 303);   // answered already, or never sent: nothing to take
+      const b = fields(req), facts: Record<string, boolean> = {}; for (const q of x.T.CHECKQ as string[][]) facts[q[0]!] = b["f_" + q[0]] === "1";
+      // Only taps, a count and a short note cross over. What the note means is read by the model on the server, never taken from the browser.
+      await d.app.checkinAnswers(x.firmId, x.c.id, b.same === "1" ? { same: true, facts: {}, counts: {} } : { facts, counts: { w2: Math.min(9, Math.max(1, Math.round(+b.w2!) || 1)) }, note: String(b.note || "").slice(0, 300) });
+      return html(reply, pages.checkinDone(x.firm));
+    }
     if (!req.isMultipart()) return html(reply, uploadView(x, t, { error: "Choose a photo or a PDF first." }), 400);
     const files: { name: string; type: string; b64: string }[] = []; let tooBig = false;
     try { for await (const part of req.files()) { const buf = await part.toBuffer(); if (buf.length) files.push({ name: String(part.filename || "").slice(0, 120), type: part.mimetype, b64: buf.toString("base64") }); } }

@@ -101,3 +101,22 @@ for (const kind of KINDS) {
     await H.close();
   });
 }
+
+for (const kind of KINDS) {
+  test("client pages (" + kind + "): the check-in is taps and one note, comes back to the firm as a proposal, and is taken once", async () => {
+    const H = await build(kind, { ai: model() }), { firmId, ownerId } = await H.newFirm();
+    await H.app.staff(firmId, ownerId, (T: Engine) => { T.S.firm.hound.mode = "autopilot"; T.S.firm.senderStatus = "approved"; T.importRows(T.parseCSV("First,Last,Email,Mobile\nJo,Day,jo@x.example,6155550111")); const r = T.sendCheckin(T.S.engs[0].id); if (r) throw new Error(r); });
+    const state = async () => { const T = createEngine(); T.load(await H.store.readState(firmId)); return T; }, sent = H.email.sent.concat(H.sms.sent).find((m: { body: string }) => /\/u\//.test(m.body))!;
+    assert.ok(sent, "the check-in message went with a link"); const u = "/u/" + /\/u\/([a-z-]+)/.exec(sent.body)![1];
+    const page = await H.server.inject({ method: "GET", url: u }); assert.equal(page.statusCode, 200); const t = words(page.body);
+    assert.match(t, /What did you have in 2026\?/); assert.match(t, /A job with a W-2/); assert.match(t, /Sold stocks, funds or crypto/); assert.equal((page.body.match(/type="checkbox"/g) || []).length, (await state()).CHECKQ.length); assert.ok(!/<script/i.test(page.body));
+    const post = (body: Record<string, string>) => H.server.inject({ method: "POST", url: u, payload: new URLSearchParams(body).toString(), headers: { "content-type": "application/x-www-form-urlencoded" } });
+    const r = await post({ form: "checkin", f_w2: "1", f_brokerage: "1", w2: "2", note: "I sold some shares in March", topics: "rental", custom: "x" }); assert.equal(r.statusCode, 200); assert.match(words(r.body), /Thanks\. That's all\. Test CPAs 1 will send you a short list/);
+    const T = await state(), e = T.S.engs[0]; assert.ok(e.checkin.doneAt); assert.equal(e.checkin.note, "I sold some shares in March"); assert.ok(e.checkin.adds.length > 0, "a proposal for the firm to confirm");
+    assert.equal(T.S.clients[0].profile.brokerage, true); assert.ok(!T.S.clients[0].profile.rental, "a field the browser added by hand is ignored");
+    // The firm decides: nothing was added to the checklist by the client's taps alone, and collecting has not started.
+    assert.equal(e.status, "not_started"); const n = (await state()).S.msgs.length; assert.equal((await post({ form: "checkin", f_rental: "1", w2: "1" })).statusCode, 303, "a second set of answers is not taken"); assert.equal((await state()).S.msgs.length, n);
+    assert.match(words((await H.server.inject({ method: "GET", url: u })).body), /We're waiting for|already has everything/, "afterwards the link is the upload page");
+    await H.close();
+  });
+}

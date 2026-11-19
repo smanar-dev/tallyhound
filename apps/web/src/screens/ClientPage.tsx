@@ -53,15 +53,53 @@ function NextCard({ T, e, c, onHandOff }: Ctx & { onHandOff: () => void }) {
   </div></div>;
 }
 
+// The client's check-in answers, as a proposal: what to add, what may no longer apply, their note. The firm ticks and confirms (docs/UX.md).
+function CheckinCard({ T, e, c }: Ctx) {
+  const { can, actMany, toast } = useFirm(), k = e.checkin, s = T.S;
+  const [add, setAdd] = useState<Set<number>>(() => new Set((k?.adds || []).map((_: Row, n: number) => n))), [drop, setDrop] = useState<Set<string>>(() => new Set(k?.drops || [])), [cus, setCus] = useState<Set<number>>(() => new Set((k?.customs || []).map((_: Row, n: number) => n))), [own, setOwn] = useState("");
+  if (!k) return null;
+  if (!k.doneAt) {
+    if (k.afterOptIn) return ["in_progress", "stuck"].includes(e.status) && s.now - k.sentAt < T.CHECKIN_WAIT_DAYS * T.DAY ? <div className="note info" style={{ marginBottom: 12 }}><Icon name="clock" small /><span className="grow">{k.pending ? "The questions go out by text when sending hours begin" : "The questions went to " + c.first + " by text " + rel(T, k.sentAt)}. Sent once, with no reminder. Document requests wait up to {T.CHECKIN_WAIT_DAYS} days for the answers.</span></div> : null;
+    return e.status === "not_started" ? <div className="note info" style={{ marginBottom: 12 }}><Icon name="clock" small /><span className="grow">{k.pending ? "The check-in goes out when sending hours begin" : "Check-in sent " + rel(T, k.sentAt)}. Waiting for {c.first} to tick what applies. You can still choose a checklist yourself and start.</span></div> : null;
+  }
+  if (k.reviewedAt) return null;
+  const it = (id: string) => s.items.find((x: Row) => x.id === id), drops: string[] = (k.drops || []).filter(it), live = ["in_progress", "stuck"].includes(e.status);
+  const flip = <V,>(set: Set<V>, v: V, to: (n: Set<V>) => void) => { const n = new Set(set); if (n.has(v)) n.delete(v); else n.add(v); to(n); };
+  const apply = async (start: boolean) => {
+    const custom = (k.customs || []).filter((_: string, n: number) => cus.has(n)).concat(own.trim() ? [own.trim()] : []);
+    try { const r = (await actMany([["applyCheckin", e.id, { add: [...add], drop: [...drop], custom, start }], ["startMany", []]]))[0] as { added: number; removed: number; started?: boolean; why?: string } | string;
+      toast(typeof r === "string" ? r + "." : "Checklist confirmed: " + r.added + " added, " + r.removed + " removed." + (live ? " Collecting carries on with the updated list." : "") + (start ? (r.started ? " Collecting has started." : " Not started: " + r.why + ".") : "")); } catch { /* said */ }
+  };
+  return <div className="card pad col checkin" style={{ marginBottom: 14 }}>
+    <div className="row"><h3 className="grow">{c.first} {k.afterOptIn ? "answered the questions" : "finished the check-in"}</h3><span className="small muted">{rel(T, k.doneAt)}</span></div>
+    <p className="small muted">{k.same ? "Says this year is about the same as last year. " : ""}Tick what to apply, then confirm.</p>
+    {(k.adds || []).length ? <div><b className="small">Add to the checklist</b>{k.adds.map((a: Row, n: number) => <label key={n} className="row small ckrow"><input type="checkbox" checked={add.has(n)} disabled={!can()} onChange={() => flip(add, n, setAdd)} /><span><b>{a.form === "PRIOR" ? "Prior return" : cap(fname(T, a.form))}{a.payer ? " from " + a.payer : ""}</b> <span className="muted">{a.reason}</span></span></label>)}</div> : null}
+    {(k.customs || []).length ? <div><b className="small">Requests Claude suggests from the note</b>{k.customs.map((t: string, n: number) => <label key={n} className="row small ckrow"><input type="checkbox" checked={cus.has(n)} disabled={!can()} onChange={() => flip(cus, n, setCus)} /><span><b>{t}</b></span></label>)}</div> : null}
+    {drops.length ? <div><b className="small">Remove from the checklist</b>{drops.map((id) => <label key={id} className="row small ckrow"><input type="checkbox" checked={drop.has(id)} disabled={!can()} onChange={() => flip(drop, id, setDrop)} /><span><b>{cap(iname(T, it(id)))}{it(id).payer ? " from " + it(id).payer : ""}</b> <span className="muted">Client says this no longer applies</span></span></label>)}</div> : null}
+    {!(k.adds || []).length && !drops.length && !(k.customs || []).length ? <p className="small">Nothing to add or remove. The checklist below stands.</p> : null}
+    {k.note ? <><div className="note"><Icon name="msg" small /><span>{c.first} wrote: “{k.note}”{k.noteRead ? "" : " This note was not read by Claude, so check whether it needs a document."}</span></div>{can() ? <label className="f small">Add your own request from the note (optional)<input type="text" maxLength={60} placeholder="For example: closing statement for the home sale" value={own} onChange={(ev) => setOwn(ev.target.value)} /></label> : null}</> : null}
+    {can() ? <div className="row">{live ? <button className="btn pri" onClick={() => void apply(false)}><Icon name="check" small />Apply and carry on collecting</button> : <><button className="btn pri" onClick={() => void apply(true)}><Icon name="send" small />Confirm and start collecting</button><button className="btn" onClick={() => void apply(false)}>Confirm only</button></>}</div> : null}
+  </div>;
+}
+// Something a client mentioned in a message that may need a document. Nothing is asked for unless a person adds it.
+function MentionCard({ e, c }: Ctx) {
+  const { can, act, toast } = useFirm(), L: string[] = e.suggestCustom || []; if (!L.length || !can()) return null;
+  return <div className="card pad col" style={{ marginBottom: 14, gap: 8 }}><b>{c.first} mentioned something that may need a document</b>
+    {L.map((t) => <div key={t} className="row" style={{ flexWrap: "nowrap" }}><span className="grow">{t}</span><button className="btn sm pri" onClick={() => void act("customSuggest", e.id, t, true).then(() => toast("Added to the checklist. The Hound will ask for it."), () => {})}>Add as a request</button><button className="btn sm ghost" onClick={() => void act("customSuggest", e.id, t, false).then(() => toast("Dismissed."), () => {})}>Dismiss</button></div>)}
+    <p className="small muted">Claude read the message and flagged this. Nothing is requested from the client unless you add it.</p></div>;
+}
+
 function Checklist({ T, e, c, openDoc }: Ctx & { openDoc: (id: string) => void }) {
   const { can, act, toast } = useFirm(), s = T.S, items: Row[] = T.itemsOf(e.id), [form, setForm] = useState(Object.keys(T.FORMS).filter((k) => k !== "OTHER")[0]!), [payer, setPayer] = useState(""), [waive, setWaive] = useState<Row | null>(null), [note, setNote] = useState("");
   const editable = can() && !["closed", "opted_out"].includes(e.status), docOf = (id: string) => s.docs.find((d: Row) => d.id === id);
   const set = (i: Row, state: string, why?: string, said?: string) => act("setItem", i.id, state, why).then(() => { if (said) toast(said); }, () => {});
   const checkin = async () => { try { const r = await act("sendCheckin", e.id); toast(r ? "Not sent: " + r + "." : "Check-in sent. The answers come back here as a proposed checklist."); } catch { /* said */ } };
   const icon = (st: string): IconName | null => st === "received" ? "check" : st === "requested" ? "send" : ["in_review", "says_none", "partial"].includes(st) ? "alert" : st === "waived" ? "minus" : null;
+  const proposal = !!(e.checkin && e.checkin.doneAt && !e.checkin.reviewedAt);
   return <>
-    {e.confirmed ? null : <div className="note" style={{ marginBottom: 12 }}><Icon name="alert" small /><span className="grow">This checklist has not been confirmed. Go through it, then confirm so collecting can start.</span>{can() ? <button className="btn sm pri" onClick={() => void act("confirmChecklist", e.id).then(() => toast("Checklist confirmed."), () => {})}>Confirm checklist</button> : null}</div>}
-    {editable && e.status === "not_started" && !(e.checkin && e.checkin.doneAt) ? <div className="row" style={{ marginBottom: 12 }}><span className="small muted">{e.checkin ? "A check-in was sent " + rel(T, e.checkin.sentAt) + "." : "Not sure what " + c.first + " has this year? Ask with a 2-minute check-in."}</span><span className="sp" /><button className="btn sm" onClick={checkin}><Icon name="send" small />{e.checkin ? "Send the check-in again" : "Send a check-in"}</button></div> : null}
+    <CheckinCard key={"ck" + (e.checkin?.doneAt ? +e.checkin.doneAt : 0)} T={T} e={e} c={c} /><MentionCard T={T} e={e} c={c} />
+    {e.confirmed || proposal ? null : <div className="note" style={{ marginBottom: 12 }}><Icon name="alert" small /><span className="grow">This checklist has not been confirmed. Go through it, then confirm so collecting can start.</span>{can() ? <button className="btn sm pri" onClick={() => void act("confirmChecklist", e.id).then(() => toast("Checklist confirmed."), () => {})}>Confirm checklist</button> : null}</div>}
+    {editable && e.status === "not_started" && !(e.checkin && e.checkin.doneAt) ? <div className="row" style={{ marginBottom: 12 }}><span className="small muted">{e.checkin ? "No answer yet?" : "Not sure what " + c.first + " has this year? Ask with a 2-minute check-in."}</span><span className="sp" /><button className="btn sm" onClick={checkin}><Icon name="send" small />{e.checkin ? "Send the check-in again" : "Send a check-in"}</button></div> : null}
     <div className="card">
       {items.length ? <div className="list">{items.map((i) => { const d = i.docId ? docOf(i.docId) : null, ic = icon(i.state), rel0 = ["expected", "requested"].includes(i.state) ? T.releaseOf(i, e) : null;
         return <div className="li" key={i.id}><span className={"ico " + i.state}>{ic ? <Icon name={ic} /> : null}</span>

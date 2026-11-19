@@ -29,3 +29,23 @@ scene("a client on a phone with no script agrees to texts, then sends a photo fr
     assert.deepEqual(errors, [], "nothing was blocked and nothing failed to load");
   } finally { await b.close(); }
 });
+
+scene("the check-in loop: the firm sends it, the client ticks on a phone with no script, the firm confirms the proposal and collecting starts", async (W) => {
+  const { firmId, ownerId } = await W.newFirm();
+  await W.app.staff(firmId, ownerId, (T: Engine) => { T.S.firm.hound.mode = "autopilot"; T.S.firm.senderStatus = "approved"; T.importRows(T.parseCSV("First,Last,Email,Mobile\nJo,Day,jo@x.example,6155550111")); });
+  const page = await W.signIn("pat1@firm1.test"); let T: Engine = await W.state(firmId); const jo = T.S.engs[0];
+  await page.goto(W.url + "/clients/" + jo.id); await page.getByRole("button", { name: "Send a check-in" }).click(); await page.getByText(/^Check-in sent\. The answers come back here/).waitFor(); await page.getByText(/Waiting for Jo to tick what applies/).waitFor();
+  const sent = W.email.sent.concat(W.sms.sent).find((m: { body: string }) => /\/u\//.test(m.body))!, link = /\/u\/([a-z-]+)/.exec(sent.body)![1]!;
+  // The client, on a phone, scripting off.
+  const b = await chromium.launch(), phone = await (await b.newContext({ viewport: { width: 360, height: 740 }, javaScriptEnabled: false })).newPage();
+  try { await phone.goto(W.url + "/u/" + link); await phone.getByRole("heading", { name: "What did you have in 2026?" }).waitFor();
+    for (const el of await phone.locator("label.tile").all()) assert.ok((await el.boundingBox())!.height >= 44);
+    await phone.getByLabel("Sold stocks, funds or crypto").check(); await phone.getByLabel("Anything else we should know?").fill("We sold the lake house in June"); await phone.getByRole("button", { name: "Send" }).click(); await phone.getByRole("heading", { name: "Thanks. That's all." }).waitFor();
+  } finally { await b.close(); }
+  // Back at the firm: it shows in Needs you, and the client page has the proposal to confirm.
+  await page.goto(W.url + "/"); await page.locator(".card", { hasText: "Needs you" }).first().locator(".li", { hasText: "Finished the check-in" }).getByRole("link", { name: "Go through the checklist" }).click();
+  const card = page.locator(".card.checkin"); await card.waitFor(); assert.match(text(await card.textContent()), /Jo finished the check-in/); assert.match(text(await card.textContent()), /Jo wrote: “We sold the lake house in June”/);
+  T = await W.state(firmId); const adds = T.S.engs[0].checkin.adds.length, before = T.itemsOf(jo.id).length; assert.ok(adds > 0); assert.equal(await card.locator("input[type=checkbox]:checked").count(), adds + T.S.engs[0].checkin.drops.length);
+  await card.getByLabel(/Add your own request/).fill("Closing statement for the lake house"); await card.getByRole("button", { name: "Confirm and start collecting" }).click(); await page.getByText(/^Checklist confirmed: \d+ added, \d+ removed\. Collecting has started\./).waitFor(); await card.waitFor({ state: "detached" });
+  T = await W.state(firmId); const e = T.S.engs[0]; assert.equal(e.confirmed, true); assert.notEqual(e.status, "not_started"); assert.ok(T.itemsOf(jo.id).some((i: { custom?: string }) => i.custom === "Closing statement for the lake house")); assert.ok(T.itemsOf(jo.id).length > before);
+});

@@ -18,7 +18,7 @@ export const ACTIONS: Record<string, Rule> = {
     return T.importRows(p); } },
   // checklist
   setItem: staff(3), addItem: staff(4), addRecommended: staff(2), dismissRec: staff(2), addFromPrior: staff(2), setCustomEs: staff(2),
-  saveTemplate: staff(1), removeTemplate: staff(1), applyTemplate: staff(3), sendCheckin: staff(1), applyCheckin: staff(2), skipQuestions: staff(2),
+  saveTemplate: staff(1), removeTemplate: staff(1), applyTemplate: staff(3), sendCheckin: staff(1), applyCheckin: staff(2), skipQuestions: staff(2), customSuggest: staff(3),
   // Editing a client's details, as the demo's Details tab does it. A changed mobile number is a new number: any OK to text is reset
   // and a wrong-number flag is cleared (spec TH-CON-9). The language is not editable here while Spanish is off for pilots.
   saveClient: { role: "staff", n: 2, run: (T, [cid, v]) => {

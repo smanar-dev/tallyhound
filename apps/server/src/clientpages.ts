@@ -54,3 +54,22 @@ export function unsubscribePage(firm: FirmView, o: { action: string; keep: strin
       h("form", { key: 2, method: "post", action: o.action }, h("button", { className: "btn pri" }, "Unsubscribe")), h("a", { key: 3, className: "btn", href: o.keep }, "Keep emails")]);
 }
 export const keptPage = (firm: FirmView) => frame("Nothing changed", firm, [h("h1", { key: 1 }, "Nothing changed"), h("p", { key: 2 }, "You will keep getting emails from " + firm.name + " about your tax documents.")]);
+
+// The check-in (docs/UX.md): two minutes, taps only, one optional note. A returning client gets one question first.
+export interface CheckinView { action: string; year: number; choices: [key: string, label: string][]; ticked: Record<string, boolean>; employers: number; last: string[]; returning: boolean; changed: boolean; error?: string }
+export function checkinPage(firm: FirmView, o: CheckinView) {
+  if (o.returning && !o.changed) return frame("2-minute check-in", firm, [
+    h("h1", { key: 1 }, "Was " + o.year + " about the same?"), h("p", { key: 2, className: "muted" }, "Last year you sent us:"),
+    h("ul", { key: 3, className: "chips" }, o.last.map((x, i) => h("li", { key: i }, x))),
+    h("form", { key: 4, method: "post", action: o.action }, h("input", { type: "hidden", name: "form", value: "checkin" }), h("button", { className: "btn pri", name: "same", value: "1" }, "Yes, about the same")),
+    h("a", { key: 5, className: "btn", href: o.action + "?changed=1" }, "Some things changed")]);
+  return frame("2-minute check-in", firm, [
+    h("h1", { key: 1 }, "What did you have in " + o.year + "?"), h("p", { key: 2, className: "muted" }, "Tick everything that applies, so we only ask for what you have. Untick anything that no longer does."),
+    o.error ? h("p", { key: 3, className: "err", role: "alert" }, o.error) : null,
+    h("form", { key: 4, method: "post", action: o.action }, h("input", { type: "hidden", name: "form", value: "checkin" }),
+      h("div", { className: "tiles" }, o.choices.map(([k, label]) => h("label", { key: k, className: "tile" }, h("input", { type: "checkbox", name: "f_" + k, value: "1", defaultChecked: !!o.ticked[k] }), label))),
+      h("div", { className: "field" }, h("label", { htmlFor: "w2" }, "If you had a job with a W-2: how many employers?"), h("input", { id: "w2", name: "w2", type: "number", inputMode: "numeric", min: 1, max: 9, defaultValue: o.employers })),
+      h("div", { className: "field" }, h("label", { htmlFor: "note" }, "Anything else we should know? (optional)"), h("textarea", { id: "note", name: "note", maxLength: 300 })),
+      h("button", { className: "btn pri" }, "Send"))]);
+}
+export const checkinDone = (firm: FirmView) => frame("Thanks", firm, [h("h1", { key: 1 }, "Thanks. That's all."), h("p", { key: 2 }, firm.name + " will send you a short list of what to send.")]);

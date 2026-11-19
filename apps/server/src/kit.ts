@@ -32,6 +32,7 @@ export interface App {
   inboundSms(m: Record<string, unknown>): Promise<any>;
   inboundEmail(m: Record<string, unknown>): Promise<any>;
   readHeld(firmId: string): Promise<number>;
+  checkinAnswers(firmId: string, clientId: string, answers: Record<string, unknown>): Promise<unknown>;
   clientUpload(m: { firmId: string; clientId: string; files: { bytes: Buffer; contentType?: string }[]; providerId?: string }): Promise<{ handled: boolean; duplicate?: boolean; held?: boolean; docs?: string[]; unusable?: string }>;
   staffUpload(firmId: string, userId: string, clientId: string, file: { bytes: Buffer; contentType?: string }): Promise<{ error?: string; docs?: (string | null)[] }>;
   openFile(firmId: string, userId: string, docId: string): Promise<{ bytes: Buffer; contentType: string } | null>;
