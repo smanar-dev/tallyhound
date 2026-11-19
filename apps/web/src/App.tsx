@@ -7,6 +7,8 @@ import { Soon } from "./screens/Soon";
 import { Clients } from "./screens/Clients";
 import { ClientPage } from "./screens/ClientPage";
 import { NeedsYou } from "./screens/NeedsYou";
+import { AddClients } from "./screens/AddClients";
+import { Messages } from "./screens/Messages";
 
 function Staff() {
   const signedOut = useCallback(() => { window.location.replace("/signin"); }, []);
@@ -16,8 +18,8 @@ function Staff() {
     <Route path="/clients/:id" element={<ClientPage />} />
     <Route path="/needs-you" element={<NeedsYou />} />
     <Route path="/hound" element={<Soon title="The Hound" what="What Tallyhound has done and why, what is coming up, and the rules it follows." />} />
-    <Route path="/add-clients" element={<Soon title="Add clients" what="Import a spreadsheet of clients, or add one at a time." />} />
-    <Route path="/messages" element={<Soon title="All messages" what="Every conversation, and messages from senders Tallyhound could not match to a client." />} />
+    <Route path="/add-clients" element={<AddClients />} />
+    <Route path="/messages" element={<Messages />} />
     <Route path="/progress" element={<Soon title="Progress" what="How the season is going: who is complete, how fast documents arrive, how many needed a person." />} />
     <Route path="/settings" element={<Soon title="Settings" what="Your firm's details, people, message wording, storage and how long data is kept." />} />
     <Route path="*" element={<Navigate to="/" replace />} />

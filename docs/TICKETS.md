@@ -384,4 +384,12 @@ Four engine log lines use retired words ("Stuck:", "Outreach started", "Delivere
 | T-40 Three checks everywhere | Done on every screen that shows a document. A test fails the build if the web app mentions `qualityMin` or `expectYear`. The demo's "How each check was made" list is left out because it worked the checks out again in the screen |
 | T-61 Draft hygiene | Drafts are listed in Needs you and in the conversation; a held draft says when it will go |
 
+### Step 9: import and All messages (same day)
+
+| Ticket | State |
+|---|---|
+| T-24 CSV import | Done: where is your list (with the export steps for Drake, Lacerte, UltraTax, ProSeries, CCH and the practice tools), upload or paste, match columns, check rows, done. "Check rows" runs the engine's own import on a copy of the firm's state in the browser, so the preview is what happens. Sensitive columns are shown as "Never imported" and the server ignores any attempt to map one. A second import of the same list updates and adds. 200 rows import in well under 5 seconds in the test. XLSX is not read: the screen says to save as CSV |
+| All messages | Done: every message in, with how it was read and what was done; Unknown senders, where a person says whose a message is (it is then checked as that client's) or discards it |
+| T-42 Under an hour to first request | Not timed with a person. The pieces it needs now exist |
+
 Home's buttons for adding a client, the check-in for everyone, a checklist for everyone and starting are now live. Still left out: text registration, the heads-up wording, storage. Next in order: Clients list and add one client (T-16, T-38, T-56), the client page (T-16), the document viewer (T-17), conversation and approvals (T-18).

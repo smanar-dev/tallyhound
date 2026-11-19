@@ -32,3 +32,7 @@ a.dcard,div.dcard{display:block;text-decoration:none;color:inherit}
 .rqi{text-align:left;font:inherit;color:inherit;cursor:pointer;margin-bottom:8px}
 button.dcard{display:block;width:100%;font:inherit;color:inherit;cursor:pointer}
 .list textarea{width:100%;min-height:60px;font:inherit}
+.narrow{max-width:860px;width:100%}
+.tiles.srcs{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+.steps-list{margin:0 0 0 20px;display:grid;gap:4px;padding:0}
+.pastebox{min-height:140px;width:100%;font:12px var(--mono)}

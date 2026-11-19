@@ -31,4 +31,6 @@ React, built with Vite. `npm run build` writes `apps/web/dist`, and the web serv
 | Clients: list, filters, selection, add a client, choose a checklist, start collecting | T-16, T-38, T-39 | Done |
 | Client page: checklist, suggested, documents, conversation and approvals, activity, details | T-16, T-18, T-90 | Done, except the Hound panel and the check-in card |
 | Needs you, and the document viewer | T-17, T-19, T-40 | Done. PDFs open in their own tab |
-| The Hound, add clients (import), all messages, progress, settings | T-20, T-24 | Not built: each shows a holding screen |
+| Add clients: the four-step import | T-24 | Done. CSV only |
+| All messages, with unknown senders | | Done |
+| The Hound, Progress, Settings | T-20 | Not built: each shows a holding screen |

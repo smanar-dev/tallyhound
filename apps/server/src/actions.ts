@@ -10,7 +10,12 @@ const staff = (n: number): Rule => ({ role: "staff", n }), owner = (n: number): 
 export const ACTIONS: Record<string, Rule> = {
   // client list
   addClient: staff(1), setZone: staff(2), setFact: staff(3), recordConsent: staff(2),
-  importCsv: { role: "staff", n: 1, run: (T, [text]) => T.importRows(T.parseCSV(String(text || ""))) },
+  // The file is parsed again here, by the engine, from the text. The browser may say how to use each column and nothing else:
+  // a column the engine marked sensitive (SSN, date of birth, fees) stays unread whatever the browser sends.
+  importCsv: { role: "staff", n: 2, run: (T, [text, map]) => {
+    const p = T.parseCSV(String(text || "")), FIELDS = ["", "first", "last", "email", "mobile", "preparer", "lang", "name", "tz", "ref", "docs", "entity", "rtype"];
+    if (Array.isArray(map) && map.length === p.head.length) p.map = p.map.map((was: string, i: number) => ((p.sensitive || [])[i] ? "" : FIELDS.includes(map[i]) ? map[i] : was));
+    return T.importRows(p); } },
   // checklist
   setItem: staff(3), addItem: staff(4), addRecommended: staff(2), dismissRec: staff(2), addFromPrior: staff(2), setCustomEs: staff(2),
   saveTemplate: staff(1), removeTemplate: staff(1), applyTemplate: staff(3), sendCheckin: staff(1), applyCheckin: staff(2), skipQuestions: staff(2),
@@ -39,6 +44,16 @@ export const ACTIONS: Record<string, Rule> = {
     Object.assign(d, { form, year: +(f.year as number) || d.year, payer: String(f.payer ?? "").replace(/[<>]/g, "").trim().slice(0, 80) });
     (d.versions = d.versions || []).push({ v: d.versions.length + 1, by: T.S.user.name, form: d.form, year: d.year, payer: d.payer }); T.audit("document.correct", d.form); return null; } },
   decideTask: staff(3), deliver: staff(1), closeEng: staff(1),
+  // Unknown senders: a person says whose it is, and it is then checked exactly as if that client had sent it (the demo's assign).
+  assignUnknown: { role: "staff", n: 2, run: (T, [yid, cid]) => {
+    const S = T.S, y = S.tray.find((x: { id: string }) => x.id === yid), c = T.client(cid), e = c && T.engOf(c.id); if (!y) return { ok: false, why: "That message has already been dealt with" }; if (!c || !e) return { ok: false, why: "Choose a client" };
+    if (!y.docId && !y.spec && (y.why === "Could not be processed" || y.why === "Blocked by the virus scan")) return { ok: false, why: "There is nothing in this notice to assign" };
+    S.tray.splice(S.tray.indexOf(y), 1); let doc = null;
+    if (y.docId) { doc = S.docs.find((d: { id: string }) => d.id === y.docId); if (doc) { doc.clientId = c.id; doc.engId = e.id; T.check(doc); T.decide(doc, e, c); } }
+    else if (y.spec) doc = T.inboundDoc(c.id, y.spec, y.channel || "text"); else if (y.text) T.inboundText(c.id, y.text);
+    T.audit("unknown.assigned", c.last); return { ok: true, first: c.first, state: doc ? doc.state : null }; } },
+  // Discarding forgets the message. A file that came with it is marked discarded so it is deleted on the short schedule.
+  discardUnknown: { role: "staff", n: 1, run: (T, [yid]) => { const S = T.S, y = S.tray.find((x: { id: string }) => x.id === yid); if (!y) return false; S.tray = S.tray.filter((x: { id: string }) => x.id !== yid); const d = y.docId && S.docs.find((x: { id: string }) => x.id === y.docId); if (d && !d.engId) d.state = "discarded"; T.audit("unknown.discarded", ""); return true; } },
   // alerts: read marks, exactly as the demo's bell sets them
   alertRead: { role: "staff", n: 1, run: (T, [id]) => { const a = (T.S.alerts || []).find((x: { id: string }) => x.id === id); if (a) a.read = true; return !!a; } },
   alertsRead: { role: "staff", n: 0, run: (T) => { (T.S.alerts || []).forEach((a: { read?: boolean }) => { a.read = true; }); return true; } },
