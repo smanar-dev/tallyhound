@@ -208,7 +208,7 @@ Read `docs/ARCHITECTURE.md`, `docs/SECURITY.md` and `docs/INTEGRATIONS.md` first
 **T-102 Master key in the cloud key service (week 1).** `localKeyring` is for tests. Write a keyring with the same two methods that calls the key service to wrap and unwrap. The app's role may use the key and may not read or export it. Turn on rotation.
 **T-103 Outbound email (week 2).** One adapter with `send({ from, to, subject, body, idempotencyKey })`. From is the firm's Tallyhound address with the firm's name. Handle bounces and complaints: a hard bounce marks the client's email as bad and tells the firm.
 **T-104 Karbon against a live account (ONLY IF A PILOT FIRM USES KARBON).** Get a test tenant, run `karbonContacts` with `details: true`, fix field names. Store the firm's two Karbon credentials sealed with the firm key.
-**T-105 Sign-in (week 2).** Emailed link or Google/Microsoft sign-in, plus a second factor for everyone. Sessions as in `db/schema.sql`: store the hash, 12-hour idle timeout, sign out everywhere on role change.
+**T-105 Sign-in (week 2).** Emailed link or Google/Microsoft sign-in, plus a second factor for everyone. Sessions as in `db/schema.sql`: store the hash, 2-hour idle timeout, 12 hours at most, sign out everywhere on role change.
 **T-106 Model call outside the lock (week 3).** Today the firm's lock is held while the model reads a document. Read first, then lock and apply. Needed before any firm has more than a handful of clients sending at once.
 **T-107 Support access (week 5).** No standing access for us. A firm owner grants a named person read access for a set time; every view is in the firm's audit log.
 **T-108 Shorten what Twilio keeps (week 2).** `twilio.inbound` deletes media after fetching it. Add a nightly sweep for deletes that failed, and set message body redaction on the account if the plan allows it.
@@ -315,10 +315,10 @@ Still different from the specification, each needing a decision or a ticket:
 
 | Specification | Build | Next |
 |---|---|---|
-| Session: 30 minutes idle, 12 hours at most (lines 822-823) | 12 hours idle, 7 days at most (from T-105) | DECISION |
-| Email, password and authenticator code; reset and invite screens (771, 825, S1 to S5) | No passwords: emailed link plus authenticator code (from T-105 and `docs/SECURITY.md`) | DECISION to record |
+| Session: 30 minutes idle, 12 hours at most (lines 822-823) | 2 hours idle, 12 hours at most | DECIDED by Jordan, November 19 |
+| Email, password and authenticator code; reset and invite screens (771, 825, S1 to S5) | No passwords: emailed link plus authenticator code (from T-105 and `docs/SECURITY.md`) | DECIDED by Jordan, November 19: keep no passwords. This overrides the specification |
 | Five failed sign-ins in 15 minutes lock the account for 15 minutes and email the user (824) | Five wrong codes end that attempt only | T-144 |
-| Upload page: the link is the only credential (2180) | T-21 asks for a code sent to the client first | DECISION, before the client pages are built |
+| Upload page: the link is the only credential (2180) | T-21 asked for a code sent to the client first | DECIDED by Jordan, November 19: the link only, as the specification says. T-21's code check is dropped |
 | Consent record holds the wording shown, its version, IP address, user agent and the record it replaces (1090-1092, 926) | The engine keeps one sentence per event | T-23 |
 | Consent page takes or corrects the mobile number and rejects landlines (2117-2150) | `giveConsent` takes no number | T-23 |
 | Staff may record consent the firm holds only after the owner switches it on (1094) | No switch | T-145 |

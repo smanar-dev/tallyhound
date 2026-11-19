@@ -102,7 +102,7 @@ for (const kind of KINDS) {
     await H.close();
   });
 
-  test(name("sessions end after 12 idle hours; a role change or removal signs the person out everywhere; a firm always keeps an owner"), async () => {
+  test(name("sessions end after 2 idle hours and at 12 hours whatever happens; a role change or removal signs the person out everywhere; a firm always keeps an owner"), async () => {
     const H = await build(kind); await H.newFirm(); const owner = await H.signInAs("pat1@firm1.test"), ownerId = (await owner.get("/api/me")).json.id;
     const id = (await owner.post("/api/users", { name: "Alex Staff", email: "alex@firm1.test", role: "staff" })).json.id;
     const one = await H.signInAs("alex@firm1.test"), two = await H.signInAs("alex@firm1.test");
@@ -112,9 +112,12 @@ for (const kind of KINDS) {
     const back = await H.signInAs("alex@firm1.test"); assert.equal((await back.get("/api/me")).json.role, "read_only");
     assert.equal((await owner.del("/api/users/" + id)).status, 200); assert.equal((await back.get("/api/me")).status, 401);
     const n = H.links.length; await H.browser().post("/auth/link", { email: "alex@firm1.test" }); assert.equal(H.links.length, n, "a removed person gets no link");
-    H.advance(11 * 3600); assert.equal((await owner.get("/api/me")).status, 200, "still in use: the clock restarts");
-    H.advance(11 * 3600); assert.equal((await owner.get("/api/me")).status, 200);
-    H.advance(12 * 3600 + 60); assert.equal((await owner.get("/api/me")).status, 401);
+    H.advance(110 * 60); assert.equal((await owner.get("/api/me")).status, 200, "still in use: the idle clock restarts");
+    H.advance(110 * 60); assert.equal((await owner.get("/api/me")).status, 200);
+    H.advance(121 * 60); assert.equal((await owner.get("/api/me")).status, 401, "two idle hours end it");
+    // Twelve hours is the most, however busy the person is.
+    const busy = await H.signInAs("pat1@firm1.test"); for (let h = 0; h < 11; h++) { H.advance(3600); assert.equal((await busy.get("/api/me")).status, 200, "hour " + (h + 1)); }
+    H.advance(3660); assert.equal((await busy.get("/api/me")).status, 401, "signed out at twelve hours");
     const out = await H.signInAs("pat1@firm1.test"); assert.equal((await out.post("/auth/signout")).status, 200); assert.equal((await out.get("/api/me")).status, 401);
     await H.close();
   });

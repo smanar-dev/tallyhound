@@ -4,8 +4,8 @@ import { createHash } from "node:crypto";
 import { kitAuth } from "./kit.ts";
 import type { AuthStore, Session, User } from "./authstore.ts";
 
-export const IDLE_HOURS = 12;          // a session ends after this long without a request
-export const MAX_DAYS = 7;             // and after this long whatever happens
+export const IDLE_HOURS = 2;           // a session ends after this long without a request (decided November 19: survives lunch, not the night)
+export const MAX_HOURS = 12;           // and after this long whatever happens
 export const PRE_MINUTES = 15;         // time allowed between opening the link and entering the code
 export const MAX_CODE_FAILS = 5;       // wrong codes before the half-open session is thrown away
 export const LINKS_PER_HOUR = 5;       // emailed links per address
@@ -97,7 +97,7 @@ export function createSignIn(d: SignInDeps) {
     async whoIs(sessionToken: string | undefined): Promise<{ user: User; session: Session } | null> {
       if (!sessionToken) return null;
       const hash = kitAuth.hashToken(sessionToken), s = await auth.session(hash), now = clock(); if (!s) return null;
-      if (s.expiresAt <= now || now.getTime() - s.createdAt.getTime() > MAX_DAYS * 86400000) { await auth.deleteSession(hash); return null; }
+      if (s.expiresAt <= now || now.getTime() - s.createdAt.getTime() > MAX_HOURS * 3600000) { await auth.deleteSession(hash); return null; }
       const user = await auth.userById(s.userId); if (!user) return null;
       // Slide the idle timeout, at most once every few minutes so a busy page is not one write per request.
       const fresh = new Date(now.getTime() + IDLE_HOURS * 3600000);

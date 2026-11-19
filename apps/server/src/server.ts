@@ -56,7 +56,7 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
     if (!h || h.until < now) { hits.set(req.ip, { n: 1, until: now + 60000 }); return; }
     if (++h.n > 30) return reply.code(429).send({ error: "slow_down", message: "Too many tries. Wait a minute and try again." });
   };
-  const setCookie = (reply: FastifyReply, token: string) => reply.setCookie(COOKIE, token, { httpOnly: true, secure: d.secureCookies, sameSite: "lax", path: "/", maxAge: 7 * 86400 });
+  const setCookie = (reply: FastifyReply, token: string) => reply.setCookie(COOKIE, token, { httpOnly: true, secure: d.secureCookies, sameSite: "lax", path: "/", maxAge: 12 * 3600 });
   const who = async (req: FastifyRequest) => (req.who = (await d.signIn.whoIs(req.cookies[COOKIE])) || undefined);
   // Half signed in: the link was opened, the code is still owed.
   const half = async (req: FastifyRequest, reply: FastifyReply) => { if (!(await who(req))) return reply.code(401).send({ error: "signin", message: "Open a sign-in link first." }); };
