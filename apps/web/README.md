@@ -33,4 +33,5 @@ React, built with Vite. `npm run build` writes `apps/web/dist`, and the web serv
 | Needs you, and the document viewer | T-17, T-19, T-40 | Done. PDFs open in their own tab |
 | Add clients: the four-step import | T-24 | Done. CSV only |
 | All messages, with unknown senders | | Done |
-| The Hound, Progress, Settings | T-20 | Not built: each shows a holding screen |
+| Settings: your firm, people | | Done. The other settings pages are not built |
+| The Hound, Progress | T-20 | Not built: each shows a holding screen |

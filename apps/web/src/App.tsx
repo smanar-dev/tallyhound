@@ -9,6 +9,7 @@ import { ClientPage } from "./screens/ClientPage";
 import { NeedsYou } from "./screens/NeedsYou";
 import { AddClients } from "./screens/AddClients";
 import { Messages } from "./screens/Messages";
+import { Settings } from "./screens/Settings";
 
 function Staff() {
   const signedOut = useCallback(() => { window.location.replace("/signin"); }, []);
@@ -21,7 +22,7 @@ function Staff() {
     <Route path="/add-clients" element={<AddClients />} />
     <Route path="/messages" element={<Messages />} />
     <Route path="/progress" element={<Soon title="Progress" what="How the season is going: who is complete, how fast documents arrive, how many needed a person." />} />
-    <Route path="/settings" element={<Soon title="Settings" what="Your firm's details, people, message wording, storage and how long data is kept." />} />
+    <Route path="/settings" element={<Settings />} />
     <Route path="*" element={<Navigate to="/" replace />} />
   </Routes></FirmProvider>;
 }

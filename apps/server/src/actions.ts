@@ -59,6 +59,12 @@ export const ACTIONS: Record<string, Rule> = {
   alertsRead: { role: "staff", n: 0, run: (T) => { (T.S.alerts || []).forEach((a: { read?: boolean }) => { a.read = true; }); return true; } },
   // the emergency stop is lifted by an owner
   resumeAll: { role: "owner", n: 0, run: (T) => { T.S.firm.stopped = false; T.audit("emergency.resume", "Messages resumed"); return true; } },
+  // The firm's own details. The Tallyhound address is not editable: mail to it is how the firm is found.
+  saveFirm: { role: "owner", n: 1, run: (T, [v]) => {
+    const f = T.S.firm, x = (v && typeof v === "object" ? v : {}) as Record<string, unknown>, str = (k: string, max: number) => String(x[k] ?? "").replace(/[<>]/g, "").replace(/\s+/g, " ").trim().slice(0, max);
+    f.name = str("name", 80) || f.name; f.sender = str("sender", 30) || f.sender; f.phone = str("phone", 20);
+    const y = +(x.taxYear as number); if ([2025, 2026, 2027].includes(y)) f.taxYear = y;
+    T.audit("settings.firm", "Firm details changed"); return null; } },
   // owner only: how long data is kept, deleting copies, ending a pause
   setRetain: owner(2), deleteDocsNow: owner(1), purge: owner(1), resumeNow: owner(0)
 };

@@ -51,3 +51,20 @@ scene("unknown senders: a person says whose it is and it is checked as that clie
   let T: Engine = await W.state(firmId); const sam = T.S.engs.find((e: { clientId: string }) => T.client(e.clientId).first === "Sam"); assert.equal(T.S.docs.filter((d: { engId: string }) => d.engId === sam.id).length, 1, "the document is now in Sam's file"); assert.equal(T.S.tray.length, 1);
   await cards.first().getByRole("button", { name: "Discard" }).click(); await page.getByText("Everything that arrived was matched to a client.").waitFor(); T = await W.state(firmId); assert.equal(T.S.tray.length, 0); assert.ok(T.S.audit.some((a: { action: string }) => a.action === "unknown.assigned"));
 });
+
+scene("settings: an owner changes the firm's details and manages who can sign in; staff cannot open it", async (W) => {
+  const { firmId } = await busyFirm(W), page = await W.signIn("pat1@firm1.test"); await page.locator(".side").getByRole("link", { name: "Settings" }).click(); await page.getByRole("heading", { name: "Your firm" }).waitFor();
+  await page.getByLabel("Office phone").fill("(615) 555-0100"); await page.getByLabel("Name at the start of every text").fill("Test CPAs"); await page.getByRole("button", { name: "Save" }).click(); await page.getByText("Saved.", { exact: true }).waitFor();
+  let T: Engine = await W.state(firmId); assert.equal(T.S.firm.sender, "Test CPAs"); assert.equal(T.S.firm.email, "test1@docs.tallyhound.test", "the Tallyhound address is not changed"); assert.match(text(await page.locator(".note.info").textContent()), /Clients see: “Hi Jo, Test CPAs here\./);
+  await page.getByRole("tab", { name: "People" }).click(); await page.getByText("You are the only owner.").waitFor();
+  await page.getByRole("button", { name: "Add a person" }).click(); const dlg = page.getByRole("dialog"); await dlg.getByLabel("Name").fill("Alex Staff"); await dlg.getByLabel("Work email").fill("pat1@firm1.test"); await dlg.getByRole("button", { name: "Add", exact: true }).click();
+  await dlg.getByRole("alert").waitFor(); assert.match(text(await dlg.getByRole("alert").textContent()), /already has an account/); await dlg.getByLabel("Work email").fill("alex@firm1.test"); await dlg.getByRole("button", { name: "Add", exact: true }).click(); await dlg.waitFor({ state: "detached" });
+  await page.getByLabel("What Alex Staff can do").waitFor(); T = await W.state(firmId); assert.ok(T.S.users.some((u: { name: string; role: string }) => u.name === "Alex Staff" && u.role === "staff"));
+  assert.equal(await page.getByLabel("What Pat Owner can do").isDisabled(), true, "an owner cannot demote themselves by accident");
+  // Alex signs in, cannot reach Settings, and is signed out when their role changes.
+  const alex = await W.signIn("alex@firm1.test"); assert.equal(await alex.locator(".side .nav", { hasText: "Settings" }).count(), 0); await alex.goto(W.url + "/settings"); await alex.getByText("Settings are for owners.").waitFor();
+  await page.getByLabel("What Alex Staff can do").selectOption("read_only"); await page.getByText(/Alex Staff is now read-only and has been signed out everywhere/).waitFor();
+  await alex.goto(W.url + "/clients"); await alex.waitForURL("**/signin");
+  await page.locator("tr", { hasText: "Alex Staff" }).getByRole("button", { name: "Remove" }).click(); await page.getByRole("dialog").getByRole("button", { name: "Remove" }).click(); await page.getByText("Alex Staff can no longer sign in.").waitFor();
+  assert.equal((await W.auth.usersOfFirm(firmId)).length, 1);
+});
