@@ -6,6 +6,7 @@ import { Home } from "./screens/Home";
 import { Soon } from "./screens/Soon";
 import { Clients } from "./screens/Clients";
 import { ClientPage } from "./screens/ClientPage";
+import { NeedsYou } from "./screens/NeedsYou";
 
 function Staff() {
   const signedOut = useCallback(() => { window.location.replace("/signin"); }, []);
@@ -13,7 +14,7 @@ function Staff() {
     <Route path="/" element={<Home />} />
     <Route path="/clients" element={<Clients />} />
     <Route path="/clients/:id" element={<ClientPage />} />
-    <Route path="/needs-you" element={<Soon title="Needs you" what="Documents Tallyhound is unsure about, client questions and drafts to approve, in one list." />} />
+    <Route path="/needs-you" element={<NeedsYou />} />
     <Route path="/hound" element={<Soon title="The Hound" what="What Tallyhound has done and why, what is coming up, and the rules it follows." />} />
     <Route path="/add-clients" element={<Soon title="Add clients" what="Import a spreadsheet of clients, or add one at a time." />} />
     <Route path="/messages" element={<Soon title="All messages" what="Every conversation, and messages from senders Tallyhound could not match to a client." />} />

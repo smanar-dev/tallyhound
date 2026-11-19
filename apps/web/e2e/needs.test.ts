@@ -1,0 +1,82 @@
+// Needs you and the document viewer (T-17, T-19, T-40): where a preparer settles what Tallyhound could not.
+import test, { after } from "node:test";
+import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { busyFirm, closeBrowser, PHOTO, scene } from "./world.ts";
+import type { Engine } from "../../server/src/kit.ts";
+
+after(closeBrowser);
+const text = (s: string | null) => (s || "").replace(/\s+/g, " ").trim();
+const FIRM = "+16155550101", JO = "+16155550111";
+type D = { id: string; state: string; form: string; year: number; payer: string; versions?: unknown[] };
+
+test("T-40: no screen works out a check on its own", () => {
+  const src = join(dirname(fileURLToPath(import.meta.url)), "../src"), files = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((f) => (f.isDirectory() ? files(join(dir, f.name)) : [join(dir, f.name)]));
+  for (const f of files(src).filter((x) => /\.tsx?$/.test(x))) assert.ok(!/qualityMin|expectYear/.test(readFileSync(f, "utf8")), f + " reads a threshold the engine owns; use T.verdict");
+});
+
+scene("a document Tallyhound was unsure about is settled in Needs you: accept one, correct another, send a third back", async (W) => {
+  const { firmId } = await busyFirm(W);
+  // Three photos arrive that the model is not sure about: a second W-2 from another employer, a bank statement read as the wrong year, and a blur.
+  W.reading.doc = { ...W.CLEAN_W2, payer: "Bluebird Cafe", confidence: 0.55, note: "Probably a W-2, partly in shadow" }; await W.app.inboundSms({ to: FIRM, from: JO, body: "", media: [{ bytes: PHOTO, contentType: "image/jpeg" }], providerId: "n1" });
+  W.reading.doc = { ...W.CLEAN_W2, form: "1099INT", payer: "First Farmers Bnk", confidence: 0.5, note: "An interest statement" }; await W.app.inboundSms({ to: FIRM, from: JO, body: "", media: [{ bytes: PHOTO, contentType: "image/jpeg" }], providerId: "n2" });
+  W.reading.doc = { ...W.CLEAN_W2, payer: "", confidence: 0.3, legibility: 0.9, note: "Hard to tell" }; await W.app.inboundSms({ to: FIRM, from: JO, body: "", media: [{ bytes: PHOTO, contentType: "image/jpeg" }], providerId: "n3" });
+  let T: Engine = await W.state(firmId); const waiting = T.S.tasks.filter((t: { kind: string; status: string }) => t.kind === "document" && t.status === "open"); assert.equal(waiting.length, 3, "all three went to a person");
+  const page = await W.signIn("pat1@firm1.test"); await page.locator(".side").getByRole("link", { name: /Needs you/ }).click(); await page.locator(".rq").waitFor();
+  assert.equal(await page.locator(".rqi").count(), 4, "three documents and Jo's missing mortgage statement"); assert.equal(text(await page.getByRole("button", { name: /^Documents to check/ }).locator("span").textContent()), "3");
+  await page.getByRole("button", { name: /^Documents to check/ }).click(); await page.waitForURL("**show=document"); await page.locator(".rqi").nth(3).waitFor({ state: "detached" }); assert.equal(await page.locator(".rqi").count(), 3);
+  // The picture is really drawn, and the three checks are the engine's.
+  await page.waitForFunction(() => { const i = document.querySelector<HTMLImageElement>(".inline-viewer img"); return !!i && i.naturalWidth === 900; });
+  const d1 = T.S.docs.find((d: D) => d.payer === "Bluebird Cafe"), v = T.verdict(d1), shown = await page.locator(".rvwrap .v3").evaluateAll((els) => els.map((e) => [e.querySelector("b")!.textContent, e.className.includes(" ok") ? true : e.className.includes(" no") ? false : null, e.querySelector(".small")!.textContent]));
+  assert.deepEqual(shown, [["Right document", v.doc.ok, v.doc.why], ["Right information", v.info.ok, v.info.why], ["Clear to read", v.clear.ok, v.clear.why]]);
+  assert.match(text(await page.locator(".rvwrap").textContent()), /Claude read it: Probably a W-2, partly in shadow/);
+  const sent = W.sms.sent.length; await page.getByRole("button", { name: /Accept as read/ }).click(); await page.getByText("Accepted.", { exact: true }).waitFor();
+  T = await W.state(firmId); assert.equal(T.S.docs.find((d: D) => d.id === d1.id).state, "accepted"); await page.locator(".rqi").nth(2).waitFor({ state: "detached" });
+  // The next one: the model misread the payer. Correct it and accept in one step.
+  assert.match(text(await page.locator(".rqi.on").textContent()), /Jo Day/); await page.locator(".rvwrap").getByLabel("Payer").fill("First Farmers Bank"); await page.getByRole("button", { name: "Save correction and accept" }).click(); await page.getByText("Correction saved and accepted.").waitFor();
+  T = await W.state(firmId); const d2 = T.S.docs.find((d: D) => d.form === "1099INT"); assert.equal(d2.payer, "First Farmers Bank"); assert.equal(d2.state, "accepted"); assert.ok((d2.versions || []).length >= 1, "the first reading is kept as a version");
+  // The last one goes back to the client with one plain sentence.
+  await page.locator(".rqi").nth(1).waitFor({ state: "detached" }); await page.getByLabel("Why ask again").selectOption("illegible"); await page.getByRole("button", { name: "Ask again" }).click(); await page.getByText(/^Asked again\. Jo gets one plain sentence/).waitFor();
+  assert.ok(W.sms.sent.length > sent, "Jo was texted"); T = await W.state(firmId); assert.equal(T.S.tasks.filter((t: { kind: string; status: string }) => t.kind === "document" && t.status === "open").length, 0);
+  await page.getByText("Nothing needs you.").waitFor(); assert.match(text(await page.locator(".page").textContent()), /3 cleared today/);
+});
+
+scene("a client's question is answered from Needs you, and a reply with an advice word cannot be sent", async (W) => {
+  const { firmId } = await busyFirm(W);
+  W.reading.text = { intent: "question", item_id: null, summary: "Asks whether a home office can be claimed", scope: "tax_question", sentiment: "calm", topics: [], staff_reply: "Good question, Jo. Let's go over it when we talk this week." };
+  await W.app.inboundSms({ to: FIRM, from: JO, body: "Can I claim my home office this year?", media: [], providerId: "q1" });
+  const page = await W.signIn("pat1@firm1.test"); await page.goto(W.url + "/needs-you?show=question"); await page.locator(".rq").waitFor();
+  assert.match(text(await page.locator(".rvwrap .convo").textContent()), /Can I claim my home office this year\?/); const box = page.getByLabel("Reply to Jo");
+  assert.equal(await box.inputValue(), "Good question, Jo. Let's go over it when we talk this week.", "the suggested reply is ready to edit");
+  await box.fill("Yes, you can deduct it."); assert.match(text(await page.locator(".warnline").textContent()), /blocked word "deduct"/); assert.equal(await page.getByRole("button", { name: "Send reply" }).isDisabled(), true);
+  const sent = W.sms.sent.length; await box.fill("Good question, Jo. I'll call you Thursday to go over it."); await page.getByRole("button", { name: "Send reply" }).click(); await page.getByText("Reply sent.").waitFor();
+  assert.equal(W.sms.sent.length, sent + 1); assert.equal(W.sms.sent.at(-1)!.body, "Good question, Jo. I'll call you Thursday to go over it.");
+  const T: Engine = await W.state(firmId); assert.equal(T.S.tasks.filter((t: { kind: string; status: string }) => t.kind === "question" && t.status === "open").length, 0);
+});
+
+scene("the viewer: open a document from the client page, zoom and turn it, move with the keyboard, correct an accepted one", async (W) => {
+  const { firmId } = await busyFirm(W); W.reading.doc = { ...W.CLEAN_W2, form: "1099INT", payer: "First Farmers Bank" }; await W.app.inboundSms({ to: FIRM, from: JO, body: "", media: [{ bytes: PHOTO, contentType: "image/jpeg" }], providerId: "v1" });
+  let T: Engine = await W.state(firmId); const jo = T.S.engs[0], page = await W.signIn("pat1@firm1.test"); await page.goto(W.url + "/clients/" + jo.id + "?tab=documents"); await page.locator(".dcard").nth(1).waitFor();
+  const opener = page.getByRole("button", { name: /^Open W-2/ }); await opener.click(); const view = page.getByRole("dialog", { name: "Document viewer" }); await view.waitFor(); await page.waitForURL("**doc=**");
+  assert.match(text(await view.locator(".vtop").textContent()), /Jo Day · W-2 wage statement/); assert.match(text(await view.locator(".vtop").textContent()), /1 of 2/);
+  // The first document was a stand-in file no browser can draw: the viewer says so and offers the file, instead of a broken picture.
+  await view.getByText("This one opens in its own tab.").waitFor();
+  await page.keyboard.press("ArrowRight"); await view.getByText(/2 of 2/).waitFor(); await page.waitForFunction(() => { const i = document.querySelector<HTMLImageElement>(".viewer img"); return !!i && i.naturalWidth === 900; });
+  const tf = () => view.locator("img").evaluate((el) => (el as HTMLElement).style.transform);
+  assert.equal(await tf(), "scale(1) rotate(0deg)"); await page.keyboard.press("+"); assert.equal(await tf(), "scale(1.15) rotate(0deg)"); await view.getByRole("button", { name: "Turn" }).click(); assert.equal(await tf(), "scale(1.15) rotate(90deg)");
+  await view.getByLabel("Tax year").fill("2026"); await view.getByLabel("Payer").fill("First Farmers Bank of Tennessee"); await view.getByRole("button", { name: "Save correction", exact: true }).click(); await page.getByText(/^Correction saved\. The file name updates/).waitFor();
+  T = await W.state(firmId); const d = T.S.docs.find((x: D) => x.form === "1099INT"); assert.equal(d.payer, "First Farmers Bank of Tennessee"); assert.ok(T.S.audit.some((a: { action: string }) => a.action === "document.correct"));
+  assert.match(text(await view.locator(".vside").textContent()), /Filed as.*First Farmers Bank of Tennessee/);
+  await view.getByLabel("Payer").blur(); await page.keyboard.press("Escape"); await view.waitFor({ state: "detached" }); assert.ok(!page.url().includes("doc="), "the address no longer names a document");
+});
+
+scene("in Copilot, drafts wait in Needs you and nothing is sent until one is approved there", async (W) => {
+  const { firmId, ownerId } = await W.newFirm();
+  await W.app.staff(firmId, ownerId, (T: Engine) => { T.S.firm.senderStatus = "approved"; T.importRows(T.parseCSV("First,Last,Email,Mobile\nJo,Day,jo@x.example,6155550111\nSam,Lee,sam@x.example,6155550122")); for (const e of T.S.engs) { e.confirmed = true; T.giveConsent(e.clientId, "page"); } for (const e of T.S.engs) T.start(e.id); T.tick(); });
+  const page = await W.signIn("pat1@firm1.test"), before = W.sms.sent.length; await page.goto(W.url + "/needs-you"); const card = page.locator(".card", { hasText: "Drafts to approve" }); await card.waitFor();
+  assert.equal(await card.locator(".li").count(), 2); assert.equal(text(await page.locator(".side .nav", { hasText: "Needs you" }).locator(".n").textContent()), "2");
+  await card.locator(".li", { hasText: "Sam Lee" }).getByRole("button", { name: "Approve and send" }).click(); await card.locator(".li").nth(1).waitFor({ state: "detached" });
+  assert.equal(W.sms.sent.length, before + 1); assert.equal(W.sms.sent.at(-1)!.to, "6155550122"); await card.getByRole("button", { name: "Discard" }).click(); await page.getByText("Draft discarded.").waitFor(); assert.equal(W.sms.sent.length, before + 1);
+});

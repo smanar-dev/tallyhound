@@ -373,6 +373,15 @@ Still different from the specification, each needing a decision or a ticket:
 | T-17 Document viewer | Not built. A document opens in a new tab from the server, in a response that cannot run anything. No zoom, rotate or decision buttons yet |
 | T-145 Staff-recorded consent | Left off the client page on purpose until the owner switch exists and counsel has approved it |
 
-Two engine log lines use retired words ("Stuck:", "Outreach started", "Delivered"). The Activity tab shows them in the product's vocabulary; the engine text is unchanged.
+Four engine log lines use retired words ("Stuck:", "Outreach started", "Delivered", "Document sent to review"). The Activity tab shows them in the product's vocabulary; the engine text is unchanged.
+
+### Step 8: Needs you and the document viewer (same day)
+
+| Ticket | State |
+|---|---|
+| T-19 Needs you | Done: documents to check, client questions with the suggested reply, "I don't have that", calls to make with the script, messages stopped by the safety check, drafts to approve, and everyone else who is waiting. One list, one badge |
+| T-17 Document viewer | Done for photos: full screen, zoom, turn, previous and next, the three checks, required parts, what was read, and accept, correct, ask again, discard. Opens from the client page and from Needs you. Keys: arrows, plus and minus, A, Escape. PDFs open in their own tab until pages are drawn on the server (T-143) |
+| T-40 Three checks everywhere | Done on every screen that shows a document. A test fails the build if the web app mentions `qualityMin` or `expectYear`. The demo's "How each check was made" list is left out because it worked the checks out again in the screen |
+| T-61 Draft hygiene | Drafts are listed in Needs you and in the conversation; a held draft says when it will go |
 
 Home's buttons for adding a client, the check-in for everyone, a checklist for everyone and starting are now live. Still left out: text registration, the heads-up wording, storage. Next in order: Clients list and add one client (T-16, T-38, T-56), the client page (T-16), the document viewer (T-17), conversation and approvals (T-18).

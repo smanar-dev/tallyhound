@@ -32,6 +32,12 @@ export const ACTIONS: Record<string, Rule> = {
   // chase
   start: staff(1), pause: staff(1), resume: staff(1), takeover: staff(2), handback: staff(2), approveMsg: staff(2), rejectMsg: staff(1), manual: staff(2), markHeadsUp: staff(1),
   // check
+  // Correcting what was read on a document that is already accepted, as the demo's viewer does: the old reading is kept as a version.
+  correctDoc: { role: "staff", n: 2, run: (T, [id, v]) => {
+    const d = T.S.docs.find((x: { id: string }) => x.id === id), f = (v && typeof v === "object" ? v : {}) as Record<string, unknown>; if (!d) return "No such document"; if (d.state !== "accepted") return "Only an accepted document can be corrected here";
+    const form = String(f.form || ""); if (!Object.hasOwn(T.FORMS, form)) return "Choose a form from the list";
+    Object.assign(d, { form, year: +(f.year as number) || d.year, payer: String(f.payer ?? "").replace(/[<>]/g, "").trim().slice(0, 80) });
+    (d.versions = d.versions || []).push({ v: d.versions.length + 1, by: T.S.user.name, form: d.form, year: d.year, payer: d.payer }); T.audit("document.correct", d.form); return null; } },
   decideTask: staff(3), deliver: staff(1), closeEng: staff(1),
   // alerts: read marks, exactly as the demo's bell sets them
   alertRead: { role: "staff", n: 1, run: (T, [id]) => { const a = (T.S.alerts || []).find((x: { id: string }) => x.id === id); if (a) a.read = true; return !!a; } },

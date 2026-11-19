@@ -56,7 +56,7 @@ scene("T-90: a document added by staff is checked like any other, shown with its
   assert.equal(await page.locator(".dcard").count(), 2); assert.equal(W.sms.sent.length + W.email.sent.length, sent);
   const T: Engine = await W.state(firmId); assert.ok(T.S.docs.some((d: { channel: string }) => d.channel === "staff"));
   // The file itself opens for this firm's staff, in a response that cannot run anything.
-  const href = await first.getAttribute("href"), r = await page.request.get(W.url + href!); assert.equal(r.status(), 200); assert.equal(r.headers()["content-type"], "image/jpeg"); assert.match(r.headers()["content-security-policy"]!, /sandbox/);
+  const r = await page.request.get(W.url + "/api/documents/" + T0.S.docs.find((d: { engId: string }) => d.engId === jo.id).id + "/file"); assert.equal(r.status(), 200); assert.equal(r.headers()["content-type"], "image/jpeg"); assert.match(r.headers()["content-security-policy"]!, /sandbox/);
   await page.locator('input[type="file"]').setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("hello") }); await page.getByText(/Not added: notes\.txt/).waitFor();
 });
 

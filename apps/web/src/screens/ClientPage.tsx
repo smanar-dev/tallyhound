@@ -8,6 +8,7 @@ import { api } from "../lib/api";
 import { Page } from "./Shell";
 import { Modal } from "../components/Modal";
 import { Avatar, Chip, DocChip, Empty, Icon, Ring, StatusChip } from "../components/ui";
+import { Viewer } from "../components/Doc";
 import { openTasks, type Row } from "../lib/select";
 import { cname, DOW, dshort, dt, DSTATE, fname, iname, ISTATE, phone, plural, rel, tm, when } from "../lib/fmt";
 import type { IconName } from "../lib/icons";
@@ -52,7 +53,7 @@ function NextCard({ T, e, c, onHandOff }: Ctx & { onHandOff: () => void }) {
   </div></div>;
 }
 
-function Checklist({ T, e, c }: Ctx) {
+function Checklist({ T, e, c, openDoc }: Ctx & { openDoc: (id: string) => void }) {
   const { can, act, toast } = useFirm(), s = T.S, items: Row[] = T.itemsOf(e.id), [form, setForm] = useState(Object.keys(T.FORMS).filter((k) => k !== "OTHER")[0]!), [payer, setPayer] = useState(""), [waive, setWaive] = useState<Row | null>(null), [note, setNote] = useState("");
   const editable = can() && !["closed", "opted_out"].includes(e.status), docOf = (id: string) => s.docs.find((d: Row) => d.id === id);
   const set = (i: Row, state: string, why?: string, said?: string) => act("setItem", i.id, state, why).then(() => { if (said) toast(said); }, () => {});
@@ -69,7 +70,7 @@ function Checklist({ T, e, c }: Ctx) {
               {i.state === "partial" && i.missing ? <> · <b style={{ color: "var(--warn)" }}>Still needs {T.missText(i.missing, "en", i.form).fix}</b></> : null}
               {rel0 && rel0 > s.now ? <> · <span className="chip info plain">Issued after {dshort(rel0)}: no reminders before then</span></> : null}
               {i.laterUntil && i.laterUntil > s.now ? <> · <span className="chip plain">Client says later: back in touch {dshort(i.laterUntil)}</span></> : null}</div></div>
-          {d && d.fileKey ? <a className="btn sm ghost" href={"/api/documents/" + d.id + "/file"} target="_blank" rel="noreferrer" aria-label={"Open the " + iname(T, i)}><Icon name="eye" small /></a> : null}
+          {d ? <button className="btn sm ghost" aria-label={"Open the " + iname(T, i)} onClick={() => openDoc(d.id)}><Icon name="eye" small /></button> : null}
           {can() ? <Menu label={"Actions for " + iname(T, i)} small>{(close) => <>
             {["expected", "requested", "says_none", "partial"].includes(i.state) ? <><button onClick={() => { close(); setNote(""); setWaive(i); }}><Icon name="minus" small />Not needed this year</button><button onClick={() => { close(); void set(i, "received", "Received outside Tallyhound", "Marked received."); }}><Icon name="check" small />Received outside Tallyhound</button></> : null}
             {i.state === "waived" ? <button onClick={() => { close(); void set(i, "expected"); }}><Icon name="reset" small />Restore</button> : null}
@@ -99,7 +100,7 @@ function Suggested({ T, e, c }: Ctx) {
     </div></div>;
 }
 
-function Documents({ T, e, c }: Ctx) {
+function Documents({ T, e, c, openDoc }: Ctx & { openDoc: (id: string) => void }) {
   const { can, reload, toast } = useFirm(), ds: Row[] = T.S.docs.filter((d: Row) => d.engId === e.id).sort((a: Row, b: Row) => b.at - a.at), [busy, setBusy] = useState(false), input = useRef<HTMLInputElement>(null);
   // T-90: a document the firm received some other way. Checked like any other; the client is not messaged.
   const add = async (files: FileList | null) => {
@@ -114,11 +115,11 @@ function Documents({ T, e, c }: Ctx) {
       : <div className="dgrid">{ds.map((d) => { const v = T.verdict(d), inner = <><div className="thumb docph"><Icon name="file" /></div><div className="tx"><div className="row" style={{ gap: 6 }}><b className="trunc" style={{ maxWidth: "60%" }}>{formLabel(d.form)}</b><span className="sp" /><DocChip state={d.state} /></div><div className="small muted trunc">{d.payer || "Unknown payer"} · {d.year || "no year"}</div>
           <div className="small faint">{when(T, d.at)} · {CHANNEL[d.channel] || d.channel}{d.stripped ? " · copy deleted " + rel(T, d.stripped) : d.deliveredAt ? " · handed off" : ""}</div>
           <div className="small" style={{ marginTop: 6 }}>{([["Right document", v.doc], ["Right information", v.info], ["Clear to read", v.clear]] as [string, { ok: boolean | null; why: string }][]).map(([k, x]) => <div key={k} className="row" style={{ gap: 6, flexWrap: "nowrap" }} title={x.why}><span className={"dots3"}><i className={x.ok === true ? "ok" : x.ok === false ? "no" : ""} /></span>{k}{x.ok === false ? <span className="muted trunc">: {x.why}</span> : null}</div>)}</div></div></>;
-        return d.fileKey && !d.stripped ? <a key={d.id} className="dcard" href={"/api/documents/" + d.id + "/file"} target="_blank" rel="noreferrer" aria-label={"Open " + formLabel(d.form)}>{inner}</a> : <div key={d.id} className="dcard">{inner}</div>; })}</div>}
+        return <button key={d.id} className="dcard" aria-label={"Open " + formLabel(d.form) + (d.payer ? " from " + d.payer : "")} onClick={() => openDoc(d.id)}>{inner}</button>; })}</div>}
   </>;
 }
 
-function Conversation({ T, e, c }: Ctx) {
+function Conversation({ T, e, c, openDoc }: Ctx & { openDoc: (id: string) => void }) {
   const { can, act, toast } = useFirm(), s = T.S, ms: Row[] = s.msgs.filter((m: Row) => m.engId === e.id && m.status !== "discarded"), ch = T.channelFor(c, e) || "email";
   const [text, setText] = useState(""), [edits, setEdits] = useState<Record<string, string>>({}), thread = useRef<HTMLDivElement>(null), docOf = (id: string) => s.docs.find((d: Row) => d.id === id);
   useEffect(() => { const el = thread.current; if (el) el.scrollTop = el.scrollHeight; }, [ms.length]);
@@ -134,7 +135,7 @@ function Conversation({ T, e, c }: Ctx) {
       <div key={m.id + "m"} className="meta r" style={{ color: "var(--warn)", fontWeight: 700 }}>Draft waiting for you · {T.TPL_USE[m.tpl] || ""}{m.ai ? " · written by Claude" : ""}{can() ? <> <button className="btn sm pri" onClick={() => void approve(m)}>Approve and send</button> <button className="btn sm ghost" onClick={() => void act("rejectMsg", m.id).then(() => toast("Draft discarded."), () => {})}>Discard</button></> : null}</div>); return; }
     if (!last || last.toDateString() !== m.at.toDateString()) out.push(<div key={m.id + "d"} className="day">{m.at.toDateString() === s.now.toDateString() ? "Today" : DOW[m.at.getDay()] + " " + dshort(m.at)}</div>);
     last = m.at; const d = m.docId ? docOf(m.docId) : null, att: Row[] = (m.attachments || []).map(docOf).filter(Boolean), cls = m.dir === "in" ? "in" : m.kind === "manual" ? "man" : "out";
-    const docLink = (x: Row) => <a key={x.id} className="btn sm" href={"/api/documents/" + x.id + "/file"} target="_blank" rel="noreferrer"><Icon name="file" small />{formLabel(x.form)}</a>;
+    const docLink = (x: Row) => <button key={x.id} className="btn sm" onClick={() => openDoc(x.id)}><Icon name="file" small />{formLabel(x.form)}</button>;
     out.push(<div key={m.id} className={"bub " + cls}>{d ? docLink(d) : m.body}{att.length ? <div className="row" style={{ gap: 6, marginTop: 8 }}>{att.map(docLink)}</div> : null}</div>);
     if (m.dir === "in" && m.understood) out.push(<div key={m.id + "u"} className="meta l" style={{ color: "var(--info)", fontWeight: 600 }}>Understood{m.ai ? " by Claude" : ""}: {m.understood}{m.aiNote ? " · " + m.aiNote : ""}</div>);
     out.push(<div key={m.id + "m"} className={"meta " + (m.dir === "in" ? "l" : "r")}>{m.dir === "in" ? c.first + (d ? " · " + (DSTATE[d.state] || [""])[0].toLowerCase() : "") : m.kind === "manual" ? m.by : "Tallyhound · " + (T.TPL_USE[m.tpl] || "") + (m.ai ? " · written by Claude" : "") + (m.approvedBy ? " · approved by " + m.approvedBy : "")} · {m.channel} · {tm(m.at)}{m.dir === "out" ? " · " + (m.failed ? "not sent" : m.status === "unconfirmed" ? "may not have gone" : "sent") : ""}</div>);
@@ -150,8 +151,8 @@ function Conversation({ T, e, c }: Ctx) {
 
 function Activity({ T, e }: Ctx) {
   const tl: Row[] = e.timeline || [], ic = (t: string): IconName => /Accepted|Complete/.test(t) ? "check" : /Stuck|re-ask|Re-ask|Unreadable|Wrong/.test(t) ? "alert" : /Deliver/.test(t) ? "deliver" : "clock";
-  // The engine's own log lines use two older words. They are shown in the product's vocabulary.
-  const words = (t: string) => t.replace(/^Stuck: /, "Needs you: ").replace(/\bOutreach started\b/, "Collecting started").replace(/\bDelivered\b/g, "Files handed off").replace(/\bdelivered\b/g, "handed off");
+  // A few of the engine's own log lines use older words. They are shown in the product's vocabulary.
+  const words = (t: string) => t.replace(/^Stuck: /, "Needs you: ").replace(/^Document sent to review: /, "Document sent to you to check: ").replace(/\bOutreach started\b/, "Collecting started").replace(/\bDelivered\b/g, "Files handed off").replace(/\bdelivered\b/g, "handed off");
   return <div className="card"><div className="list">{tl.length ? tl.map((t, i) => <div className="li" key={i}><span className="ico"><Icon name={ic(t.text)} small /></span><div className="grow">{words(t.text)}<div className="small faint">{when(T, t.at)} · {t.actor}</div></div></div>) : <Empty small>Nothing has happened yet. Every request, reply and decision for this client is listed here.</Empty>}</div></div>;
 }
 
@@ -182,6 +183,9 @@ export function ClientPage() {
   const s = T.S, p = T.progress(e.id), u = s.users.find((x: Row) => x.id === c.preparer), docs = s.docs.filter((d: Row) => d.engId === e.id).length, msgs = s.msgs.filter((m: Row) => m.engId === e.id && m.status !== "discarded").length, rc = T.recommend(e.id).add.length;
   const TABS: [string, string, (string | number | null)?][] = [["checklist", "Checklist", p.done + "/" + p.total], ["suggested", "Suggested", rc ? rc + " to add" : null], ["documents", "Documents", docs], ["conversation", "Conversation", msgs], ["activity", "Activity"], ["details", "Details"]];
   const tab = TABS.some((t) => t[0] === params.get("tab")) ? params.get("tab")! : "checklist", ctx = { T, e, c };
+  // The viewer opens over the page and its address says which document, so a link to it can be shared with a colleague at the firm.
+  const docIds: string[] = s.docs.filter((d: Row) => d.engId === e.id).sort((a: Row, b: Row) => a.at - b.at).map((d: Row) => d.id), viewing = params.get("doc");
+  const openDoc = (did: string | null) => { const n = new URLSearchParams(params); if (did) n.set("doc", did); else n.delete("doc"); setParams(n); };
   const doHandOff = async () => { try { setHandOff((await act("deliver", e.id)) as { folder: string; files: string[]; missing: string[] }); } catch { /* said */ } };
   const consent = ({ given: ["Texts on", "good"], invited: ["Invited", "info"], withdrawn: ["Opted out", "bad"], none: ["Not OK to text yet", ""] } as Record<string, [string, string]>)[c.textConsent] || ["", ""];
   return <Page title={cname(c)}>
@@ -199,7 +203,7 @@ export function ClientPage() {
     <div className="split">
       <div style={{ minWidth: 0 }}>
         <div className="tabs" role="tablist">{TABS.map((t) => <button key={t[0]} role="tab" aria-selected={tab === t[0]} className={tab === t[0] ? "on" : ""} onClick={() => setParams(t[0] === "checklist" ? {} : { tab: t[0] })}>{t[1]}{t[2] != null ? <span className="n">{t[2]}</span> : null}</button>)}</div>
-        {tab === "checklist" ? <Checklist {...ctx} /> : tab === "suggested" ? <Suggested {...ctx} /> : tab === "documents" ? <Documents {...ctx} /> : tab === "conversation" ? <Conversation {...ctx} /> : tab === "activity" ? <Activity {...ctx} /> : <Details key={c.id + ":" + (c.mobile || "") + (c.email || "")} {...ctx} />}
+        {tab === "checklist" ? <Checklist {...ctx} openDoc={openDoc} /> : tab === "suggested" ? <Suggested {...ctx} /> : tab === "documents" ? <Documents {...ctx} openDoc={openDoc} /> : tab === "conversation" ? <Conversation {...ctx} openDoc={openDoc} /> : tab === "activity" ? <Activity {...ctx} /> : <Details key={c.id + ":" + (c.mobile || "") + (c.email || "")} {...ctx} />}
       </div>
       <div className="col" style={{ gap: 16 }}>
         <NextCard {...ctx} onHandOff={doHandOff} />
@@ -207,6 +211,7 @@ export function ClientPage() {
         <div className="card pad small col" style={{ gap: 6 }}><h4>Where finished files go</h4><span>{s.firm.delivery.provider === "Download" ? "A zip you download" : s.firm.delivery.provider + " › " + s.firm.delivery.folder + " › " + e.year + " › " + (c.entity || c.last + ", " + c.first)}</span><span className="muted">{e.delivered ? "Last handed off " + when(T, e.delivered) : "Not handed off yet"}</span></div>
       </div>
     </div>
+    {viewing && docIds.includes(viewing) ? <Viewer id={viewing} list={docIds} onMove={openDoc} onClose={() => openDoc(null)} /> : null}
     {handOff ? <Modal title="Files handed off" onClose={() => setHandOff(null)} footer={<button className="btn pri" onClick={() => setHandOff(null)}>Done</button>}>
       <p className="small muted">{handOff.folder}</p>
       <div className="list card" style={{ boxShadow: "none" }}>{handOff.files.length ? handOff.files.map((f) => <div className="li" key={f}><Icon name="file" small /><span className="mono" style={{ overflowWrap: "anywhere" }}>{f}</span></div>) : <div className="li muted">No accepted documents yet.</div>}</div>

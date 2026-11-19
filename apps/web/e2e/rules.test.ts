@@ -3,14 +3,14 @@
 //   T-65  the vocabulary in docs/UX.md, and no screen that starts empty and silent
 import { after } from "node:test";
 import assert from "node:assert/strict";
-import { busyFirm, closeBrowser, scene, type World } from "./world.ts";
+import { busyFirmWithDoubt as busyFirm, closeBrowser, scene, type World } from "./world.ts";
 import type { Engine } from "../../server/src/kit.ts";
 
 after(closeBrowser);
 export const ROUTES = ["/", "/clients", "/needs-you", "/hound", "/add-clients", "/messages", "/progress", "/settings"];
 // Every screen for a firm with clients: the fixed ones plus each tab of one client's page.
 const TABS = ["", "?tab=suggested", "?tab=documents", "?tab=conversation", "?tab=activity", "?tab=details"];
-const routesFor = async (W: World, firmId: string) => { const T: Engine = await W.state(firmId); return ROUTES.concat(TABS.map((t) => "/clients/" + T.S.engs[0].id + t), ["/clients?do=add", "/clients?do=start", "/clients/nobody"]); };
+const routesFor = async (W: World, firmId: string) => { const T: Engine = await W.state(firmId); return ROUTES.concat(TABS.map((t) => "/clients/" + T.S.engs[0].id + t), ["/clients?do=add", "/clients?do=start", "/clients/nobody", "/needs-you?show=says_none", "/needs-you?show=document", "/clients/" + T.S.engs[0].id + "?tab=documents&doc=" + T.S.docs[0].id]); };
 const PAYLOAD = '"><img src=x onerror="window.__pwned=1"><script>window.__pwned=2</script><b>bold</b>';
 
 scene("T-52: an HTML payload planted in every stored text field shows as text on every screen and never runs", async (W) => {
