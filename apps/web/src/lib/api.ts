@@ -22,6 +22,7 @@ export const api = {
     return res.text();
   },
   act: (fn: string, args: unknown[]) => call<{ ok: true; result: unknown }>("POST", "/api/act", { fn, args }),
+  actMany: (calls: { fn: string; args: unknown[] }[]) => call<{ ok: true; results: unknown[] }>("POST", "/api/act", { calls }),
   post: <T,>(path: string, body?: unknown) => call<T>("POST", path, body),
   get: <T,>(path: string) => call<T>("GET", path),
   del: <T,>(path: string) => call<T>("DELETE", path)

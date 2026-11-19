@@ -27,5 +27,6 @@ React, built with Vite. `npm run build` writes `apps/web/dist`, and the web serv
 |---|---|---|
 | Sign in, two-step setup, recovery codes | T-139 | Done |
 | Shell: menu, client search, alerts, banners | T-15 | Done |
-| Home: first steps, connect once, the five counts, Needs you, activity, progress, coming up | T-15, T-41 | Done. The buttons that open flows not built yet (add one client, check-in for all, choose a checklist for all, start collecting, registration, heads-up wording, storage) are left out until those flows exist |
-| Clients, client page, document viewer, conversation, Needs you, the Hound, add clients, all messages, progress, settings | T-16 to T-20, T-24 | Not built: each shows a holding screen |
+| Home: first steps, connect once, the five counts, Needs you, activity, progress, coming up | T-15, T-41 | Done. The buttons for flows not built yet (text registration, heads-up wording, storage) are left out until those flows exist |
+| Clients: list, filters, selection, add a client, choose a checklist, start collecting | T-16, T-38, T-39 | Done |
+| Client page, document viewer, conversation, Needs you, the Hound, add clients, all messages, progress, settings | T-16 to T-20, T-24 | Not built: each shows a holding screen |

@@ -22,6 +22,8 @@ export interface Firm {
   can: (level?: "owner") => boolean;
   /** One staff action, by the engine function's name. Resolves with what the engine returned, after the screen has the new state. */
   act: (fn: string, ...args: unknown[]) => Promise<unknown>;
+  /** Many actions in one turn: the firm is loaded and saved once. Resolves with each result, in order. */
+  actMany: (calls: [fn: string, ...args: unknown[]][]) => Promise<unknown[]>;
   reload: () => Promise<void>;
   toast: (text: string) => void;
 }
@@ -55,7 +57,12 @@ export function FirmProvider({ children, onSignedOut }: { children: ReactNode; o
     try { const r = await api.act(fn, args); await reload(); return r.result; }
     catch (err) { if (err instanceof ApiError && err.status === 401) { await reload(); return null; } toast((err as Error).message); throw err; }
   }, [reload, toast]);
-  const value = useMemo<Firm | null>(() => phase.at !== "ready" ? null : { T: phase.T, me: phase.me, can: (level) => (level === "owner" ? phase.me.role === "owner" : phase.me.role !== "read_only"), act, reload, toast }, [phase, act, reload, toast]);
+  const actMany = useCallback(async (calls: [string, ...unknown[]][]) => {
+    if (!calls.length) return [];
+    try { const r = await api.actMany(calls.map(([fn, ...args]) => ({ fn, args }))); await reload(); return r.results; }
+    catch (err) { if (err instanceof ApiError && err.status === 401) { await reload(); return []; } toast((err as Error).message); throw err; }
+  }, [reload, toast]);
+  const value = useMemo<Firm | null>(() => phase.at !== "ready" ? null : { T: phase.T, me: phase.me, can: (level) => (level === "owner" ? phase.me.role === "owner" : phase.me.role !== "read_only"), act, actMany, reload, toast }, [phase, act, actMany, reload, toast]);
 
   if (phase.at === "loading" || phase.at === "signin") return <div className="main"><div className="empty" role="status">Loading your firm…</div></div>;
   if (phase.at === "error") return <div className="main"><div className="empty" role="alert"><b>Tallyhound could not load your firm.</b><br />{phase.message}<br /><button className="btn" style={{ marginTop: 12 }} onClick={() => { setPhase({ at: "loading" }); void reload(); }}>Try again</button></div></div>;

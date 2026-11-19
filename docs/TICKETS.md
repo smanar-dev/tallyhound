@@ -351,4 +351,15 @@ Still different from the specification, each needing a decision or a ticket:
 | T-65 UX checks | Vocabulary and empty-state checks in CI for every screen. The first-run click count waits for the screens it clicks through |
 | T-53 Keyboard and labels | Not started |
 
-Home leaves out the buttons whose flows are not built yet. Next in order: Clients list and add one client (T-16, T-38, T-56), the client page (T-16), the document viewer (T-17), conversation and approvals (T-18).
+### Step 6: Clients (same day)
+
+| Ticket | State |
+|---|---|
+| T-16 Clients list | Done: filters with counts, filter box, preparer, selection, and for everyone selected: send check-in, choose a checklist, add suggested documents, confirm, start, pause, resume. The client page itself is next |
+| T-38 Add one client | Done. A refused add shows the engine's reason in the dialog and nothing is saved, with a browser test |
+| T-39 Checklist templates | The assign half is done: one request for any number of clients (`/api/act` takes `{ calls: [...] }`, one load and one save), and a reopened complete file is reported. Not timed at 500 clients. The settings page to edit templates is not built |
+| T-56 Client list paging | 200 rows, then "Show 200 more", in the browser. The server still sends the whole workspace; paging on the server waits for T-33 |
+| First run (docs/UX.md rule 1) | A browser test goes from an empty firm to a client being contacted and fails above 12 clicks. It takes 10 |
+| T-53 Keyboard | Dialogs take the focus, keep Tab inside, close on Escape and give the focus back; Enter opens a row. Tested. No screen reader pass yet |
+
+Home's buttons for adding a client, the check-in for everyone, a checklist for everyone and starting are now live. Still left out: text registration, the heads-up wording, storage. Next in order: Clients list and add one client (T-16, T-38, T-56), the client page (T-16), the document viewer (T-17), conversation and approvals (T-18).

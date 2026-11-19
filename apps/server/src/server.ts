@@ -90,13 +90,19 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
     let out = JSON.stringify(s); for (const k of keys) out = out.split(k).join("(private link)");
     return reply.type("application/json").send(out);
   });
-  // One staff action: { fn, args }. The role is checked here, the rules are the engine's.
+  // One staff action: { fn, args }, or several in one turn: { calls: [{ fn, args }] }. The role is checked here, for every call, before any runs.
+  // The rules are the engine's. Several calls load and save the firm once, so "assign a checklist to 500 clients" is one request.
+  const NO: Record<string, string> = { read_only: "Your account can look but not change things. Ask an owner to change your role.", other: "Only an owner can do that." };
   f.post("/api/act", { preHandler: full }, async (req, reply) => {
-    const u = req.who!.user, b = body(req), fn = str(b.fn), ok = allowed(u.role, fn);
-    if (ok === "unknown") return reply.code(404).send({ error: "unknown_action", message: "Tallyhound does not know that action." });
-    if (ok === "forbidden") return reply.code(403).send({ error: "role", message: u.role === "read_only" ? "Your account can look but not change things. Ask an owner to change your role." : "Only an owner can do that." });
-    try { return { ok: true, result: await d.app.staff(u.firmId, u.id, (T: Engine) => run(T, fn, b.args as unknown[])) }; }
-    catch (err) { say("act_failed", u.firmId, fn, (err as Error).message); return reply.code(400).send({ error: "refused", message: (err as Error).message }); }
+    const u = req.who!.user, b = body(req), many = Array.isArray(b.calls), calls = (many ? (b.calls as unknown[]) : [b]).map((c) => (c && typeof c === "object" ? c : {}) as { fn?: unknown; args?: unknown });
+    if (!calls.length || calls.length > 5000) return reply.code(400).send({ error: "bad_request", message: "That request could not be read." });
+    for (const c of calls) {
+      const ok = allowed(u.role, str(c.fn));
+      if (ok === "unknown") return reply.code(404).send({ error: "unknown_action", message: "Tallyhound does not know that action." });
+      if (ok === "forbidden") return reply.code(403).send({ error: "role", message: u.role === "read_only" ? NO.read_only : NO.other });
+    }
+    try { const results = await d.app.staff(u.firmId, u.id, (T: Engine) => calls.map((c) => run(T, str(c.fn), c.args as unknown[]))); return many ? { ok: true, results } : { ok: true, result: results[0] }; }
+    catch (err) { say("act_failed", u.firmId, calls.length === 1 ? str(calls[0]!.fn) : "batch", (err as Error).message); return reply.code(400).send({ error: "refused", message: (err as Error).message }); }
   });
   f.get("/api/actions", { preHandler: full }, async () => Object.fromEntries(Object.entries(ACTIONS).map(([k, v]) => [k, v.role])));
 

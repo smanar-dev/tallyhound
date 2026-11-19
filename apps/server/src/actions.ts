@@ -14,6 +14,10 @@ export const ACTIONS: Record<string, Rule> = {
   // checklist
   setItem: staff(3), addItem: staff(4), addRecommended: staff(2), dismissRec: staff(2), addFromPrior: staff(2), setCustomEs: staff(2),
   saveTemplate: staff(1), removeTemplate: staff(1), applyTemplate: staff(3), sendCheckin: staff(1), applyCheckin: staff(2), skipQuestions: staff(2),
+  // Confirming a checklist is the firm saying "this list is right". The demo sets the same flag and writes the same two records.
+  confirmChecklist: { role: "staff", n: 1, run: (T, [eid]) => { const e = T.eng(eid); if (!e) return "No such client"; if (e.confirmed) return "Already confirmed"; e.confirmed = true; T.timeline(e, "Checklist confirmed", T.S.user.name); T.audit("checklist.confirm", T.client(e.clientId).last); return null; } },
+  // Start collecting for many clients in one turn, then let the first messages go, as the demo's wizard does.
+  startMany: { role: "staff", n: 1, run: (T, [ids]) => { let started = 0, capped = 0; const refused: string[] = []; for (const id of Array.isArray(ids) ? ids.slice(0, 5000) : []) { if (!T.eng(id)) continue; const r = T.start(id); if (!r) started++; else if (/free trial/.test(r)) capped++; else refused.push(r); } T.tick(); return { started, capped, refused: [...new Set(refused)] }; } },
   // chase
   start: staff(1), pause: staff(1), resume: staff(1), takeover: staff(2), handback: staff(2), approveMsg: staff(2), rejectMsg: staff(1), manual: staff(2), markHeadsUp: staff(1),
   // check

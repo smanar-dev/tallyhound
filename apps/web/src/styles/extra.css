@@ -18,3 +18,5 @@ a.nav,a.logo{text-decoration:none}
 a.pstep{text-decoration:none;color:inherit}
 a.btn{text-decoration:none}
 .who .me{flex:1;min-width:0;line-height:1.25;color:#fff;font-weight:600;font-size:13px}.who .me small{display:block;font-weight:500;color:#8C9AB0}
+.bulkbar{position:sticky;bottom:12px;background:var(--ink);color:#fff;border-color:var(--ink)}
+.note.bad{background:var(--bad-bg);color:var(--bad)}

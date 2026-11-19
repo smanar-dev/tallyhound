@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useState, type ReactNode } from "react";
 import { useFirm } from "../lib/firm";
 import { Page } from "./Shell";
-import { activity, countBy, needReason, needsYou, openTasks, type Event, type Need, type Row } from "../lib/select";
+import { activity, countBy, needReason, needsYou, openTasks, readyToStart, type Event, type Need, type Row } from "../lib/select";
 import { cname, DOW, fmtDay, fname, iname, MON, plural, rel, STAT, when } from "../lib/fmt";
 import { Avatar, DocChip, Empty, Icon, Ring } from "../components/ui";
 
@@ -42,15 +42,21 @@ function FeedLine({ x }: { x: Event }) {
 
 // The three numbered steps shown until the first requests go out. Only the current step has buttons, and only buttons that work.
 function StartCard() {
-  const { T, can } = useFirm(), s = T.S, n = s.clients.length;
+  const { T, can, actMany, toast } = useFirm(), s = T.S, n = s.clients.length, ready = readyToStart(T).length;
+  // The check-in goes to everyone who has not been started and has not had one. The engine says who it could not reach.
+  const checkinAll = async () => {
+    const who: Row[] = s.engs.filter((e: Row) => e.status === "not_started" && !e.checkin); if (!who.length) return toast("Nobody left to send it to.");
+    try { const r = await actMany(who.map((e) => ["sendCheckin", e.id])), ok = r.filter((x) => !x).length, no = who.length - ok;
+      toast(ok ? "Check-in sent to " + plural(ok, "client") + ". Answers come back to Needs you as proposed checklists." + (no ? " " + no + " could not be sent." : "") : String(r.find((x) => x) || "It could not be sent.")); } catch { /* the toast has said why */ }
+  };
   const unconf = s.engs.filter((e: Row) => !e.confirmed && e.status === "not_started").length, started = s.engs.filter((e: Row) => e.status !== "not_started").length;
   if (started || !can()) return null;
   const cur = !n ? 1 : unconf ? 2 : 3, backs = s.engs.filter((e: Row) => e.checkin && e.checkin.doneAt).length, sentCk = s.engs.filter((e: Row) => e.checkin).length;
   const Step = ({ k, title, text, children }: { k: number; title: string; text: string; children?: ReactNode }) => <div className={"gs " + (k < cur ? "done" : k === cur ? "cur" : "")}><span className="gsn">{k < cur ? <Icon name="check" small /> : k}</span><div className="grow"><b>{title}</b><div className="small muted">{text}</div>{k === cur && children ? <div className="row" style={{ marginTop: 10 }}>{children}</div> : null}</div></div>;
   return <div className="card pad col" style={{ gap: 4 }}><h2>Get your first requests out</h2>
-    <Step k={1} title="Add your clients" text={n ? plural(n, "client") + " added." : "Upload a spreadsheet of names with a mobile number or email, or add one client to try it."}><Link className="btn pri" to="/add-clients"><Icon name="upload" small />Add clients</Link></Step>
-    <Step k={2} title="Give each client a checklist" text={n && !unconf ? "Every client has a confirmed checklist." : (sentCk > backs ? backs + " of " + sentCk + " check-ins are back. " : "") + "The list of documents each client owes you. Let clients tell you with a few taps, or pick a ready-made list for everyone."}><Link className="btn pri" to="/clients?show=not_started">Go through them one by one</Link></Step>
-    <Step k={3} title="Start collecting" text={"Tallyhound asks each client for their documents by text and email, checks what comes back, and follows up. " + (s.firm.hound.mode === "copilot" ? "You approve each message before it goes." : "It only comes to you when it needs a person.")}><Link className="btn pri" to="/clients?show=not_started"><Icon name="send" small />Choose who to start</Link></Step>
+    <Step k={1} title="Add your clients" text={n ? plural(n, "client") + " added." : "Upload a spreadsheet of names with a mobile number or email, or add one client to try it."}><Link className="btn pri" to="/add-clients"><Icon name="upload" small />Import a list</Link><Link className="btn" to="/clients?do=add"><Icon name="plus" small />Add one client</Link></Step>
+    <Step k={2} title="Give each client a checklist" text={n && !unconf ? "Every client has a confirmed checklist." : (sentCk > backs ? backs + " of " + sentCk + " check-ins are back. " : "") + "The list of documents each client owes you. Let clients tell you with a few taps, or pick a ready-made list for everyone."}><button className="btn pri" onClick={checkinAll}><Icon name="send" small />Ask clients with a 2-minute check-in</button><Link className="btn" to="/clients?do=assign"><Icon name="file" small />Choose a checklist for all {unconf}</Link><Link className="btn" to="/clients?show=not_started">Go through them one by one</Link></Step>
+    <Step k={3} title="Start collecting" text={"Tallyhound asks each client for their documents by text and email, checks what comes back, and follows up. " + (s.firm.hound.mode === "copilot" ? "You approve each message before it goes." : "It only comes to you when it needs a person.")}><Link className="btn pri" to="/clients?do=start"><Icon name="send" small />Start collecting for {plural(ready, "client")}</Link></Step>
   </div>;
 }
 
@@ -71,11 +77,12 @@ function SetupCard() {
 }
 
 export function Home() {
-  const { T } = useFirm(), s = T.S, nav = useNavigate(), h = s.now.getHours(), ny = needsYou(T), done = countBy(T, "complete") + countBy(T, "closed");
+  const { T, can } = useFirm(), s = T.S, nav = useNavigate(), h = s.now.getHours(), ny = needsYou(T), done = countBy(T, "complete") + countBy(T, "closed");
   const wk: Row[] = s.docs.filter((d: Row) => d.engId && s.now - d.at < 7 * T.DAY), auto = wk.filter((d) => d.state === "accepted" && !s.tasks.some((t: Row) => t.docId === d.id)).length;
   const upcoming: Row[] = s.engs.filter((e: Row) => e.next && e.next > s.now && ["in_progress", "awaiting_consent"].includes(e.status)).sort((a: Row, b: Row) => a.next - b.next).slice(0, 6);
   const anyStarted = s.engs.some((e: Row) => e.status !== "not_started"), feed = activity(T, 10);
-  return <Page title="Home">
+  const more = readyToStart(T).length;
+  return <Page title="Home" actions={can() && more && anyStarted ? <Link className="btn pri" to="/clients?do=start"><Icon name="send" small />Start collecting ({more})</Link> : null}>
     <div><h1>Good {h < 12 ? "morning" : h < 17 ? "afternoon" : "evening"}, {s.user.first}</h1>
       <p className="muted" style={{ marginTop: 4 }}>{DOW[s.now.getDay()]}, {MON[s.now.getMonth()]} {s.now.getDate()}. {!s.clients.length ? "Three steps to your first request. It takes about ten minutes." : !anyStarted ? "Your clients are in. Nothing has been sent yet." : ny.length ? ny.length + " thing" + (ny.length > 1 ? "s need" : " needs") + " you. Tallyhound is handling the rest." : "Nothing needs you. Tallyhound is collecting for everyone else."}</p></div>
     <StartCard /><SetupCard />

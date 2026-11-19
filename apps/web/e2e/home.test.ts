@@ -14,12 +14,12 @@ scene("web: a new owner signs in through the screens and lands on a Home that sa
   assert.match(text(await page.locator(".banner.info").textContent()), /Nothing is sent to clients until it is done/, "an unchecked firm is told why nothing sends");
   // docs/UX.md rule 2: three numbered steps, and only the current one has a button. Rule 6: no primary button that cannot do anything.
   const steps = page.locator(".gs"); assert.equal(await steps.count(), 3); assert.equal(await page.locator(".gs.cur").count(), 1);
-  assert.equal(await page.locator(".gs .btn").count(), 1); assert.equal(text(await page.locator(".gs.cur .btn").textContent()), "Add clients");
+  assert.equal(await page.locator(".gs:not(.cur) .btn").count(), 0); assert.deepEqual((await page.locator(".gs.cur .btn").allTextContents()).map(text), ["Import a list", "Add one client"]);
   assert.equal(await page.getByRole("button", { name: /Start collecting/ }).count(), 0);
   assert.equal(await page.locator(".pipe").count(), 0, "no counts for a firm with no clients");
   // The menu: four things, then More (rule 4). Settings is the owner's.
   assert.deepEqual((await page.locator(".side nav .nav").allTextContents()).map(text), ["Home", "Clients", "Needs you", "The Hound your assistant", "Add clients", "All messages", "Progress", "Settings"]);
-  await page.getByRole("link", { name: "Add clients" }).first().click(); await page.getByText("This screen is being built.").waitFor(); assert.equal(await page.title(), "Add clients · Tallyhound");
+  await page.locator(".side").getByRole("link", { name: "Add clients" }).click(); await page.getByText("This screen is being built.").waitFor(); assert.equal(await page.title(), "Add clients · Tallyhound");
   await page.getByRole("button", { name: "Sign out" }).click(); await page.waitForURL("**/signin"); await page.goto(W.url + "/"); await page.waitForURL("**/signin");
 });
 
@@ -53,6 +53,7 @@ scene("web: a read-only person can look at Home and is offered nothing that chan
 scene("web: the layout holds on a phone-width screen, with the menu behind a button", async (W) => {
   await busyFirm(W); const page = await W.signIn("pat1@firm1.test", { width: 390, height: 800 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, "nothing pushes the page wider than the screen");
-  await page.getByRole("button", { name: "Menu" }).click(); await page.locator(".side.open").waitFor(); await page.locator(".side").getByRole("link", { name: "Clients", exact: true }).click(); await page.getByText("This screen is being built.").waitFor();
+  await page.getByRole("button", { name: "Menu" }).click(); await page.locator(".side.open").waitFor(); await page.locator(".side").getByRole("link", { name: "Clients", exact: true }).click(); await page.locator("table.ctbl").waitFor();
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, "the client list scrolls inside its card, not the page");
   assert.equal(await page.locator(".side.open").count(), 0, "choosing a screen closes the menu");
 });

@@ -76,6 +76,11 @@ for (const kind of KINDS) {
     assert.ok((await owner.get("/api/state")).json.state.audit.length > 0); assert.equal(st.userId, (await reader.get("/api/me")).json.id, "read-only can look");
     assert.equal((await staff.post("/api/act", { fn: "setRetain", args: ["delivered", 0] })).status, 403);
     assert.equal((await owner.post("/api/act", { fn: "setRetain", args: ["delivered", 0] })).status, 200);
+    // Several actions in one request: every one is checked before any runs, and the firm is saved once.
+    const two = { calls: [{ fn: "addClient", args: [{ first: "Al", last: "Bo", email: "al@x.example" }] }, { fn: "setRetain", args: ["delivered", 3] }] };
+    assert.equal((await staff.post("/api/act", two)).status, 403, "one owner-only call refuses the whole request"); assert.equal((await owner.get("/api/state")).json.state.clients.length, 1, "and nothing in it ran");
+    const ok = await owner.post("/api/act", two); assert.equal(ok.status, 200); assert.equal(ok.json.results.length, 2); assert.equal((await owner.get("/api/state")).json.state.clients.length, 2);
+    assert.equal((await owner.post("/api/act", { calls: [] })).status, 400); assert.equal((await owner.post("/api/act", { calls: [{ fn: "blank" }] })).status, 404);
     for (const fn of ["portalNone", "clientAnswers", "setVerified", "advance", "reset", "blank", "load", "giveConsent", "registerSender", "constructor", "__proto__", "S"]) assert.equal((await owner.post("/api/act", { fn, args: [true] })).status, 404, fn + " is not reachable");
     // The engine's own audit trail names the person who acted.
     const T = createEngine(); T.load(await H.store.readState(firmId)); assert.ok(T.S.audit.some((a: { actor: string }) => a.actor === "Alex Staff"));
