@@ -1,0 +1,109 @@
+// Where the outside world calls in: Twilio (texts, delivery receipts, voice) and Postmark (email in, bounces).
+// Every route checks who is calling before it reads a field. Message webhooks only store the event and answer;
+// the queue does the work (queue.ts). Nothing here logs a body, a number or an address.
+import { timingSafeEqual } from "node:crypto";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { ready } from "./files.ts";
+import { kitEmailIn, kitEmailOut, kitTwilio, type App, type Engine, type KitStore, type PrepareOpts, type TwilioAdapter } from "./kit.ts";
+import type { Handler, Inbox, Kind } from "./queue.ts";
+
+const last10 = (v: unknown) => String(v || "").replace(/\D/g, "").slice(-10);
+const addr = (v: unknown) => { const s = String(v || ""), m = /<([^>]+)>/.exec(s); return (m ? m[1]! : s).trim().toLowerCase(); };
+
+export function handlers({ app, twilio, prepare }: { app: App; twilio: TwilioAdapter | null; prepare?: PrepareOpts }): Record<Kind, Handler | null> {
+  const opt = prepare || {};
+  return {
+    // Photos are fetched here, not in the webhook, and Twilio's copies are deleted only once ours is sealed and the result saved.
+    sms: twilio && (async (payload) => {
+      const params = JSON.parse(payload.toString("utf8")) as Record<string, string>, m = await twilio.inbound(params, { keep: true });
+      await app.inboundSms({ ...m, media: await Promise.all(m.media.map((f) => ready(f, opt))) });
+      return { from: m.from, after: async () => { await twilio.forget(params); } };
+    }),
+    email: async (payload) => {
+      const m = kitEmailIn.fromPostmark(JSON.parse(payload.toString("utf8")));
+      await app.inboundEmail({ ...m, attachments: await Promise.all(m.attachments.map((f) => ready(f, opt))) });
+      return { from: m.from };
+    }
+  };
+}
+
+export interface HookDeps {
+  app: App; store: KitStore; inbox: Inbox; publicUrl: string;
+  twilioAuthToken?: string;                          // without it the Twilio routes do not exist
+  postmarkHook?: { user: string; pass: string };     // the name and password in the webhook address given to Postmark
+  log?: (event: string, ...ids: unknown[]) => void;
+}
+
+export function registerHooks(f: FastifyInstance, d: HookDeps): void {
+  const say = d.log || (() => {}), base = d.publicUrl.replace(/\/$/, "");
+  f.addContentTypeParser("application/x-www-form-urlencoded", { parseAs: "string" }, (_req, body, done) => { done(null, Object.fromEntries(new URLSearchParams(body as string))); });
+  const xml = (reply: FastifyReply, body = "<Response/>") => reply.type("text/xml").send(body.startsWith("<?xml") ? body : '<?xml version="1.0" encoding="UTF-8"?>' + body);
+
+  if (d.twilioAuthToken) {
+    const token = d.twilioAuthToken;
+    // Twilio signs the exact public address it called plus every field. Anything else is turned away before a field is read.
+    const signed = async (req: FastifyRequest, reply: FastifyReply) => {
+      const p = (req.body && typeof req.body === "object" ? req.body : {}) as Record<string, string>;
+      if (!kitTwilio.verifySignature(token, base + req.url, p, String(req.headers["x-twilio-signature"] || ""))) { say("hook_rejected", "twilio", req.routeOptions.url); return reply.code(403).send("Forbidden"); }
+    };
+    const params = (req: FastifyRequest) => req.body as Record<string, string>;
+    // A text or picture message. The fallback address does exactly the same: store, answer.
+    const text = async (req: FastifyRequest, reply: FastifyReply) => {
+      const p = params(req), firmId = await d.store.firmIdByNumber(last10(p.To)); if (!firmId) { say("unknown_number"); return xml(reply); }
+      const r = await d.inbox.accept("twilio", p.MessageSid || p.SmsSid || null, firmId, "sms", Buffer.from(JSON.stringify(p)));
+      if (r === "queued") void d.inbox.drain(); else say("hook_repeat", "twilio", firmId);
+      return xml(reply);   // an empty answer: replies are sent by the pipeline, never from here
+    };
+    f.post("/hooks/twilio", { preHandler: signed }, text);
+    f.post("/hooks/twilio/fallback", { preHandler: signed }, text);
+    // Delivery receipts (T-60). A text the carrier could not deliver is marked failed and the firm is told, in the pipeline's own words.
+    f.post("/hooks/twilio/status", { preHandler: signed }, async (req, reply) => {
+      const p = params(req), st = String(p.MessageStatus || p.SmsStatus || "").toLowerCase();
+      if ((st === "undelivered" || st === "failed") && p.MessageSid) { const firmId = await d.store.firmIdByNumber(last10(p.From)); if (firmId) await d.app.withFirm(firmId, (T: Engine) => notDelivered(T, p.MessageSid!, p.ErrorCode || "")); }
+      return reply.code(204).send();
+    });
+    // Clients call the number that texts them. Ring the firm's office (T-122).
+    f.post("/hooks/twilio/voice", { preHandler: signed }, async (req, reply) => {
+      const firmId = await d.store.firmIdByNumber(last10(params(req).To)), json = firmId && (await d.store.readState(firmId));
+      return xml(reply, kitTwilio.voiceForward(json ? JSON.parse(json).state.firm.phone : ""));
+    });
+  }
+
+  if (d.postmarkHook) {
+    const want = Buffer.from("Basic " + Buffer.from(d.postmarkHook.user + ":" + d.postmarkHook.pass).toString("base64"));
+    // Postmark does not sign its webhooks. The address we give it carries a name and password, and only that is accepted.
+    const known = async (req: FastifyRequest, reply: FastifyReply) => {
+      const got = Buffer.from(String(req.headers.authorization || ""));
+      if (got.length !== want.length || !timingSafeEqual(got, want)) { say("hook_rejected", "postmark", req.routeOptions.url); return reply.code(401).send("Unauthorized"); }
+    };
+    f.post("/hooks/postmark/inbound", { preHandler: known, bodyLimit: 50 * 1024 * 1024 }, async (req) => {
+      const j = (req.body || {}) as Record<string, unknown>, firmId = await d.store.firmIdByInbox(addr(j.OriginalRecipient || j.To)); if (!firmId) { say("unknown_inbox"); return { ok: true }; }
+      const r = await d.inbox.accept("postmark", (j.MessageID as string) || null, firmId, "email", Buffer.from(JSON.stringify(j)));
+      if (r === "queued") void d.inbox.drain(); else say("hook_repeat", "postmark", firmId);
+      return { ok: true };
+    });
+    // A hard bounce or a spam complaint: stop emailing that address and tell the firm (T-60, T-103).
+    f.post("/hooks/postmark/bounce", { preHandler: known }, async (req) => {
+      const j = (req.body || {}) as Record<string, unknown>, b = kitEmailOut.bounceEvent(j), firmId = b.hard && b.email ? await d.store.firmIdByInbox(addr(j.From)) : null;
+      if (firmId) await d.app.withFirm(firmId, (T: Engine) => bounced(T, b.email, b.kind));
+      return { ok: true };
+    });
+  }
+}
+
+// The same record the pipeline writes when a send fails at the provider (withFirm in packages/core/pipeline.js), reached later by a receipt.
+export function notDelivered(T: Engine, providerId: string, code: string): boolean {
+  const m = T.S.msgs.find((x: { providerId?: string; dir: string }) => x.dir === "out" && x.providerId === providerId); if (!m || m.failed) return false;
+  const e = T.eng(m.engId), c = e && T.client(e.clientId); m.failed = "The carrier did not deliver it" + (code ? " (code " + String(code).replace(/\D/g, "") + ")" : ""); m.status = "failed";
+  if (c && String(code) === "21610" && c.textConsent === "given") { c.textConsent = "withdrawn"; c.consentLog.push({ at: new Date(T.S.now), what: "Withdrawn: carrier reports the number as unsubscribed", channel: "text" }); }
+  if (e && c) T.alertx(e, "high", "send_failed", "A " + m.channel + " to " + c.first + " " + c.last + " could not be sent: " + m.failed, "sf" + m.id);
+  return true;
+}
+export function bounced(T: Engine, email: string, kind: string): number {
+  let n = 0;
+  for (const c of T.S.clients.filter((x: { email?: string; emailOk?: boolean }) => x.email && x.email.toLowerCase() === email && x.emailOk !== false)) {
+    c.emailOk = false; n++; const e = T.engOf(c.id);
+    if (e) T.alertx(e, "high", "email_bounced", (kind === "complaint" ? "An email to " + c.first + " " + c.last + " was marked as spam." : "Email to " + c.first + " " + c.last + " is bouncing.") + " Tallyhound has stopped emailing that address. Check it on the client's Details tab.", "eb" + c.id);
+  }
+  return n;
+}

@@ -1,0 +1,39 @@
+{
+  "name": "tallyhound",
+  "private": true,
+  "version": "0.6.0",
+  "description": "Tallyhound: client tax-document collection for accounting firms",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js apps/server/test/*.test.ts",
+    "test:kit": "node --test test/*.test.js",
+    "typecheck": "tsc -p .",
+    "lint": "eslint .",
+    "check": "npm run typecheck && npm run lint && npm test",
+    "fuzz": "node tools/fuzz.js 200 600",
+    "scale": "node tools/scale.js",
+    "start": "node apps/server/src/main.ts",
+    "admin": "node apps/server/src/admin.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.6",
+    "@types/pg": "^8.23.1",
+    "@types/qrcode": "^1.5.6",
+    "eslint": "^10.15.0",
+    "pg": "^8.23.1",
+    "pg-mem": "^3.0.5",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.73.0"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.1.5",
+    "fastify": "^5.12.8",
+    "heic-convert": "^2.1.0",
+    "qrcode": "^1.5.4",
+    "sharp": "^0.35.5",
+    "unpdf": "^1.9.1"
+  }
+}

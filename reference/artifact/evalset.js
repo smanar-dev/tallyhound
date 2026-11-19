@@ -1,0 +1,25 @@
+/* Sixty client messages for measuring how well new topics are spotted. want: the key that should be raised, "other" for an unusual document, or null for nothing. */
+window.TH_EVAL = [
+  ["FYI I sold some of my Apple shares back in August", "brokerage"], ["cashed out a bit of bitcoin this year, does that matter?", "brokerage"], ["We unloaded the index funds my dad left us", "brokerage"],
+  ["I picked up some consulting on the side starting in March", "selfEmp"], ["been doing a bit of freelance design work for a couple of clients", "selfEmp"], ["I opened my own LLC for the bakery in June", "selfEmp"],
+  ["I drive for Uber on weekends now and they pay through the app", "gig"], ["sold a bunch of stuff on eBay and PayPal says they are sending a tax form", "gig"],
+  ["changed employers in the spring, so there will be two wage forms", "newJob"], ["I left the hospital and started at the clinic in October", "newJob"],
+  ["we finally closed on a house in May, first mortgage ever", "homeowner"], ["refinanced the house in the fall", "homeowner"],
+  ["the baby started daycare in September, it costs a fortune", "childcare"], ["we hired a nanny for the twins this year", "childcare"],
+  ["we started letting out the basement apartment in July", "rental"], ["put the lake cabin on Airbnb for the summer", "rental"],
+  ["Jake started at UT Knoxville this fall, we are paying the tuition", "student"], ["I went back to school for my nursing degree", "student"],
+  ["I took money out of my 401k to pay for the roof", "retire"], ["rolled my old pension into an IRA when I left", "retire"], ["I retired in April and the pension checks started", "retire"],
+  ["got laid off in February and was on unemployment until May", "unemp"], ["I was out of work for a while and collected benefits from the state", "unemp"],
+  ["we signed up for health insurance on healthcare.gov this year", "market"], ["my brother and I formed a partnership for the food truck", "k1"],
+  ["mom started her social security in the summer and I do her taxes with mine", "ss"], ["I opened an HSA with the new health plan and used it for the dentist", "hsa"],
+  ["we gave a big gift to the church building fund", "charity"], ["I started making quarterly payments to the IRS like you said", "estPay"], ["started paying on my student loans again in the fall", "studentLoan"],
+  ["my aunt passed in March and left me part of her house, we sold it in the fall", "other"], ["I won eight thousand at the casino in Tunica and they gave me a form", "other"], ["we adopted our daughter this year, the adoption was final in June", "other"],
+  ["I worked in Germany for three months and got paid by the German office", "other"], ["we sold our old house when we moved", "other"], ["I got a settlement from the car accident lawsuit", "other"],
+  ["here is the W-2 you asked for", null], ["I'll send the mortgage form next week when it comes in the mail", null], ["thanks so much!", null], ["can you call me tomorrow afternoon?", null],
+  ["where do I find the interest statement? is it on the bank website", null], ["I don't have that one this year, the account was closed in 2024", null], ["sorry for the delay, things have been crazy at work", null],
+  ["is this the right form? it says 1099-INT at the top", null], ["what else do you still need from me", null], ["my wife handles all the bank stuff, I will ask her tonight", null],
+  ["we are traveling until the 15th so I can send everything after that", null], ["how much do you think I will owe this year?", null], ["same job, same house, nothing new on our end", null],
+  ["I sent that already last week, please check", null], ["the photo is blurry, let me retake it", null], ["do you need both pages or just the first one", null],
+  ["my employer says the W-2 comes at the end of January", null], ["ok", null], ["when is the deadline again?", null], ["can I just email it instead", null],
+  ["I thought about selling my stock but decided to hold", null], ["my sister started a business, she might need a CPA, can I give her your number", null], ["we looked at houses all summer but did not buy anything", null], ["please stop texting me so early in the morning", null]
+];
