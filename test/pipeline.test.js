@@ -161,3 +161,28 @@ test("custom requests are translated for Spanish-speaking clients, and only an o
   assert.equal(await x.app.translateCustoms("f1"), 1); assert.match(x.state().S.items.find((i) => i.custom).customEs, /Estado de cierre/);
   await assert.rejects(() => x.app.rollSeason("f1", "nobody", 2027)); assert.equal((await x.app.rollSeason("f1", "u1", 2027)).year, 2027);
 });
+
+// ---- round 16: the client's upload page, and the way out of email ----
+test("pipeline: a file from the client's upload page is checked like a text, and the same upload twice is one document", async () => {
+  const { createApp } = require("../packages/core/pipeline"), { memoryStore, fakeSender, fakeAI } = require("../packages/core/memory");
+  const store = memoryStore(), sms = fakeSender(), email = fakeSender(), ai = fakeAI((p) => p.startsWith("You read photos") ? { is_tax_document: true, form: "W2", tax_year: 2026, payer: "Acme Logistics", recipient_name: "JO DAY", legibility: 0.95, confidence: 0.97, missing_parts: [], note: "A W-2" } : null);
+  const app = createApp({ store, sms, email, ai, clock: () => new Date(2027, 0, 25, 10, 5) });
+  await app.createFirm("f1", { plan: "Practice", name: "Test CPAs", email: "docs@test.example", smsNumber: "+16155550100", senderStatus: "approved", mode: "autopilot", users: [{ id: "u1", first: "Pat", name: "Pat Owner", role: "owner", email: "pat@test.example" }] });
+  let cid; await app.staff("f1", "u1", (T) => { T.S.firm.linkBase = "go.tallyhound.test"; T.S.firm.slug = "testcpas"; T.importRows(T.parseCSV("First,Last,Email,Mobile\nJo,Day,jo@x.example,")); const e = T.S.engs[0]; cid = T.S.clients[0].id; T.itemsOf(e.id).find((i) => i.form === "W2").payer = "Acme Logistics"; e.confirmed = true; T.start(e.id); T.tick(); });
+  const file = { bytes: Buffer.alloc(5000, 7), contentType: "image/jpeg" }, n = email.sent.length;
+  const r = await app.clientUpload({ firmId: "f1", clientId: cid, files: [file], providerId: "up1" }); assert.deepEqual(r.docs, ["accepted"]);
+  const again = await app.clientUpload({ firmId: "f1", clientId: cid, files: [file], providerId: "up1" }); assert.equal(again.duplicate, true);
+  const { createEngine } = require("../packages/engine"), T = createEngine(); T.load(store.read("f1")); assert.equal(T.S.docs.length, 1); assert.equal(T.S.docs[0].channel, "portal"); assert.ok(T.S.docs[0].fileKey);
+  assert.equal(email.sent.length, n + 1, "one reply to the client"); assert.equal((await app.clientUpload({ firmId: "f1", clientId: "nobody", files: [file] })).handled, false);
+  assert.equal((await app.clientUpload({ firmId: "f1", clientId: cid, files: [{ bytes: Buffer.from("x"), contentType: "text/plain" }], providerId: "up2" })).unusable, "type");
+  // Every email carries the way to stop them, in the body and for the one-click header.
+  const m = email.sent.at(-1); assert.match(m.body, /To stop these emails: https:\/\/go\.tallyhound\.test\/e\/testcpas-[a-z]{28}$/); assert.match(m.unsubscribe, /^https:\/\/go\.tallyhound\.test\/e\/testcpas-[a-z]{28}$/); assert.equal(m.fromName, "Test CPAs");
+  assert.ok(email.sent.every((x) => x.unsubscribe === m.unsubscribe), "the same link in every email to this client");
+});
+test("email out: the unsubscribe address becomes the two headers mail programs look for", async () => {
+  const { postmark } = require("../packages/adapters/email-out"); let sent = null;
+  const pm = postmark({ serverToken: "t", fetchImpl: async (_u, o) => { sent = JSON.parse(o.body); return { ok: true, json: async () => ({ MessageID: "m1" }) }; } });
+  await pm.send({ from: "docs@test.example", to: "jo@x.example", subject: "s", body: "b", idempotencyKey: "k", unsubscribe: "https://go.tallyhound.test/e/x-abc" });
+  assert.deepEqual(sent.Headers.slice(1), [{ Name: "List-Unsubscribe", Value: "<https://go.tallyhound.test/e/x-abc>" }, { Name: "List-Unsubscribe-Post", Value: "List-Unsubscribe=One-Click" }]);
+  await pm.send({ from: "docs@test.example", to: "jo@x.example", subject: "s", body: "b" }); assert.equal(sent.Headers.length, 1);
+});

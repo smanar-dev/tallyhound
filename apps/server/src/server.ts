@@ -12,12 +12,15 @@ import { FirmError, type Firms } from "./firms.ts";
 import { ACTIONS, allowed, run } from "./actions.ts";
 import { registerHooks, type HookDeps } from "./hooks.ts";
 import { ready } from "./files.ts";
+import { registerPublic, type PublicDeps } from "./public.ts";
 import type { PrepareOpts } from "./kit.ts";
 
 export interface ServerDeps {
   app: App; auth: AuthStore; signIn: SignIn; firms: Firms;
   readState(firmId: string): Promise<string | null>;
   appUrl: string; secureCookies: boolean; webDir: string; prepare?: PrepareOpts;
+  /** The client's own pages. Present whenever there is a queue to put uploads on. */
+  clientPages?: Omit<PublicDeps, "app" | "auth" | "log">;
   health?: () => Record<string, unknown> | Promise<Record<string, unknown>>;
   hooks?: Omit<HookDeps, "app" | "store" | "publicUrl" | "log"> & { store: HookDeps["store"] };
   log?: (event: string, ...ids: unknown[]) => void;
@@ -66,6 +69,7 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
 
   f.get("/healthz", async () => ({ ok: true, ...(d.health ? await d.health() : {}) }));
   if (d.hooks) registerHooks(f, { ...d.hooks, app: d.app, publicUrl: d.appUrl, log: d.log });
+  if (d.clientPages) await registerPublic(f, { ...d.clientPages, app: d.app, auth: d.auth, log: d.log });
 
   // ---- sign-in ----
   f.post("/auth/link", { preHandler: brake }, async (req) => { await d.signIn.requestLink(str(body(req).email)); return { ok: true }; });
@@ -140,7 +144,7 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
   if (existsSync(assets)) for (const name of readdirSync(assets)) if (TYPES[extname(name)]) files.set(name, { type: TYPES[extname(name)]!, bytes: readFileSync(join(assets, name)) });
   f.get("/assets/:name", async (req, reply) => { const a = files.get((req.params as { name: string }).name); if (!a) return reply.code(404).send("Not found"); return reply.header("cache-control", "public, max-age=31536000, immutable").type(a.type).send(a.bytes); });
   f.setNotFoundHandler(async (req, reply) => {
-    if (req.method !== "GET" || /^\/(api|auth|hooks|assets)\//.test(req.url)) return reply.code(404).send({ error: "not_found", message: "There is nothing at that address." });
+    if (req.method !== "GET" || /^\/(api|auth|hooks|assets|c|u|e|f)\//.test(req.url)) return reply.code(404).send({ error: "not_found", message: "There is nothing at that address." });
     if (!index) return reply.code(503).type("text/plain").send("The web app has not been built. Run: npm run build");
     return reply.type("text/html; charset=utf-8").send(index);
   });

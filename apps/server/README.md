@@ -29,13 +29,14 @@ A new firm is not checked: nothing is sent or read until `npm run admin -- firm-
 | `src/actions.ts` | The engine functions a browser may call, and which role may call each |
 | `src/firms.ts` | Create a firm, the firm check, add and remove people, change roles |
 | `src/hooks.ts` | Where providers call in: `/hooks/twilio` (texts), `/hooks/twilio/status`, `/hooks/twilio/voice`, `/hooks/postmark/inbound`, `/hooks/postmark/bounce` |
+| `src/public.ts`, `src/clientpages.ts` | The client's pages: `/c/` agree to texts, `/u/` send documents, `/e/` stop emails, and `/f/`, the firm's public page. Plain HTML from React on the server, no script |
 | `src/queue.ts` | The inbound queue: store, answer, process with retries, hand to a person |
 | `src/files.ts` | Makes an arriving file ready: identify, convert, rotate, shrink, scan, read PDF text |
 | `src/model.ts` | The Claude client: timeout, retries, refusals, a daily spend cap per firm |
 | `src/worker.ts` | Calls `tick` for every firm every five minutes, and works the queue every 15 seconds |
 | `src/runtime.ts` | Reads the environment, connects everything, runs database migrations |
 | `src/admin.ts` | `migrate`, `create-firm`, `firm-check`, `firms` |
-| `test/` | 33 tests. 21 of them run in memory and again on a real Postgres when `DATABASE_URL` is set |
+| `test/` | 41 tests. 29 of them run in memory and again on a real Postgres when `DATABASE_URL` is set |
 
 ## Rules this code keeps
 

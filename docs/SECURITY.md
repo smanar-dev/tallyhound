@@ -22,7 +22,7 @@ Three rules follow from that:
 | Document files | To check them. The original goes to the firm's storage on arrival | 7 days after delivery (firm can set 0 to 365). Rejected, duplicate and discarded files: 7 days. Nothing longer than 400 days |
 | One line per document: form, year, issuer, date, verdict | Builds next year's checklist | Kept |
 | Messages and files from a sender nobody matched | So a person can file them | 30 days |
-| Consent record: when and how each client agreed to texts | Required for texting | Kept with the client |
+| Consent record: when and how each client agreed to texts, the wording they were shown, and the IP address and browser it came from | Required for texting, and proof if a carrier or a client asks | Kept with the client |
 | Audit log | Who did what | Seven years (to confirm) |
 
 An owner changes the four document times on Settings, Security and data. "Delete Tallyhound's copies" on a client's Documents tab removes them at once.

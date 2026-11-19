@@ -5,7 +5,7 @@
 import { randomBytes } from "node:crypto";
 import type { App, Engine, KitStore } from "./kit.ts";
 
-export type Kind = "sms" | "email";
+export type Kind = "sms" | "email" | "upload";
 export interface Job { id: string; provider: string; providerId: string; firmId: string; kind: Kind; fileKey: string | null; attempts: number }
 export interface QueueStore {
   /** Null when this provider id has been seen before. */
@@ -75,7 +75,7 @@ export function createInbox({ queue, store, app, handlers, clock, log }: { queue
   async function one(j: Job): Promise<void> {
     const now = clock(), h = handlers[j.kind];
     try {
-      if (!h) throw new Error(j.kind === "sms" ? "Texting is not connected" : "Email is not connected");
+      if (!h) throw new Error(j.kind === "sms" ? "Texting is not connected" : j.kind === "email" ? "Email is not connected" : "Uploads are not connected");
       const f = await store.getFile(j.firmId, j.fileKey!); if (!f) throw new Error("The stored event is missing");
       const r = await h(f.bytes, j.firmId);
       await queue.done(j.id, clock()); await store.deleteFile(j.firmId, j.fileKey!).catch(() => say("queue_delete_failed", j.firmId, j.id));
@@ -85,7 +85,7 @@ export function createInbox({ queue, store, app, handlers, clock, log }: { queue
       if (wait !== undefined) { await queue.retry(j.id, new Date(now.getTime() + wait * 1000), msg); say("queue_retry", j.firmId, j.id, j.attempts, msg); return; }
       await queue.dead(j.id, clock(), msg); say("queue_dead", j.firmId, j.id, msg);
       // Hand it to a person. Nothing about the message itself is known here beyond that it arrived.
-      await app.withFirm(j.firmId, (T: Engine) => { T.S.tray.push({ id: "yq" + j.id, text: "A" + (j.kind === "sms" ? " text" : "n email") + " arrived and Tallyhound could not process it after several tries. If you are expecting something from a client, ask them to send it again.", from: "Unknown", at: new Date(T.S.now), channel: j.kind === "sms" ? "text" : "email", why: "Could not be processed" }); }).catch(() => say("queue_handoff_failed", j.firmId, j.id));
+      await app.withFirm(j.firmId, (T: Engine) => { T.S.tray.push({ id: "yq" + j.id, text: (j.kind === "sms" ? "A text" : j.kind === "email" ? "An email" : "A file from a client's upload page") + " arrived and Tallyhound could not process it after several tries. If you are expecting something from a client, ask them to send it again.", from: "Unknown", at: new Date(T.S.now), channel: j.kind === "sms" ? "text" : j.kind === "email" ? "email" : "portal", why: "Could not be processed" }); }).catch(() => say("queue_handoff_failed", j.firmId, j.id));
     }
   }
   async function run(): Promise<number> {

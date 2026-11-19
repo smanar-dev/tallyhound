@@ -639,6 +639,37 @@
     if (c.textConsent === "given") return null;
     giveConsent(cid, "recorded by " + S.user.name + ": " + (String(how || "").trim() || "agreed with the firm directly")); return null;
   }
+  /* ---------- the client's own pages (round 16): consent, email only, stop emails ---------- */
+  const CONSENT_WORDING = { v: "v1", text: "By entering your mobile number and tapping Agree, you agree to receive text messages from {firm}, sent using Tallyhound, about the documents needed for your tax return. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for help. Agreeing is not a condition of any service. See the privacy notice and terms." };
+  // The client agrees on their own page. They may enter or correct the mobile number there; a changed number is a new number.
+  // The record keeps which wording they saw and where the agreement came from, as proof (never the wording of anything else).
+  function consentFromPage(cid, o) {
+    const c = client(cid); o = o || {}; if (!c) return { ok: false, why: "Unknown client" };
+    const mob = String(o.mobile || "").replace(/\D/g, "").replace(/^1(\d{10})$/, "$1"); if (mob.length !== 10 || /^[01]/.test(mob)) return { ok: false, why: "Enter a 10-digit mobile number" };
+    if (c.textConsent === "given" && c.mobile === mob) return { ok: true, already: true };
+    if (c.mobile !== mob) { c.mobile = mob; c.mobileBad = false; if (c.textConsent === "given" || c.textConsent === "withdrawn") c.consentLog.push({ at: new Date(S.now), what: "Reset: the client gave a new mobile number on their page", channel: "text" }); c.textConsent = "none"; }
+    giveConsent(cid, "page"); if (c.textConsent !== "given") return { ok: false, why: "Texts could not be turned on" };
+    Object.assign(c.consentLog[c.consentLog.length - 1], { wording: CONSENT_WORDING.v, shown: CONSENT_WORDING.text.replace("{firm}", S.firm.name), mobile: mob, ip: String(o.ip || "").slice(0, 60), agent: String(o.agent || "").slice(0, 200) });
+    return { ok: true };
+  }
+  // "No thanks, I'll use email." Nothing is texted; collecting carries on by email if there is an address.
+  function declineTexts(cid) {
+    const c = client(cid), e = c && engOf(cid); if (!c) return { ok: false, why: "Unknown client" }; if (c.textConsent === "given") return { ok: true, already: true };
+    c.textConsent = "none"; c.consentLog.push({ at: new Date(S.now), what: "Declined texts on their page: email only", channel: "text" }); audit("consent.declined", c.first + " " + c.last, c.first);
+    if (e && e.status === "awaiting_consent") { if (c.email && c.emailOk) { e.status = "in_progress"; e.emailOnly = true; e.stuck = null; e.next = nextAllowed(S.now); timeline(e, "Chose email instead of texts", c.first); } else setStuck(e, "no_consent"); }
+    return { ok: true };
+  }
+  // The unsubscribe link in every email, and the one-click header. No further automated email goes to that address.
+  // If that leaves no way to reach the client, the file comes to a person, exactly as a STOP with no email on file does.
+  function stopEmail(cid, how) {
+    const c = client(cid), e = c && engOf(cid); if (!c) return { ok: false, why: "Unknown client" }; if (c.emailOff) return { ok: true, already: true };
+    c.emailOff = true; c.emailOk = false; c.consentLog.push({ at: new Date(S.now), what: "Withdrawn: unsubscribed from email (" + (how || "link") + ")", channel: "email" }); audit("email.unsubscribed", c.first + " " + c.last, c.first);
+    if (e) { timeline(e, "Unsubscribed from email", c.first); if (!channelFor(c, e) && !["complete", "closed", "not_started", "paused"].includes(e.status)) { setStuck(e, "opted_out"); alertx(e, "high", "opted_out", c.first + " " + c.last + " unsubscribed from email and cannot be texted. Call them to collect the rest.", "eo" + c.id); } }
+    return { ok: true };
+  }
+  // A key for the unsubscribe link. It never changes, so a link in an old email keeps working.
+  function emailKey(c) { if (!c.ekey) c.ekey = linkKey(); return c.ekey; }
+  function unsubscribeLink(c) { return S.firm.linkBase && c ? S.firm.linkBase + "/e/" + (S.firm.slug ? S.firm.slug + "-" : "") + emailKey(c) : ""; }
   function inboundText(cid, text, ai) {
     const c = cid ? client(cid) : null, e = c ? engOf(c.id) : null;
     text = scrubIn(text, e);
@@ -1359,7 +1390,7 @@
     else if (["in_progress", "stuck"].includes(e.status) && !open && any) { if (checkComplete(e)) send(e, "M13", {}); }
   }
   window.TH = { RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
-    dump, load, blank, setNow, setUser, linkFor, linkLive, LINK_DAYS,
+    dump, load, blank, setNow, setUser, linkFor, linkLive, LINK_DAYS, consentFromPage, declineTexts, stopEmail, unsubscribeLink, CONSENT_WORDING,
     get S() { return S; }, FORMS, TPL, TPL_USE, QUESTIONS, STUCK, DAY, HOUR, MIN,
     client, eng, engOf, itemsOf, openItems, progress, fill, outputCheck, channelFor, allowed, nextAllowed, live, nextItem,
     start, step, tick, advance, jumpToNext, inboundDoc, inboundText, giveConsent, decideTask, manual, setItem, addItem, pause, resume, deliver, closeEng, purge, parseCSV, importRows, audit, timeline, fileName,

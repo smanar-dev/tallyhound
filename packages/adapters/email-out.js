@@ -3,9 +3,9 @@
 function postmark({ serverToken, stream, fetchImpl }) {
   const f = fetchImpl || fetch;
   return {
-    async send({ from, fromName, to, subject, body, idempotencyKey }) {
+    async send({ from, fromName, to, subject, body, idempotencyKey, unsubscribe }) {
       const res = await f("https://api.postmarkapp.com/email", { method: "POST", headers: { accept: "application/json", "content-type": "application/json", "x-postmark-server-token": serverToken },
-        body: JSON.stringify({ From: fromName ? '"' + String(fromName).replace(/["\\]/g, "") + '" <' + from + ">" : from, To: to, ReplyTo: from, Subject: subject, TextBody: body, MessageStream: stream || "outbound", TrackOpens: false, TrackLinks: "None", Headers: [{ Name: "X-Tallyhound-Id", Value: String(idempotencyKey || "") }] }) });
+        body: JSON.stringify({ From: fromName ? '"' + String(fromName).replace(/["\\]/g, "") + '" <' + from + ">" : from, To: to, ReplyTo: from, Subject: subject, TextBody: body, MessageStream: stream || "outbound", TrackOpens: false, TrackLinks: "None", Headers: [{ Name: "X-Tallyhound-Id", Value: String(idempotencyKey || "") }].concat(unsubscribe ? [{ Name: "List-Unsubscribe", Value: "<" + unsubscribe + ">" }, { Name: "List-Unsubscribe-Post", Value: "List-Unsubscribe=One-Click" }] : []) }) });
       const data = await res.json().catch(() => ({}));
       // 406: the address bounced or complained before. Never retried; the engine marks the address bad and tells the firm.
       if (!res.ok) { const err = new Error(data.Message || "Postmark " + res.status); err.code = data.ErrorCode === 406 ? "bounced" : data.ErrorCode || res.status; throw err; }

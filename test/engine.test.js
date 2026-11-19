@@ -211,3 +211,35 @@ test("links: a model's rewrite that drops or changes the client's link is refuse
   m.status = "writing"; T.composeDone(m.id, std.replace(link, "evil.example/x"), "Claude"); assert.equal(m.body, std);
   m.status = "writing"; T.composeDone(m.id, std.replace("Hi", "Hello"), "Claude"); assert.ok(m.body.includes(link));
 });
+
+// ---- round 16: the client's own pages ----
+test("consent page: agreeing turns texts on, sends the confirmation, and keeps what the client saw as proof", () => {
+  const { T, c, e } = firm(); e.confirmed = true; T.start(e.id); assert.equal(c.textConsent, "invited");
+  assert.equal(T.consentFromPage(c.id, { mobile: "615" }).ok, false, "a short number is refused"); assert.equal(c.textConsent, "invited");
+  const r = T.consentFromPage(c.id, { mobile: "(615) 555-0111", ip: "203.0.113.9", agent: "Mobile Safari" }); assert.equal(r.ok, true); assert.equal(c.textConsent, "given");
+  const rec = c.consentLog.at(-1); assert.match(rec.what, /Given \(page\)/); assert.equal(rec.wording, "v1"); assert.match(rec.shown, /you agree to receive text messages from Test CPAs/); assert.equal(rec.ip, "203.0.113.9"); assert.equal(rec.agent, "Mobile Safari");
+  assert.equal(T.S.msgs.at(-1).tpl, "M2"); assert.equal(T.consentFromPage(c.id, { mobile: "6155550111" }).already, true, "pressing Agree twice does nothing more");
+  assert.equal(T.S.msgs.filter((m) => m.tpl === "M2").length, 1);
+});
+test("consent page: a corrected mobile number is a new number, and clears a wrong-number flag", () => {
+  const { T, c, e } = firm(); e.confirmed = true; T.start(e.id); c.mobileBad = true;
+  assert.equal(T.consentFromPage(c.id, { mobile: "6155550199" }).ok, true); assert.equal(c.mobile, "6155550199"); assert.equal(c.mobileBad, false); assert.equal(c.textConsent, "given"); assert.equal(c.consentLog.at(-1).mobile, "6155550199");
+});
+test("consent page: 'no thanks, I'll use email' sends nothing by text and carries on by email", () => {
+  const { T, c, e } = firm(); e.confirmed = true; T.start(e.id); assert.equal(e.status, "awaiting_consent");
+  assert.equal(T.declineTexts(c.id).ok, true); assert.equal(c.textConsent, "none"); assert.equal(e.status, "in_progress"); assert.equal(e.emailOnly, true); assert.match(c.consentLog.at(-1).what, /email only/);
+  T.setNow(new Date(T.S.now.getTime() + T.DAY)); T.tick(); const out = T.S.msgs.filter((m) => m.dir === "out" && m.tpl !== "M1"); assert.ok(out.length > 0, "the first request goes out"); assert.ok(out.every((m) => m.channel === "email"));
+});
+test("unsubscribe: no more email to that address; with no other way to reach them the file comes to a person", () => {
+  const { T, c, e } = firm(); e.confirmed = true; T.start(e.id); T.declineTexts(c.id); const n = T.S.msgs.length;
+  assert.equal(T.stopEmail(c.id, "one click").ok, true); assert.equal(c.emailOk, false); assert.match(c.consentLog.at(-1).what, /unsubscribed from email \(one click\)/);
+  assert.equal(e.status, "stuck"); assert.equal(e.stuck, "opted_out"); assert.ok(T.S.alerts.some((a) => a.kind === "opted_out"));
+  T.setNow(new Date(T.S.now.getTime() + 3 * T.DAY)); T.tick(); assert.equal(T.S.msgs.filter((m) => m.dir === "out").length, T.S.msgs.slice(0, n).filter((m) => m.dir === "out").length, "nothing more is sent");
+  assert.equal(T.stopEmail(c.id).already, true);
+  // A client who texts keeps getting texts after unsubscribing from email.
+  const B = firm(); B.e.confirmed = true; B.T.start(B.e.id); B.T.giveConsent(B.c.id, "page"); B.T.stopEmail(B.c.id); assert.notEqual(B.e.status, "stuck"); assert.equal(B.T.channelFor(B.c, B.e), "text");
+});
+test("unsubscribe link: one per client, the same for ever, and only for a firm with its own link host", () => {
+  const { T, c } = firm(); assert.equal(T.unsubscribeLink(c), ""); T.S.firm.linkBase = "go.tallyhound.test"; T.S.firm.slug = "testcpas";
+  const a = T.unsubscribeLink(c); assert.match(a, /^go\.tallyhound\.test\/e\/testcpas-[a-z]{28}$/); T.setNow(new Date(T.S.now.getTime() + 400 * T.DAY)); assert.equal(T.unsubscribeLink(c), a);
+});

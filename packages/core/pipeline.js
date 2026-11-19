@@ -81,7 +81,7 @@ function createApp({ store, sms, email, ai, clock, log, files }) {
     }
     const done = [];
     for (const j of jobs) {
-      try { done.push({ id: j.id, providerId: j.channel === "text" ? await sms.send({ from: j.from, to: j.to, body: j.body, idempotencyKey: j.id }) : await email.send({ from: j.from, to: j.to, subject: j.subject, body: j.body, idempotencyKey: j.id }) }); }
+      try { done.push({ id: j.id, providerId: j.channel === "text" ? await sms.send({ from: j.from, to: j.to, body: j.body, idempotencyKey: j.id }) : await email.send({ from: j.from, fromName: j.fromName, to: j.to, subject: j.subject, body: j.body, idempotencyKey: j.id, unsubscribe: j.unsubscribe }) }); }
       catch (err) { done.push({ id: j.id, error: String(err && err.message || err), code: err && err.code }); }
     }
     await store.lock(firmId, async (json) => {
@@ -134,7 +134,10 @@ function createApp({ store, sms, email, ai, clock, log, files }) {
     for (const m of S.msgs.filter((x) => x.dir === "out" && x.status === "delivered" && !x.sentAt && !x.failed && !x.claimedAt)) {
       const e = T.eng(m.engId), c = e && T.client(e.clientId); if (!c) continue;
       m.claimedAt = now().getTime();
-      jobs.push(m.channel === "text" ? { id: m.id, channel: "text", from: S.firm.smsNumber, to: c.mobile, body: m.body } : { id: m.id, channel: "email", from: S.firm.email, to: c.email, subject: S.firm.sender + ": your " + e.year + " tax documents", body: m.body });
+      if (m.channel === "text") { jobs.push({ id: m.id, channel: "text", from: S.firm.smsNumber, to: c.mobile, body: m.body }); continue; }
+      // Every email carries a way to stop them: a line at the foot, and the address the mail provider puts in the one-click header.
+      const un = T.unsubscribeLink ? T.unsubscribeLink(c) : "", foot = un ? "\n\nYou're getting this because " + S.firm.name + " prepares your taxes. To stop these emails: https://" + un : "";
+      jobs.push({ id: m.id, channel: "email", from: S.firm.email, fromName: S.firm.sender, to: c.email, subject: S.firm.sender + ": your " + e.year + " tax documents", body: m.body + foot, unsubscribe: un ? "https://" + un : undefined });
     }
     return jobs;
   }
@@ -262,6 +265,20 @@ function createApp({ store, sms, email, ai, clock, log, files }) {
         res.docs.forEach((d, i) => { d.fileKey = specs[i].fileKey; });
         if (byStaff && e) T.timeline ? T.timeline(e, "Email forwarded in by " + byStaff) : null;
         return { handled: true, client: c.id, understood: res.m.understood, docs: res.docs.map((d) => d.state), forwardedBy: byStaff || undefined, routed: others.length ? others : undefined };
+      });
+    },
+    // The client sends files from their own upload page (no login: the page is reached by their private link).
+    // Checked exactly like a text or an email from them, and they get one reply. Held, not read, while the firm has no access.
+    async clientUpload({ firmId, clientId, files, providerId }) {
+      return withFirm(firmId, async (T) => {
+        if (seen(T, providerId)) return { handled: true, duplicate: true };
+        const c = T.client(clientId); if (!c) return { handled: false };
+        if (!T.canRead()) { await hold(T, firmId, c, files, "portal"); return { handled: true, client: c.id, held: true, docs: [] }; }
+        const { specs, bad } = await readAll(T, c, firmId, files), out = { handled: true, client: c.id, docs: [] };
+        if (specs.length > 1) { const res = T.inboundBundle(c.id, specs, "portal"); res.docs.forEach((d, i) => { d.fileKey = specs[i].fileKey; out.docs.push(d.state); }); }
+        else for (const spec of specs) { const d = T.inboundDoc(c.id, spec, "portal"); if (d) { d.fileKey = spec.fileKey; out.docs.push(d.state); } }
+        if (bad && !specs.length) { T.inboundUnusable(c.id, bad, "portal"); out.unusable = bad; }
+        return out;
       });
     },
     // A staff member adds a document they received some other way. It is checked like any other and the client is not messaged.

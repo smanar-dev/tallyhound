@@ -13,9 +13,9 @@ const addr = (v: unknown) => { const s = String(v || ""), m = /<([^>]+)>/.exec(s
 export function handlers({ app, twilio, prepare }: { app: App; twilio: TwilioAdapter | null; prepare?: PrepareOpts }): Record<Kind, Handler | null> {
   const opt = prepare || {};
   // A file the scanner refused is never kept. The firm is told that it happened (spec TH-CAP-14); the client is asked for a photo or PDF as for any unreadable file.
-  const infected = async (firmId: string, files: { refused?: string }[], channel: "text" | "email") => {
+  const infected = async (firmId: string, files: { refused?: string }[], channel: "text" | "email" | "portal") => {
     const n = files.filter((f) => f.refused === "infected").length; if (!n) return;
-    await app.withFirm(firmId, (T: Engine) => { T.S.tray.push({ id: "yv" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), text: n + (n === 1 ? " file" : " files") + " that arrived by " + channel + " failed the virus scan and " + (n === 1 ? "was" : "were") + " not kept. If you were expecting a document, ask the client to send it again from another device.", from: "Tallyhound", at: new Date(T.S.now), channel, why: "Blocked by the virus scan" }); });
+    await app.withFirm(firmId, (T: Engine) => { T.S.tray.push({ id: "yv" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), text: n + (n === 1 ? " file" : " files") + " that arrived by " + (channel === "portal" ? "a client's upload page" : channel) + " failed the virus scan and " + (n === 1 ? "was" : "were") + " not kept. If you were expecting a document, ask the client to send it again from another device.", from: "Tallyhound", at: new Date(T.S.now), channel, why: "Blocked by the virus scan" }); });
   };
   return {
     // Photos are fetched here, not in the webhook, and Twilio's copies are deleted only once ours is sealed and the result saved.
@@ -24,6 +24,12 @@ export function handlers({ app, twilio, prepare }: { app: App; twilio: TwilioAda
       await app.inboundSms({ ...m, media }); await infected(firmId, media, "text");
       return { from: m.from, after: async () => { await twilio.forget(params); } };
     }),
+    // Files from a client's upload page. The page stored them and answered; here they are prepared and checked.
+    upload: async (payload, firmId) => {
+      const j = JSON.parse(payload.toString("utf8")) as { id: string; clientId: string; files: { name?: string; type?: string; b64: string }[] }, files = await Promise.all(j.files.map((f) => ready({ bytes: Buffer.from(f.b64, "base64"), contentType: f.type, name: f.name }, opt)));
+      await app.clientUpload({ firmId, clientId: j.clientId, files, providerId: "up-" + j.id }); await infected(firmId, files, "portal");
+      return { from: "upload page" };
+    },
     email: async (payload, firmId) => {
       const m = kitEmailIn.fromPostmark(JSON.parse(payload.toString("utf8"))), attachments = await Promise.all(m.attachments.map((f) => ready(f, opt)));
       await app.inboundEmail({ ...m, attachments }); await infected(firmId, attachments, "email");

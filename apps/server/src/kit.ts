@@ -32,11 +32,14 @@ export interface App {
   inboundSms(m: Record<string, unknown>): Promise<any>;
   inboundEmail(m: Record<string, unknown>): Promise<any>;
   readHeld(firmId: string): Promise<number>;
+  clientUpload(m: { firmId: string; clientId: string; files: { bytes: Buffer; contentType?: string }[]; providerId?: string }): Promise<{ handled: boolean; duplicate?: boolean; held?: boolean; docs?: string[]; unusable?: string }>;
   staffUpload(firmId: string, userId: string, clientId: string, file: { bytes: Buffer; contentType?: string }): Promise<{ error?: string; docs?: (string | null)[] }>;
   openFile(firmId: string, userId: string, docId: string): Promise<{ bytes: Buffer; contentType: string } | null>;
 }
 
 export const { createEngine } = require("../../../packages/engine") as { createEngine(): Engine };
+export const { wallTime } = require("../../../packages/core/pipeline.js") as { wallTime(date: Date, iana: string): Date };
+export const kitRegistration = require("../../../packages/core/registration.js") as { firmPage(firm: { name: string; phone?: string }, opt?: { number?: string; address?: string }): string };
 export const { createApp } = require("../../../packages/core/pipeline.js") as {
   createApp(deps: { store: KitStore; sms: Sender; email: Sender; ai: unknown; clock?: () => Date; log?: (event: string, ...ids: unknown[]) => void; files?: unknown }): App;
 };

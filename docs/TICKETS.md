@@ -393,4 +393,18 @@ Four engine log lines use retired words ("Stuck:", "Outreach started", "Delivere
 | T-42 Under an hour to first request | Not timed with a person. The pieces it needs now exist |
 | Settings | Two pages so far, owner only: the firm's details, and People (add, change what someone can do, remove). The Tallyhound address cannot be edited. Not built: message wording, checklist templates (T-39), where files go, how long data is kept, plan |
 
+### Step 10: the client's pages (same day)
+
+A client's link now leads somewhere. Written as React components, turned into plain HTML on the server: no script, no cookie, no login, a few kilobytes.
+
+| Ticket | State |
+|---|---|
+| T-23 Consent page and records | Done: `/c/<link>`. The wording in full (version 1 from the specification, held in the engine as `CONSENT_WORDING`), Agree, and "No thanks, I'll use email". The record keeps the wording version and text shown, the number, the time, the IP address and the browser. The number on file is shown only by its last four digits; the client may type a different one, which is then a new number. COUNSEL has not approved the wording. Not built: export of consent records per client, landline detection (T-119), Spanish |
+| T-21 Client upload page | Done: `/u/<link>`. Says what is being waited for and how many more, takes photos and PDFs through a plain form (a phone offers its camera), stores them sealed, answers, and the worker checks them like a text. Never shows a document or anything already received. The link is the only credential (decided November 19) and dies after 14 days or when the file is complete. Not built: progress bars, the retake prompt (T-89), the offline retry, "I don't have this", the check-in questions (T-68) |
+| Unsubscribe (spec TH-CON-7) | Done: `/e/<link>` asks first; a one-click request from the mail program needs no page. Every email carries the link in its last line and in the `List-Unsubscribe` headers. The link has its own key that never changes. If no way to reach the client is left, the file comes to a person |
+| T-117, T-135 Firm page | Done: `/f/<firm>` serves the kit's `registration.firmPage` for each firm. The client pages link to it for privacy and terms. Not on its own domain yet |
+| T-128 Queue | Uploads go through it as a third kind (`db/migrations/005_upload_queue.sql`) |
+
+Engine additions, each with tests in `test/engine.test.js`: `consentFromPage`, `declineTexts`, `stopEmail`, `unsubscribeLink`. Pipeline: `clientUpload`, and the unsubscribe line and header on every email (`test/pipeline.test.js`).
+
 Home's buttons for adding a client, the check-in for everyone, a checklist for everyone and starting are now live. Still left out: text registration, the heads-up wording, storage. Next in order: Clients list and add one client (T-16, T-38, T-56), the client page (T-16), the document viewer (T-17), conversation and approvals (T-18).
