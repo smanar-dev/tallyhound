@@ -29,4 +29,5 @@ React, built with Vite. `npm run build` writes `apps/web/dist`, and the web serv
 | Shell: menu, client search, alerts, banners | T-15 | Done |
 | Home: first steps, connect once, the five counts, Needs you, activity, progress, coming up | T-15, T-41 | Done. The buttons for flows not built yet (text registration, heads-up wording, storage) are left out until those flows exist |
 | Clients: list, filters, selection, add a client, choose a checklist, start collecting | T-16, T-38, T-39 | Done |
-| Client page, document viewer, conversation, Needs you, the Hound, add clients, all messages, progress, settings | T-16 to T-20, T-24 | Not built: each shows a holding screen |
+| Client page: checklist, suggested, documents, conversation and approvals, activity, details | T-16, T-18, T-90 | Done, except the Hound panel and the check-in card |
+| Document viewer, conversation, Needs you, the Hound, add clients, all messages, progress, settings | T-16 to T-20, T-24 | Not built: each shows a holding screen |

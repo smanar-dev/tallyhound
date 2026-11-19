@@ -14,6 +14,17 @@ export const ACTIONS: Record<string, Rule> = {
   // checklist
   setItem: staff(3), addItem: staff(4), addRecommended: staff(2), dismissRec: staff(2), addFromPrior: staff(2), setCustomEs: staff(2),
   saveTemplate: staff(1), removeTemplate: staff(1), applyTemplate: staff(3), sendCheckin: staff(1), applyCheckin: staff(2), skipQuestions: staff(2),
+  // Editing a client's details, as the demo's Details tab does it. A changed mobile number is a new number: any OK to text is reset
+  // and a wrong-number flag is cleared (spec TH-CON-9). The language is not editable here while Spanish is off for pilots.
+  saveClient: { role: "staff", n: 2, run: (T, [cid, v]) => {
+    const c = T.client(cid), f = (v && typeof v === "object" ? v : {}) as Record<string, unknown>, str = (k: string, max: number) => String(f[k] ?? "").replace(/[<>]/g, "").trim().slice(0, max); if (!c) return "No such client";
+    c.first = str("first", 60) || c.first; c.last = str("last", 60) || c.last;
+    const mobile = String(f.mobile ?? "").replace(/\D/g, "").slice(-10);
+    if (mobile !== c.mobile) { c.mobileBad = false; if (c.textConsent === "given") { c.textConsent = "none"; c.consentLog.push({ at: new Date(T.S.now), what: "Reset: the mobile number was changed", channel: "text" }); } }
+    c.mobile = mobile; c.email = str("email", 254); c.notes = String(f.notes ?? "").slice(0, 4000);
+    if (T.S.users.some((u: { id: string; role: string }) => u.id === f.preparer && u.role !== "read_only")) c.preparer = f.preparer;
+    const tz = String(f.tz ?? ""); if ((c.tz || "") !== tz && (tz === "" || Object.hasOwn(T.ZNAME, tz))) T.setZone(c.id, tz);
+    T.audit("client.edit", c.last); return null; } },
   // Confirming a checklist is the firm saying "this list is right". The demo sets the same flag and writes the same two records.
   confirmChecklist: { role: "staff", n: 1, run: (T, [eid]) => { const e = T.eng(eid); if (!e) return "No such client"; if (e.confirmed) return "Already confirmed"; e.confirmed = true; T.timeline(e, "Checklist confirmed", T.S.user.name); T.audit("checklist.confirm", T.client(e.clientId).last); return null; } },
   // Start collecting for many clients in one turn, then let the first messages go, as the demo's wizard does.

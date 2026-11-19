@@ -3,11 +3,14 @@
 //   T-65  the vocabulary in docs/UX.md, and no screen that starts empty and silent
 import { after } from "node:test";
 import assert from "node:assert/strict";
-import { busyFirm, closeBrowser, scene } from "./world.ts";
+import { busyFirm, closeBrowser, scene, type World } from "./world.ts";
 import type { Engine } from "../../server/src/kit.ts";
 
 after(closeBrowser);
 export const ROUTES = ["/", "/clients", "/needs-you", "/hound", "/add-clients", "/messages", "/progress", "/settings"];
+// Every screen for a firm with clients: the fixed ones plus each tab of one client's page.
+const TABS = ["", "?tab=suggested", "?tab=documents", "?tab=conversation", "?tab=activity", "?tab=details"];
+const routesFor = async (W: World, firmId: string) => { const T: Engine = await W.state(firmId); return ROUTES.concat(TABS.map((t) => "/clients/" + T.S.engs[0].id + t), ["/clients?do=add", "/clients?do=start", "/clients/nobody"]); };
 const PAYLOAD = '"><img src=x onerror="window.__pwned=1"><script>window.__pwned=2</script><b>bold</b>';
 
 scene("T-52: an HTML payload planted in every stored text field shows as text on every screen and never runs", async (W) => {
@@ -28,8 +31,8 @@ scene("T-52: an HTML payload planted in every stored text field shows as text on
   });
   await W.auth.setRole(ownerId, "owner");
   const page = await W.signIn("pat1@firm1.test");
-  for (const route of ROUTES) {
-    await page.goto(W.url + route); await page.locator(".side .firm").waitFor();
+  for (const route of await routesFor(W, firmId)) {
+    await page.goto(W.url + route); await page.locator(".side .firm").waitFor(); await page.waitForTimeout(50);
     if (route === "/") { await page.getByLabel(/Alerts/).click(); await page.locator(".menu-pop").waitFor(); await page.getByLabel("Find a client").fill("Jo"); await page.locator(".sres").waitFor(); }
     const r = await page.evaluate(() => ({ pwned: (window as unknown as { __pwned?: number }).__pwned, imgs: document.querySelectorAll('img[src="x"]').length, scripts: [...document.querySelectorAll("script")].filter((s) => !s.src).length, bold: [...document.querySelectorAll("b")].filter((b) => b.textContent === "bold").length, text: document.body.innerText }));
     assert.equal(r.pwned, undefined, route + ": the payload ran"); assert.equal(r.imgs, 0, route + ": the payload became an image"); assert.equal(r.scripts, 0, route + ": an inline script is on the page"); assert.equal(r.bold, 0, route + ": the payload became markup");
@@ -41,8 +44,8 @@ scene("T-52: an HTML payload planted in every stored text field shows as text on
 // for a list; "approval" in a sentence about the carriers is ordinary English and stays.
 const BANNED = ["start outreach", "review queue", "review", "inbox", "unmatched tray", "unmatched", "stuck", "waiting on consent", "handoffs", "approvals", "queue", "playbook", "live log", "requirements", "deliver", "latest reasoning", "engagements?"];
 for (const busy of [true, false]) scene("T-65: no screen uses a word the vocabulary table retired (" + (busy ? "a busy firm" : "an empty firm") + ")", async (W) => {
-  if (busy) await busyFirm(W); else await W.newFirm(); const page = await W.signIn("pat1@firm1.test");
-  for (const route of ROUTES) {
+  const firmId = busy ? (await busyFirm(W)).firmId : (await W.newFirm()).firmId, page = await W.signIn("pat1@firm1.test");
+  for (const route of busy ? await routesFor(W, firmId) : ROUTES) {
     await page.goto(W.url + route); await page.locator(".side .firm").waitFor();
     const seen = (await page.evaluate(() => document.body.innerText + " " + [...document.querySelectorAll("[aria-label],[title],[placeholder]")].map((e) => (e.getAttribute("aria-label") || "") + " " + (e.getAttribute("title") || "") + " " + (e.getAttribute("placeholder") || "")).join(" "))).toLowerCase();
     for (const w of BANNED) assert.ok(!new RegExp("\\b" + w + "\\b").test(seen), route + ' says "' + w + '"');

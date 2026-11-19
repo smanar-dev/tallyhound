@@ -23,6 +23,15 @@ export const api = {
   },
   act: (fn: string, args: unknown[]) => call<{ ok: true; result: unknown }>("POST", "/api/act", { fn, args }),
   actMany: (calls: { fn: string; args: unknown[] }[]) => call<{ ok: true; results: unknown[] }>("POST", "/api/act", { calls }),
+  /** A staff member adds a document they received some other way. The file goes up as it is; the server identifies and checks it. */
+  async upload(clientId: string, file: File): Promise<{ ok: true; docs: (string | null)[] }> {
+    let res: Response;
+    try { res = await fetch("/api/clients/" + encodeURIComponent(clientId) + "/documents", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/octet-stream", "x-tallyhound": "1" }, body: file }); }
+    catch { throw new ApiError(0, "offline", "Tallyhound could not be reached. Check your connection and try again."); }
+    const j = (await res.json().catch(() => ({}))) as { error?: string; message?: string; docs?: (string | null)[] };
+    if (!res.ok) throw new ApiError(res.status, j.error || "error", j.message || "That file could not be added.");
+    return { ok: true, docs: j.docs || [] };
+  },
   post: <T,>(path: string, body?: unknown) => call<T>("POST", path, body),
   get: <T,>(path: string) => call<T>("GET", path),
   del: <T,>(path: string) => call<T>("DELETE", path)

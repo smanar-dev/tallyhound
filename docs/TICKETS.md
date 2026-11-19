@@ -362,4 +362,17 @@ Still different from the specification, each needing a decision or a ticket:
 | First run (docs/UX.md rule 1) | A browser test goes from an empty firm to a client being contacted and fails above 12 clicks. It takes 10 |
 | T-53 Keyboard | Dialogs take the focus, keep Tab inside, close on Escape and give the focus back; Enter opens a row. Tested. No screen reader pass yet |
 
+### Step 7: the client page (same day)
+
+| Ticket | State |
+|---|---|
+| T-16 Client page | Done: Checklist (confirm, add, not needed with a reason, received outside Tallyhound, restore, remove, send a check-in), Suggested (what applies this year, add or dismiss a suggestion), Documents, Conversation, Activity, Details, the "What happens next" card, hand off files, pause, resume, close, and delete documents (owner, asks for the last name). Not yet on it: the Hound panel (take over, target date, memory), the check-in card, "Build from last year's return" (legal gate, T-46), "See it as the client" |
+| T-18 Conversation and approvals | Done. A browser test proves that in Copilot nothing reaches the text sender until Approve is pressed, that the edited wording is what goes, and that a message with a blocked word cannot be sent. Held and discarded drafts are shown with the reason (T-61) |
+| T-90 Staff upload | Done on the Documents tab |
+| T-40 Three checks everywhere | The Documents tab shows `T.verdict`'s three answers and computes nothing. The viewer and Needs you come next |
+| T-17 Document viewer | Not built. A document opens in a new tab from the server, in a response that cannot run anything. No zoom, rotate or decision buttons yet |
+| T-145 Staff-recorded consent | Left off the client page on purpose until the owner switch exists and counsel has approved it |
+
+Two engine log lines use retired words ("Stuck:", "Outreach started", "Delivered"). The Activity tab shows them in the product's vocabulary; the engine text is unchanged.
+
 Home's buttons for adding a client, the check-in for everyone, a checklist for everyone and starting are now live. Still left out: text registration, the heads-up wording, storage. Next in order: Clients list and add one client (T-16, T-38, T-56), the client page (T-16), the document viewer (T-17), conversation and approvals (T-18).

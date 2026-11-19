@@ -25,9 +25,10 @@ export async function world() {
   const pages: Page[] = [], errors: string[] = [];
   // A person at their desk: signs in through the real screens, authenticator and all.
   async function signIn(email: string, viewport = { width: 1280, height: 900 }): Promise<Page> {
-    const ctx = await browser!.newContext({ viewport, deviceScaleFactor: 1 }), page = await ctx.newPage(); pages.push(page);
+    const ctx = await browser!.newContext({ viewport, deviceScaleFactor: +(process.env.SHOT_SCALE || 1) }), page = await ctx.newPage(); pages.push(page);
     await page.clock.install({ time: H.clock() });   // the browser's clock agrees with the server's, as it would in real life
-    page.on("console", (m) => { if (m.type() === "error" && !/status of 40[13]/.test(m.text())) errors.push(m.text()); }); page.on("pageerror", (e) => errors.push(String(e)));
+    // A refused request (a 4xx) is an answer, not a fault. A blocked script or style is reported differently and is kept.
+    page.on("console", (m) => { if (m.type() === "error" && !/Failed to load resource: the server responded with a status of 4\d\d/.test(m.text())) errors.push(m.text()); }); page.on("pageerror", (e) => errors.push(String(e)));
     page.on("dialog", (d) => { errors.push("a dialog opened: " + d.message()); void d.dismiss(); });
     await page.goto(url + "/"); await page.waitForURL("**/signin"); await page.fill("#email", email); await page.keyboard.press("Enter"); await page.getByText("Check your email").waitFor();
     await page.goto(H.links.filter((l) => l.to === email).pop()!.url);

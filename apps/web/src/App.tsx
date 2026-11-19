@@ -5,13 +5,14 @@ import { SignIn } from "./screens/SignIn";
 import { Home } from "./screens/Home";
 import { Soon } from "./screens/Soon";
 import { Clients } from "./screens/Clients";
+import { ClientPage } from "./screens/ClientPage";
 
 function Staff() {
   const signedOut = useCallback(() => { window.location.replace("/signin"); }, []);
   return <FirmProvider onSignedOut={signedOut}><Routes>
     <Route path="/" element={<Home />} />
     <Route path="/clients" element={<Clients />} />
-    <Route path="/clients/:id" element={<Soon title="Client" what="This client's checklist, documents, conversation and details." />} />
+    <Route path="/clients/:id" element={<ClientPage />} />
     <Route path="/needs-you" element={<Soon title="Needs you" what="Documents Tallyhound is unsure about, client questions and drafts to approve, in one list." />} />
     <Route path="/hound" element={<Soon title="The Hound" what="What Tallyhound has done and why, what is coming up, and the rules it follows." />} />
     <Route path="/add-clients" element={<Soon title="Add clients" what="Import a spreadsheet of clients, or add one at a time." />} />

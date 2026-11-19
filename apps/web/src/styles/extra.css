@@ -20,3 +20,8 @@ a.btn{text-decoration:none}
 .who .me{flex:1;min-width:0;line-height:1.25;color:#fff;font-weight:600;font-size:13px}.who .me small{display:block;font-weight:500;color:#8C9AB0}
 .bulkbar{position:sticky;bottom:12px;background:var(--ink);color:#fff;border-color:var(--ink)}
 .note.bad{background:var(--bad-bg);color:var(--bad)}
+.bub.draft{border-style:dashed;max-width:86%}
+.bub.draft textarea{min-height:60px;width:100%;background:transparent;border:0;padding:0;font:inherit;color:inherit;resize:vertical}
+.docph{display:grid;place-items:center;background:var(--bg);color:var(--faint)}.docph svg{width:34px;height:34px}
+a.dcard,div.dcard{display:block;text-decoration:none;color:inherit}
+.btn.bad{background:var(--bad);border-color:var(--bad);color:#fff}
