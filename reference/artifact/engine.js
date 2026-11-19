@@ -260,6 +260,15 @@
   /* ---------- templates ---------- */
   const LONGDOC = ["1099CONS", "K1", "PRIOR", "PNL", "BALANCE_SHEET", "TRIAL_BALANCE", "BANK_STATEMENT", "PAYROLL_REPORT", "FORMS_ISSUED"];
   const LONGHOW = { en: ["Reply with a photo when you have it.", "It usually runs to several pages, so a PDF by email works best."], es: ["Responda con una foto cuando lo tenga.", "Suele tener varias páginas, así que lo mejor es enviar el PDF por correo electrónico."] };
+  /* Links to the client's own pages (consent, upload, check-in). The demo uses a fixed sample link. A production firm has
+     firm.linkBase (the host) and firm.slug (which firm), and each client gets a private key of letters only, so the link never
+     trips the digit check in outputCheck. A key is good for LINK_DAYS; the next message that carries a link after that makes a new one. */
+  const LINK_DAYS = 14, LINK_SAMPLE = "go.tallyhound.example";
+  const linkHost = () => S.firm.linkBase || LINK_SAMPLE;
+  function linkKey() { const A = "abcdefghijkmnpqrstuvwxyz", b = new Uint8Array(20); globalThis.crypto.getRandomValues(b); let k = ""; for (const x of b) k += A[x % A.length]; return k; }
+  function linkLive(c) { return !!(c && c.key && c.keyAt && S.now - new Date(c.keyAt) <= LINK_DAYS * DAY); }
+  function linkFresh(c) { if (!S.firm.linkBase || !c) return; if (!linkLive(c)) { c.key = linkKey(); c.keyAt = new Date(S.now); } }
+  function linkFor(c, kind) { return S.firm.linkBase ? S.firm.linkBase + "/" + kind + "/" + (S.firm.slug ? S.firm.slug + "-" : "") + ((c && c.key) || "") : LINK_SAMPLE + "/" + kind + "/k3x9"; }
   function fill(code, c, e, extra) {
     const lang = c && c.lang === "es" ? "es" : "en", t = (S.firm.templates[lang] || {})[code] || TPL[lang][code] || TPL.en[code];
     const it = extra && extra.item, F = it ? FORMS[it.form] : null, p = progress(e ? e.id : "");
@@ -270,7 +279,7 @@
       firm: S.firm.sender, first: c ? c.first : "", preparer: prep, year: e ? e.year : S.firm.taxYear || 2026, n: p.total, k: e ? openItems(e.id).length : 0,
       plain_name: F ? (it.custom ? ((x) => (/^[A-ZÁÉÍÓÚ][a-záéíóúñ]/.test(x) ? x[0].toLowerCase() + x.slice(1) : x))(lang === "es" && it.customEs ? it.customEs : it.custom) : lang === "es" ? F.es : F.plain) : "", from_payer: it && it.payer ? (lang === "es" ? " de " : " from ") + it.payer : "",
       where_hint: F ? (lang === "es" ? F.hintEs : F.hint) : "", issuer: F ? (lang === "es" ? F.issuerEs : F.issuer) : "",
-      link: "go.tallyhound.example/" + (code.startsWith("M1") ? "c/" : "u/") + "k3x9", firm_phone: S.firm.phone, firm_email: S.firm.email
+      link: linkFor(c, code.startsWith("M1") ? "c" : "u"), firm_phone: S.firm.phone, firm_email: S.firm.email
     }, extra || {});
     let tt = t; if (it && LONGDOC.includes(it.form)) tt = tt.replace(LONGHOW[lang][0], LONGHOW[lang][1]);
     if (!String(S.firm.phone || "").trim()) tt = tt.replace(" or call us on {firm_phone}", "").replace("Call {firm_phone} or email {firm_email}", "Email {firm_email}").replace("Please call {firm_phone}.", "Please contact your preparer directly.").replace(" o llámenos al {firm_phone}", "").replace("Llame al {firm_phone} o escriba a {firm_email}", "Escriba a {firm_email}").replace("Por favor llame al {firm_phone}.", "Por favor contacte a su preparador directamente.").replace(/\{firm_phone\}/g, S.firm.email || "");
@@ -366,6 +375,7 @@
     if (e.status === "not_started" && ["M3", "M4", "M5", "M6", "M10", "M22R"].includes(code)) return null;
     if (S.hold && code !== "M23") { S.hold.push({ code, extra }); return null; }
     if (e.takeover && !COMPLIANCE.includes(code)) { hlog(e, "held", "Held " + (TPL_USE[code] || code).toLowerCase() + ": " + e.takeover.by + " has this conversation", "The Hound listens but does not reply while staff are in control", "Rules"); return null; }
+    linkFresh(c);
     const body = fill(code, c, e, extra), errs = outputCheck(body, ch, { year: e.year, doc_year: extra && extra.doc_year }).filter((x) => !(code === "M23" && x.startsWith("digit run")));
     if (errs.length) { addTask({ kind: "output_check", reason: "Message blocked: " + errs.join(", "), engId: e.id }); audit("message.blocked", code + " for " + c.last + ": " + errs.join(", "), "Tallyhound"); return null; }
     const H = S.firm.hound, comp = COMPLIANCE.includes(code) || code === "M31", it0 = extra && extra.item;
@@ -810,7 +820,7 @@
   function rejectMsg(mid) { const m = S.msgs.find((x) => x.id === mid); m.status = "discarded"; hlog(eng(m.engId), "message", S.user.name + " discarded a draft: " + (TPL_USE[m.tpl] || "").toLowerCase(), "", "Rules"); }
   function composeDone(mid, text, model, err) {
     const m = S.msgs.find((x) => x.id === mid); if (!m || m.status !== "writing") return; const e = eng(m.engId);
-    if (text) { const errs = outputCheck(text, m.channel, { year: e.year, doc_year: m.ctx && m.ctx.doc_year }).filter((x) => !(x.startsWith("digit run") && (m.base || "").includes(x.split(" ").pop()))); if (m.channel === "text" && text.length > 320) errs.push("too long"); if ((m.base || "").includes("go.tallyhound.example") && !text.includes("go.tallyhound.example")) errs.push("dropped the link");
+    if (text) { const errs = outputCheck(text, m.channel, { year: e.year, doc_year: m.ctx && m.ctx.doc_year }).filter((x) => !(x.startsWith("digit run") && (m.base || "").includes(x.split(" ").pop()))); if (m.channel === "text" && text.length > 320) errs.push("too long"); if ((m.base || "").includes(linkHost() + "/") && !text.includes((/\S*\/[cu]\/\S+/.exec(m.base.slice(m.base.indexOf(linkHost()))) || [linkHost()])[0].replace(/[.,;!?)]+$/, ""))) errs.push("dropped the link");
       if (errs.length) hlog(e, "guardrail", "Claude's draft failed the safety check (" + errs.join(", ") + "); the standard wording was used", "", "Rules"); else { m.body = text; m.ai = true; } }
     else if (err) hlog(e, "guardrail", "Claude was not available (" + err + "); the standard wording was used", "", "Rules");
     m.status = m.after || "delivered"; if (m.status === "approval") alertx(e, "low", "approval", "A message to " + client(e.clientId).first + " is waiting for approval.", "ap" + m.id);
@@ -1349,7 +1359,7 @@
     else if (["in_progress", "stuck"].includes(e.status) && !open && any) { if (checkComplete(e)) send(e, "M13", {}); }
   }
   window.TH = { RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
-    dump, load, blank, setNow, setUser,
+    dump, load, blank, setNow, setUser, linkFor, linkLive, LINK_DAYS,
     get S() { return S; }, FORMS, TPL, TPL_USE, QUESTIONS, STUCK, DAY, HOUR, MIN,
     client, eng, engOf, itemsOf, openItems, progress, fill, outputCheck, channelFor, allowed, nextAllowed, live, nextItem,
     start, step, tick, advance, jumpToNext, inboundDoc, inboundText, giveConsent, decideTask, manual, setItem, addItem, pause, resume, deliver, closeEng, purge, parseCSV, importRows, audit, timeline, fileName,

@@ -14,11 +14,15 @@ const engineUser = (u: { id: string; name: string; email: string; role: Role }) 
 
 export interface NewFirm { name: string; sender?: string; phone?: string; inbox: string; smsNumber?: string; iana: string; ownerEmail: string; ownerName: string; plan?: string; verified?: boolean }
 
-export function createFirms({ app, auth }: { app: App; auth: AuthStore }) {
+// "Larkin & Poe CPAs" -> "larkinpoe". Letters only: a digit run in a link would be stopped by the engine's own message check.
+const LETTERS = "abcdefghijkmnpqrstuvwxyz";
+export const slugOf = (name: string) => name.toLowerCase().replace(/&/g, " and ").replace(/\b(cpas?|llc|llp|pllc|pc|inc|and|the|co|company|associates|group)\b/g, " ").replace(/[^a-z]/g, "").slice(0, 24) || "firm";
+
+export function createFirms({ app, auth, linkHost }: { app: App; auth: AuthStore; linkHost?: string }) {
   async function owners(firmId: string) { return (await auth.usersOfFirm(firmId)).filter((u) => u.role === "owner"); }
   return {
     // T-05. New firms start unchecked (T-116): nothing sends and nothing is read until the firm check is passed and setVerified is called.
-    async create(o: NewFirm): Promise<{ firmId: string; ownerId: string }> {
+    async create(o: NewFirm): Promise<{ firmId: string; ownerId: string; slug: string }> {
       const name = clean(o.name), ownerName = clean(o.ownerName), ownerEmail = email(o.ownerEmail), inbox = email(o.inbox);
       if (!name) throw new FirmError("The firm needs a name"); if (!ownerName) throw new FirmError("The owner needs a name");
       if (!ZONE_OF[o.iana]) throw new FirmError("Time zone must be one of: " + Object.keys(ZONE_OF).join(", "));
@@ -27,8 +31,11 @@ export function createFirms({ app, auth }: { app: App; auth: AuthStore }) {
       const firmId = newId("f_"), owner = { id: newId("u_"), name: ownerName, email: ownerEmail, role: "owner" as Role };
       await app.createFirm(firmId, { name, sender: clean(o.sender || "") || name, phone: clean(o.phone || ""), email: inbox, inbox, smsNumber: sms, iana: o.iana, tz: ZONE_OF[o.iana], plan: o.plan, verified: o.verified === true, users: [engineUser(owner)] });
       await auth.createUser({ ...owner, firmId });
+      // The firm's public short name. A clash gets a few random letters added.
+      let slug = slugOf(name); for (let i = 0; !(await auth.setFirmSlug(firmId, slug)); i++) { if (i > 20) throw new FirmError("Could not find a free short name for the firm"); slug = slugOf(name).slice(0, 20) + Array.from(randomBytes(4), (b) => LETTERS[b % LETTERS.length]).join(""); }
+      if (linkHost) await app.withFirm(firmId, (T: Engine) => { T.S.firm.linkBase = linkHost; T.S.firm.slug = slug; });
       await auth.audit(firmId, "tallyhound", "firm.created", o.verified === true ? "checked" : "waiting for the firm check");
-      return { firmId, ownerId: owner.id };
+      return { firmId, ownerId: owner.id, slug };
     },
     // The firm check (T-116) is done by a person at Tallyhound. This records the result.
     async setVerified(firmId: string, on: boolean, by: string): Promise<void> {

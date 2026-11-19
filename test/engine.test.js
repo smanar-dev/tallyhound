@@ -177,3 +177,37 @@ test("a saved and reloaded workspace behaves exactly the same", () => {
   const sig = (T) => T.S.msgs.map((m) => m.tpl + "|" + m.channel + "|" + m.at.getTime() + "|" + m.body).join("\n");
   assert.equal(sig(B), sig(a.T)); assert.equal(B.S.hlog.length, a.T.S.hlog.length);
 });
+
+// ---- round 16: real links to the client's own pages ----
+test("links: the demo keeps its sample link, so saved demos and screenshots do not change", () => {
+  const { T, c, e } = firm(); assert.equal(T.linkFor(c, "u"), "go.tallyhound.example/u/k3x9"); assert.equal(T.linkFor(c, "c"), "go.tallyhound.example/c/k3x9");
+  T.start(e.id); assert.equal(c.key, undefined, "no key is made for a firm without its own link host");
+});
+test("links: a production firm's messages carry a private link per client, made of letters only so the digit check never blocks it", () => {
+  const { T, c, e } = firm(); T.S.firm.linkBase = "go.tallyhound.test"; T.S.firm.slug = "testcpas";
+  T.importRows(T.parseCSV("First,Last,Email,Mobile\nSam,Lee,sam@x.example,6155550122")); const c2 = T.S.clients[1], e2 = T.engOf(c2.id);
+  e.confirmed = true; T.start(e.id); e2.confirmed = true; T.start(e2.id);
+  const inv = T.S.msgs.filter((m) => m.dir === "out" && /go\.tallyhound\.test\/c\//.test(m.body)); assert.equal(inv.length, 2, "both invitations went out with a link, none was blocked");
+  assert.match(c.key, /^[a-z]{20}$/); assert.match(c2.key, /^[a-z]{20}$/); assert.notEqual(c.key, c2.key);
+  assert.ok(inv[0].body.includes("go.tallyhound.test/c/testcpas-" + c.key)); assert.ok(!T.S.tasks.some((t) => t.kind === "output_check"));
+  assert.equal(T.linkFor(c, "u"), "go.tallyhound.test/u/testcpas-" + c.key); assert.equal(T.linkLive(c), true);
+});
+test("links: a key is good for 14 days; the next message with a link after that makes a new one, and reading a preview never does", () => {
+  const { T, c, e } = firm(); T.S.firm.linkBase = "go.tallyhound.test"; T.S.firm.slug = "testcpas";
+  assert.equal(T.sendCheckin(e.id), null); const first = c.key; assert.match(first, /^[a-z]{20}$/);
+  T.setNow(new Date(T.S.now.getTime() + 13 * T.DAY)); assert.equal(T.linkLive(c), true);
+  T.fill("M1", c, e); assert.equal(c.key, first, "filling a template to show it does not change the key");
+  T.setNow(new Date(T.S.now.getTime() + 2 * T.DAY)); assert.equal(T.linkLive(c), false, "past 14 days the old link is dead");
+  T.fill("M1", c, e); assert.equal(c.key, first);
+  e.confirmed = true; T.start(e.id); assert.notEqual(c.key, first, "the invitation that goes out now carries a new key"); assert.equal(T.linkLive(c), true); assert.equal(T.LINK_DAYS, 14);
+  assert.ok(T.S.msgs.at(-1).body.includes("/c/testcpas-" + c.key));
+});
+test("links: a model's rewrite that drops or changes the client's link is refused and the standard wording goes out", () => {
+  const { T, c, e } = firm(); T.S.firm.linkBase = "go.tallyhound.test"; T.S.firm.slug = "testcpas"; T.S.firm.hound.aiLive = true; e.confirmed = true; T.start(e.id);
+  const w = T.S.msgs.filter((m) => m.status === "writing" && m.base && m.base.includes("go.tallyhound.test/"));
+  if (!w.length) { const m = T.S.msgs.find((x) => x.dir === "out" && x.body.includes("go.tallyhound.test/")); m.status = "writing"; m.base = m.body; w.push(m); }
+  const m = w[0], std = m.body, link = "go.tallyhound.test/c/testcpas-" + c.key;
+  T.composeDone(m.id, std.replace(link, "go.tallyhound.test/c/testcpas-" + "z".repeat(20)), "Claude"); assert.equal(m.body, std, "a link to someone else's page is refused"); assert.ok(!m.ai);
+  m.status = "writing"; T.composeDone(m.id, std.replace(link, "evil.example/x"), "Claude"); assert.equal(m.body, std);
+  m.status = "writing"; T.composeDone(m.id, std.replace("Hi", "Hello"), "Claude"); assert.ok(m.body.includes(link));
+});

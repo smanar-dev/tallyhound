@@ -37,6 +37,9 @@ export interface AuthStore {
   deleteSession(hash: string): Promise<void>;
   deleteSessionsOf(userId: string, exceptHash?: string): Promise<void>;
   audit(firmId: string, actor: string, action: string, detail?: string): Promise<void>;
+  /** Claims a public short name for a firm. False when another firm has it. */
+  setFirmSlug(firmId: string, slug: string): Promise<boolean>;
+  firmIdBySlug(slug: string): Promise<string | null>;
   /** Firms the timer should visit. */
   activeFirmIds(): Promise<string[]>;
   /** Removes expired sessions, used links and old rate-limit rows. */
@@ -48,7 +51,7 @@ const lower = (s: string) => String(s || "").trim().toLowerCase();
 export function memoryAuthStore(firmIds: () => string[] = () => []): AuthStore & { auditRows: { firmId: string; actor: string; action: string; detail?: string }[] } {
   const users = new Map<string, User>(), sessions = new Map<string, Session>(), links = new Map<string, Date>();
   const recovery = new Map<string, Map<string, Date | null>>(), requests: { h: string; at: Date }[] = [];
-  const auditRows: { firmId: string; actor: string; action: string; detail?: string }[] = [];
+  const auditRows: { firmId: string; actor: string; action: string; detail?: string }[] = [], slugs = new Map<string, string>();
   const copy = <T>(v: T | undefined): T | null => (v ? { ...v } : null);
   return {
     auditRows,
@@ -77,6 +80,8 @@ export function memoryAuthStore(firmIds: () => string[] = () => []): AuthStore &
     async deleteSession(hash) { sessions.delete(hash); },
     async deleteSessionsOf(userId, except) { for (const [h, s] of sessions) if (s.userId === userId && h !== except) sessions.delete(h); },
     async audit(firmId, actor, action, detail) { auditRows.push({ firmId, actor, action, detail }); },
+    async setFirmSlug(firmId, slug) { if (slugs.has(slug) && slugs.get(slug) !== firmId) return false; slugs.set(slug, firmId); return true; },
+    async firmIdBySlug(slug) { return slugs.get(slug) || null; },
     async activeFirmIds() { return firmIds(); },
     async sweep(now) {
       for (const [h, s] of sessions) if (s.expiresAt <= now) sessions.delete(h);
@@ -129,6 +134,8 @@ export function postgresAuthStore(pool: Db): AuthStore {
     async deleteSession(hash) { await pool.query("delete from sessions where token_hash = $1", [H(hash)]); },
     async deleteSessionsOf(userId, except) { await pool.query("delete from sessions where user_id = $1 and ($2::bytea is null or token_hash <> $2)", [userId, except ? H(except) : null]); },
     async audit(firmId, actor, action, detail) { await pool.query("insert into audit_log (firm_id, actor, action, detail) values ($1, $2, $3, $4)", [firmId, actor, action, detail || null]); },
+    async setFirmSlug(firmId, slug) { try { return ((await pool.query("update firms set slug = $2 where id = $1", [firmId, slug])).rowCount || 0) > 0; } catch (err) { if ((err as { code?: string }).code === "23505") return false; throw err; } },
+    async firmIdBySlug(slug) { const r = await one("select id from firms where slug = $1 and status = 'active'", [slug]); return r ? (r.id as string) : null; },
     async activeFirmIds() { return (await pool.query("select f.id from firms f join firm_state s on s.firm_id = f.id where f.status = 'active' order by f.id")).rows.map((r) => r.id as string); },
     async sweep(now) {
       await pool.query("delete from sessions where expires_at <= $1", [now]);
