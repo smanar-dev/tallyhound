@@ -3,13 +3,19 @@ export class ApiError extends Error {
   status: number; code: string;
   constructor(status: number, code: string, message: string) { super(message); this.status = status; this.code = code; }
 }
-async function call<T>(method: "GET" | "POST" | "DELETE", path: string, body?: unknown): Promise<T> {
+async function call<T>(method: "GET" | "POST" | "DELETE", path: string, body?: unknown, key?: string): Promise<T> {
   let res: Response;
-  try { res = await fetch(path, { method, credentials: "same-origin", headers: { "content-type": "application/json", "x-tallyhound": "1" }, body: method === "GET" ? undefined : JSON.stringify(body ?? {}) }); }
+  try { res = await fetch(path, { method, credentials: "same-origin", headers: { "content-type": "application/json", "x-tallyhound": "1", ...(key ? { "idempotency-key": key } : {}) }, body: method === "GET" ? undefined : JSON.stringify(body ?? {}) }); }
   catch { throw new ApiError(0, "offline", "Tallyhound could not be reached. Check your connection and try again."); }
   const text = await res.text(); let json: unknown = null; try { json = text ? JSON.parse(text) : null; } catch { /* a page, not JSON */ }
   if (!res.ok) { const j = (json || {}) as { error?: string; message?: string }; throw new ApiError(res.status, j.error || "error", j.message || "Something went wrong. Try again."); }
   return json as T;
+}
+const newKey = () => { const b = new Uint8Array(18); crypto.getRandomValues(b); return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join(""); };
+async function once<T>(body: unknown): Promise<T> {
+  const key = newKey();
+  try { return await call<T>("POST", "/api/act", body, key); }
+  catch (err) { if (!(err instanceof ApiError) || err.status !== 0) throw err; await new Promise((r) => setTimeout(r, 1200)); return call<T>("POST", "/api/act", body, key); }
 }
 export interface Me { id: string; name: string; email: string; role: "owner" | "staff" | "read_only"; firmId: string }
 export const api = {
@@ -21,8 +27,10 @@ export const api = {
     if (!res.ok) { const j = (await res.json().catch(() => ({}))) as { error?: string; message?: string }; throw new ApiError(res.status, j.error || "error", j.message || "Something went wrong. Try again."); }
     return res.text();
   },
-  act: (fn: string, args: unknown[]) => call<{ ok: true; result: unknown }>("POST", "/api/act", { fn, args }),
-  actMany: (calls: { fn: string; args: unknown[] }[]) => call<{ ok: true; results: unknown[] }>("POST", "/api/act", { calls }),
+  // Every change carries a key made once per click. If the answer is lost on the way back, the same request is sent once more
+  // with the same key, and the server runs it once.
+  act: (fn: string, args: unknown[]) => once<{ ok: true; result: unknown }>({ fn, args }),
+  actMany: (calls: { fn: string; args: unknown[] }[]) => once<{ ok: true; results: unknown[] }>({ calls }),
   /** A staff member adds a document they received some other way. The file goes up as it is; the server identifies and checks it. */
   async upload(clientId: string, file: File): Promise<{ ok: true; docs: (string | null)[] }> {
     let res: Response;

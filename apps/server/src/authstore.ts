@@ -51,6 +51,9 @@ export interface AuthStore {
   firmIdBySlug(slug: string): Promise<string | null>;
   /** Firms the timer should visit. */
   activeFirmIds(): Promise<string[]>;
+  /** Claims a request key. Fresh the first time; afterwards gives back what the first request answered, or null if it has not finished. */
+  claimKey(firmId: string, key: string, at: Date): Promise<{ fresh: true } | { fresh: false; response: unknown }>;
+  finishKey(firmId: string, key: string, response: unknown): Promise<void>;
   /** Removes expired sessions, used links and old rate-limit rows. */
   sweep(now: Date): Promise<void>;
 }
@@ -60,7 +63,7 @@ const lower = (s: string) => String(s || "").trim().toLowerCase();
 export function memoryAuthStore(firmIds: () => string[] = () => []): AuthStore & { auditRows: { firmId: string; actor: string; action: string; detail?: string }[] } {
   const users = new Map<string, User>(), sessions = new Map<string, Session>(), links = new Map<string, Date>();
   const recovery = new Map<string, Map<string, Date | null>>(), requests: { h: string; at: Date }[] = [];
-  const auditRows: { firmId: string; actor: string; action: string; detail?: string }[] = [], slugs = new Map<string, string>(), fails: { u: string; at: Date }[] = [];
+  const auditRows: { firmId: string; actor: string; action: string; detail?: string }[] = [], slugs = new Map<string, string>(), fails: { u: string; at: Date }[] = [], keys = new Map<string, { at: Date; response: unknown }>();
   const copy = <T>(v: T | undefined): T | null => (v ? { ...v } : null);
   return {
     auditRows,
@@ -97,11 +100,14 @@ export function memoryAuthStore(firmIds: () => string[] = () => []): AuthStore &
     async setFirmSlug(firmId, slug) { if (slugs.has(slug) && slugs.get(slug) !== firmId) return false; slugs.set(slug, firmId); return true; },
     async firmIdBySlug(slug) { return slugs.get(slug) || null; },
     async activeFirmIds() { return firmIds(); },
+    async claimKey(firmId, key, at) { const k = firmId + "\n" + key, was = keys.get(k); if (was) return { fresh: false, response: was.response }; keys.set(k, { at, response: null }); return { fresh: true }; },
+    async finishKey(firmId, key, response) { const r = keys.get(firmId + "\n" + key); if (r) r.response = JSON.parse(JSON.stringify(response)); },
     async sweep(now) {
       for (const [h, s] of sessions) if (s.expiresAt <= now) sessions.delete(h);
       for (const [j, x] of links) if (x <= now) links.delete(j);
       const cut = now.getTime() - 86400000; for (let i = requests.length - 1; i >= 0; i--) if (requests[i]!.at.getTime() < cut) requests.splice(i, 1);
       for (let i = fails.length - 1; i >= 0; i--) if (fails[i]!.at.getTime() < cut) fails.splice(i, 1);
+      for (const [k, r] of keys) if (r.at.getTime() < cut) keys.delete(k);
     }
   };
 }
@@ -161,7 +167,13 @@ export function postgresAuthStore(pool: Db): AuthStore {
     async setFirmSlug(firmId, slug) { try { return ((await pool.query("update firms set slug = $2 where id = $1", [firmId, slug])).rowCount || 0) > 0; } catch (err) { if ((err as { code?: string }).code === "23505") return false; throw err; } },
     async firmIdBySlug(slug) { const r = await one("select id from firms where slug = $1 and status = 'active'", [slug]); return r ? (r.id as string) : null; },
     async activeFirmIds() { return (await pool.query("select f.id from firms f join firm_state s on s.firm_id = f.id where f.status = 'active' order by f.id")).rows.map((r) => r.id as string); },
+    async claimKey(firmId, key, at) {
+      if (((await pool.query("insert into request_keys (firm_id, key, at) values ($1, $2, $3) on conflict do nothing", [firmId, key, at])).rowCount || 0) > 0) return { fresh: true };
+      const r = await one("select response from request_keys where firm_id = $1 and key = $2", [firmId, key]); return { fresh: false, response: r ? r.response : null };
+    },
+    async finishKey(firmId, key, response) { await pool.query("update request_keys set response = $3::jsonb where firm_id = $1 and key = $2", [firmId, key, JSON.stringify(response)]); },
     async sweep(now) {
+      await pool.query("delete from request_keys where at < $1", [new Date(now.getTime() - 86400000)]);
       await pool.query("delete from sessions where expires_at <= $1", [now]);
       await pool.query("delete from signin_links where expires_at <= $1", [now]);
       await pool.query("delete from signin_requests where at < $1", [new Date(now.getTime() - 86400000)]);

@@ -55,7 +55,7 @@ export async function build(kind: "memory" | "postgres" = "memory", opt: { ai?: 
       let json: any = null; try { json = r.json(); } catch { /* a page, not JSON */ }   // eslint-disable-line @typescript-eslint/no-explicit-any
       return { status: r.statusCode, json, headers: r.headers, raw: r, setCookie: r.cookies.find((c) => c.name === "th_s") };
     };
-    return { get: (u: string) => call("GET", u), post: (u: string, b: unknown = {}) => call("POST", u, b), del: (u: string) => call("DELETE", u), call, cookie: () => cookie };
+    return { get: (u: string) => call("GET", u), post: (u: string, b: unknown = {}, extra?: Record<string, string>) => call("POST", u, b, extra ? { "x-tallyhound": "1", origin: APP, ...extra } : undefined), del: (u: string) => call("DELETE", u), call, cookie: () => cookie };
   }
   // Twilio calling in, signed the way Twilio signs. badSig: a caller who does not hold the token.
   const twilioPost = (path: string, params: Record<string, string>, badSig = false) => {

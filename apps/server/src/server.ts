@@ -108,11 +108,16 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
       if (ok === "unknown") return reply.code(404).send({ error: "unknown_action", message: "Tallyhound does not know that action." });
       if (ok === "forbidden") return reply.code(403).send({ error: "role", message: u.role === "read_only" ? NO.read_only : NO.other });
     }
+    // T-147: a request that carries a key runs once. The key is claimed before anything changes, so a retry after a lost answer gets
+    // the first answer back, and a retry that arrives while the first is still running is told to wait. Never run twice.
+    const key = str(req.headers["idempotency-key"]).slice(0, 80), keyed = /^[A-Za-z0-9_-]{16,80}$/.test(key);
+    if (keyed) { const c = await d.auth.claimKey(u.firmId, u.id + ":" + key, new Date()); if (!c.fresh) { const was = c.response as { s: number; b: unknown } | null; return was ? reply.code(was.s).header("idempotent-replay", "true").send(was.b) : reply.code(409).send({ error: "in_progress", message: "That is already being done. Give it a moment, then look again before trying once more." }); } }
+    const done = async <R,>(answer: R, status = 200) => { if (keyed) await d.auth.finishKey(u.firmId, u.id + ":" + key, { s: status, b: answer }); return answer; };
     try { const results = await d.app.staff(u.firmId, u.id, (T: Engine) => {
         // T-83: while a firm is paused or its trial has ended, staff can read, change settings and delete, and nothing else.
         const a = T.access(); if (!a.ok && a.state !== "checking") for (const c of calls) if (!WHILE_OFF.includes(str(c.fn))) throw new Error(a.reason);
-        return calls.map((c) => run(T, str(c.fn), c.args as unknown[])); }); return many ? { ok: true, results } : { ok: true, result: results[0] }; }
-    catch (err) { say("act_failed", u.firmId, calls.length === 1 ? str(calls[0]!.fn) : "batch", (err as Error).message); return reply.code(400).send({ error: "refused", message: (err as Error).message }); }
+        return calls.map((c) => run(T, str(c.fn), c.args as unknown[])); }); return await done(many ? { ok: true, results } : { ok: true, result: results[0] }); }
+    catch (err) { say("act_failed", u.firmId, calls.length === 1 ? str(calls[0]!.fn) : "batch", (err as Error).message); return reply.code(400).send(await done({ error: "refused", message: (err as Error).message }, 400)); }
   });
   f.get("/api/actions", { preHandler: full }, async () => Object.fromEntries(Object.entries(ACTIONS).map(([k, v]) => [k, v.role])));
 

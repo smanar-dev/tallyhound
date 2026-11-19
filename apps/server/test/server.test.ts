@@ -56,6 +56,20 @@ for (const kind of KINDS) {
     await H.close();
   });
 
+  test(name("a staff action sent twice with the same key runs once and answers the same; a different key runs again"), async () => {
+    const H = await build(kind), { firmId } = await H.newFirm(), b = await H.signInAs("pat1@firm1.test"), add = { fn: "addClient", args: [{ first: "Jo", last: "Day", email: "jo@x.example" }] }, k = { "idempotency-key": "k".repeat(24) };
+    const n = async () => { const T = createEngine(); T.load(await H.store.readState(firmId)); return T.S.clients.length; };
+    const one = await b.post("/api/act", add, k), two = await b.post("/api/act", add, k); assert.equal(one.status, 200); assert.equal(two.status, 200); assert.deepEqual(two.json, one.json); assert.equal(await n(), 1, "the retry added nothing");
+    // The same key from a different action is still the first answer: the key, not the body, is what counts.
+    assert.deepEqual((await b.post("/api/act", { fn: "stopAll", args: [] }, k)).json, one.json); const T = createEngine(); T.load(await H.store.readState(firmId)); assert.notEqual(T.S.firm.stopped, true);
+    const other = { fn: "addClient", args: [{ first: "Al", last: "Bo", email: "al@x.example" }] }; await b.post("/api/act", other, { "idempotency-key": "j".repeat(24) }); assert.equal(await n(), 2);
+    // A key claimed by a request that has not answered yet: the retry waits, it does not run.
+    const me = (await b.get("/api/me")).json; await H.auth.claimKey(firmId, me.id + ":" + "p".repeat(24), new Date());
+    const held = await b.post("/api/act", add, { "idempotency-key": "p".repeat(24) }); assert.equal(held.status, 409); assert.equal(held.json.error, "in_progress"); assert.equal(await n(), 2);
+    // A refused action answers the same refusal again.
+    const r = { "idempotency-key": "r".repeat(24) }, no1 = await b.post("/api/act", { fn: "saveClient", args: ["nobody", {}] }, r), no2 = await b.post("/api/act", add, r); assert.equal(no2.status, no1.status); assert.deepEqual(no2.json, no1.json); assert.equal(await n(), 2);
+    await H.close();
+  });
   test(name("wrong codes spread over separate sign-in attempts count together towards the lock"), async () => {
     const H = await build(kind); await H.newFirm(); await H.signInAs("pat1@firm1.test"); H.advance(61 * 60);   // an hour on, so the five links below are inside the hourly limit
     // Wrong codes spread over separate attempts still count together.
