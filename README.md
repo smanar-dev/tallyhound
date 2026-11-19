@@ -19,7 +19,7 @@ Working code and a plan to take Tallyhound from demo to pilot firms by January 1
 | Web service (`apps/server`) | Built in round 16: sign-in by emailed link plus authenticator code, recovery codes, sessions, three roles enforced on every action, firm setup in one command, the firm check gate, the timer. Step 2 added the inbound queue, the text and email webhooks, bounce and delivery receipts, file preparation, staff upload and document viewing. 23 tests, 19 of them run in memory and again on a real Postgres. Driven once in a real browser. See `apps/server/README.md`. |
 | Product screens, provider accounts, file bucket, hosting | Not built. See the tickets. |
 
-Run the tests: `npm install` once (one test-only package, an in-process Postgres emulator), then `npm test`. Node 22.18 or later. `npm run check` adds the type check and lint. 260 tests, plus twenty-two that run against a real Postgres when DATABASE_URL is set (the three kit ones passed on PostgreSQL 18 on November 19; all twenty-two passed on PostgreSQL 16 on November 19). `npm run fuzz` runs 200 random seasons; `npm run scale` prints size and timing at 150, 500 and 1,000 clients.
+Run the tests: `npm install` once (one test-only package, an in-process Postgres emulator), then `npm test`. Node 22.18 or later. `npm run check` adds the type check and lint. 258 tests, plus twenty-four that run against a real Postgres when DATABASE_URL is set (the three kit ones passed on PostgreSQL 18 on November 19; all twenty-four passed on PostgreSQL 16 on November 19). `npm run fuzz` runs 200 random seasons; `npm run scale` prints size and timing at 150, 500 and 1,000 clients.
 
 ## How it fits together
 
