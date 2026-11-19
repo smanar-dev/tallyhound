@@ -294,6 +294,48 @@ Built in `apps/server` and tested. See `apps/server/README.md`.
 
 Decisions taken here that you may want to change: thinking and effort are left at each model's default (document reading at the larger model's default will be slower and dearer than it needs to be; tune with T-138's test set). Server-side refusal fallback is not switched on: it is a beta, and a refused read already goes to a person.
 
+### Step 4: the full specification compared with the build (same day)
+
+The full production build specification (the Google Doc, 4,039 lines) was read end to end against `apps/server`. Its section 0 wins over its later sections and overrides Python, AWS-specific services and several storage providers at launch.
+
+Fixed at once:
+
+| Found | Fix |
+|---|---|
+| `GET /api/state` gave every role the audit trail and every client's link key | Link keys never leave the server, including the copy inside a sent message; the audit trail goes to owners only; `GET /api/users` is owner only |
+| `portalNone`, the client's own "I don't have this", was on the staff action list | Removed |
+| A crash between writing a queue row and storing its event left a row nothing would ever process, and the provider's retry was answered as a repeat | The sealed event is stored first, the row second |
+| The model could be called with no firm in context, uncounted | Refused |
+| A file that failed the virus scan was dropped silently | The firm is told under Unknown senders |
+| The "could not process" card said support had been told. Nothing told support | Wording corrected. Telling support is T-29 |
+| Link keys were 92 bits | 128 bits (28 letters) |
+| The engine hardcoded the demo's sample link | A production firm's messages carry a real link per client (`firm.linkBase`, `firm.slug`, `linkFor`, `linkLive`), good for 14 days |
+
+Still different from the specification, each needing a decision or a ticket:
+
+| Specification | Build | Next |
+|---|---|---|
+| Session: 30 minutes idle, 12 hours at most (lines 822-823) | 12 hours idle, 7 days at most (from T-105) | DECISION |
+| Email, password and authenticator code; reset and invite screens (771, 825, S1 to S5) | No passwords: emailed link plus authenticator code (from T-105 and `docs/SECURITY.md`) | DECISION to record |
+| Five failed sign-ins in 15 minutes lock the account for 15 minutes and email the user (824) | Five wrong codes end that attempt only | T-144 |
+| Upload page: the link is the only credential (2180) | T-21 asks for a code sent to the client first | DECISION, before the client pages are built |
+| Consent record holds the wording shown, its version, IP address, user agent and the record it replaces (1090-1092, 926) | The engine keeps one sentence per event | T-23 |
+| Consent page takes or corrects the mobile number and rejects landlines (2117-2150) | `giveConsent` takes no number | T-23 |
+| Staff may record consent the firm holds only after the owner switches it on (1094) | No switch | T-145 |
+| Removing a person keeps their name on history; no hard deletes (811, 2529) | The sign-in row is deleted; the name survives only in audit text | T-146 |
+| Only an owner edits templates (1027) | Staff can | T-146 |
+| Queue retries at 30 s, 2 min, 10 min, 1 h, 6 h; scheduler once a minute (3036, 3096) | 1, 5, 15, 60 minutes; timer every 5 minutes | Leave unless the pilot shows a need |
+| Every changing request accepts an idempotency key (2835) | None on `/api/act` | T-147, with the screens |
+| One record per model call: tokens, cost, time, outcome (3208) | Nothing kept beyond the in-memory cap | T-91 |
+| One Twilio subaccount per firm (3287) | One account, one token | DECISION at T-134 |
+| Email unsubscribe link and one-click header (1096, 3309) | Not built; the engine has no unsubscribe function | T-23 |
+| All processing in the United States (534) | No region is set on model calls | Counsel item on provider terms |
+
+**T-144 Sign-in lockout.** Five failures in 15 minutes lock the account for 15 minutes and email the user.
+**T-145 Owner switch for staff-recorded consent.** Off by default. Counsel to approve its use.
+**T-146 People and templates.** Deactivate a person instead of deleting; template edits owner only.
+**T-147 Idempotency keys on staff actions.** A retried request must not send or start anything twice.
+
 **T-143 Server-side PDF page images (week 3, replaces the open part of T-86).** A PDF is sent to the model whole, as a document, which the Claude adapter already does. `readBundle` (several forms in one PDF) needs `file.pages`, one image per page, and nothing produces them on the server yet. Until this is built a multi-form PDF is read as one document.
 
 **T-142 The product screens: how to build them (DECISION, before T-15).** `apps/server/src/actions.ts` and `GET /api/state` are shaped so the demo's interface could run in the browser against the server: the engine draws from the state, and each action is sent to `/api/act`. That reuses `reference/artifact/ui.js` instead of rewriting its 1,180 lines in React. Against it: T-52 asks for a framework that escapes by default, and `ui.js` builds HTML from strings and uses inline handlers the Content-Security-Policy forbids. Decide before starting T-15.

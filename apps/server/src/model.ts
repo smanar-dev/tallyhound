@@ -43,7 +43,8 @@ export function claude(o: ModelOpts) {
     /** What this process has spent for a firm today, by its own estimate. With two servers each keeps its own count, so the real ceiling is the cap times the number of servers. */
     spentToday(firmId: string) { const b = book(firmId); return { usd: b.usd, calls: b.calls }; },
     async json(prompt: string, opt: { images?: Buffer[]; tier?: Tier } = {}): Promise<Record<string, unknown>> {
-      const firmId = turn.getStore()?.firmId || "unknown", b = book(firmId), model = MODELS[opt.tier || "default"] || MODELS.default;
+      const firmId = turn.getStore()?.firmId; if (!firmId) throw new ModelError("no_firm", "The model is only called on a firm's behalf");   // no anonymous spending, nothing uncounted
+      const b = book(firmId), model = MODELS[opt.tier || "default"] || MODELS.default;
       if (b.usd >= cap) { if (!b.told) { b.told = true; say("model_cap_reached", firmId, b.calls); } throw new ModelError("cap", "Daily model limit reached for this firm"); }
       const content: Anthropic.ContentBlockParam[] = [];
       for (const img of opt.images || []) {

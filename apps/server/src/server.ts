@@ -82,7 +82,13 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
   // The firm's whole workspace, as the engine saves it. File bytes are never in it, only their keys.
   f.get("/api/state", { preHandler: full }, async (req, reply) => {
     const u = req.who!.user, json = await d.readState(u.firmId); if (!json) return reply.code(404).send({ error: "no_firm", message: "This firm's workspace could not be found." });
-    const s = JSON.parse(json); s.userId = u.id; return reply.type("application/json").send(JSON.stringify(s));
+    const s = JSON.parse(json); s.userId = u.id;
+    // A client's link key opens that client's own pages. No screen needs it, so it never leaves the server.
+    // The same goes for the copy of the link inside a sent message: staff see that a link was sent, not the link.
+    const keys: string[] = []; for (const c of s.state.clients || []) { if (c.key) keys.push(c.key); delete c.key; delete c.keyAt; delete c.code; }
+    if (u.role !== "owner") s.state.audit = [];   // the audit trail is the owner's to read (spec section 3)
+    let out = JSON.stringify(s); for (const k of keys) out = out.split(k).join("(private link)");
+    return reply.type("application/json").send(out);
   });
   // One staff action: { fn, args }. The role is checked here, the rules are the engine's.
   f.post("/api/act", { preHandler: full }, async (req, reply) => {
@@ -116,7 +122,7 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
   });
 
   // ---- people at the firm (owner only for changes) ----
-  f.get("/api/users", { preHandler: full }, async (req) => (await d.auth.usersOfFirm(req.who!.user.firmId)).map((u) => ({ ...me(u), twoStep: !!u.mfaSecret })));
+  f.get("/api/users", { preHandler: full }, async (req, reply) => req.who!.user.role !== "owner" ? reply.code(403).send({ error: "role", message: "Only an owner can see who has access." }) : (await d.auth.usersOfFirm(req.who!.user.firmId)).map((u) => ({ ...me(u), twoStep: !!u.mfaSecret })));
   f.post("/api/users", { preHandler: full }, async (req) => { const b = body(req), u = req.who!.user; return { id: await d.firms.addUser(u.firmId, u, { email: str(b.email), name: str(b.name), role: str(b.role) as Role }) }; });
   f.post("/api/users/:id/role", { preHandler: full }, async (req) => { const u = req.who!.user; await d.firms.setRole(u.firmId, u, (req.params as { id: string }).id, str(body(req).role) as Role); return { ok: true }; });
   f.delete("/api/users/:id", { preHandler: full }, async (req) => { const u = req.who!.user; await d.firms.removeUser(u.firmId, u, (req.params as { id: string }).id); return { ok: true }; });

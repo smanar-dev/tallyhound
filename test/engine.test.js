@@ -188,13 +188,13 @@ test("links: a production firm's messages carry a private link per client, made 
   T.importRows(T.parseCSV("First,Last,Email,Mobile\nSam,Lee,sam@x.example,6155550122")); const c2 = T.S.clients[1], e2 = T.engOf(c2.id);
   e.confirmed = true; T.start(e.id); e2.confirmed = true; T.start(e2.id);
   const inv = T.S.msgs.filter((m) => m.dir === "out" && /go\.tallyhound\.test\/c\//.test(m.body)); assert.equal(inv.length, 2, "both invitations went out with a link, none was blocked");
-  assert.match(c.key, /^[a-z]{20}$/); assert.match(c2.key, /^[a-z]{20}$/); assert.notEqual(c.key, c2.key);
+  assert.match(c.key, /^[a-z]{28}$/); assert.match(c2.key, /^[a-z]{28}$/); assert.notEqual(c.key, c2.key);
   assert.ok(inv[0].body.includes("go.tallyhound.test/c/testcpas-" + c.key)); assert.ok(!T.S.tasks.some((t) => t.kind === "output_check"));
   assert.equal(T.linkFor(c, "u"), "go.tallyhound.test/u/testcpas-" + c.key); assert.equal(T.linkLive(c), true);
 });
 test("links: a key is good for 14 days; the next message with a link after that makes a new one, and reading a preview never does", () => {
   const { T, c, e } = firm(); T.S.firm.linkBase = "go.tallyhound.test"; T.S.firm.slug = "testcpas";
-  assert.equal(T.sendCheckin(e.id), null); const first = c.key; assert.match(first, /^[a-z]{20}$/);
+  assert.equal(T.sendCheckin(e.id), null); const first = c.key; assert.match(first, /^[a-z]{28}$/);
   T.setNow(new Date(T.S.now.getTime() + 13 * T.DAY)); assert.equal(T.linkLive(c), true);
   T.fill("M1", c, e); assert.equal(c.key, first, "filling a template to show it does not change the key");
   T.setNow(new Date(T.S.now.getTime() + 2 * T.DAY)); assert.equal(T.linkLive(c), false, "past 14 days the old link is dead");
@@ -207,7 +207,7 @@ test("links: a model's rewrite that drops or changes the client's link is refuse
   const w = T.S.msgs.filter((m) => m.status === "writing" && m.base && m.base.includes("go.tallyhound.test/"));
   if (!w.length) { const m = T.S.msgs.find((x) => x.dir === "out" && x.body.includes("go.tallyhound.test/")); m.status = "writing"; m.base = m.body; w.push(m); }
   const m = w[0], std = m.body, link = "go.tallyhound.test/c/testcpas-" + c.key;
-  T.composeDone(m.id, std.replace(link, "go.tallyhound.test/c/testcpas-" + "z".repeat(20)), "Claude"); assert.equal(m.body, std, "a link to someone else's page is refused"); assert.ok(!m.ai);
+  T.composeDone(m.id, std.replace(link, "go.tallyhound.test/c/testcpas-" + "z".repeat(28)), "Claude"); assert.equal(m.body, std, "a link to someone else's page is refused"); assert.ok(!m.ai);
   m.status = "writing"; T.composeDone(m.id, std.replace(link, "evil.example/x"), "Claude"); assert.equal(m.body, std);
   m.status = "writing"; T.composeDone(m.id, std.replace("Hi", "Hello"), "Claude"); assert.ok(m.body.includes(link));
 });

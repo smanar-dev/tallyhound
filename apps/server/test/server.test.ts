@@ -71,10 +71,12 @@ for (const kind of KINDS) {
     assert.equal((await reader.get("/api/state")).json.state.clients.length, 0, "and nothing was saved");
     for (const fn of Object.keys(ACTIONS)) assert.equal((await reader.post("/api/act", { fn, args: [] })).status, 403, fn + " is closed to read-only");
     assert.equal((await staff.post("/api/act", add)).status, 200);
-    const st = (await reader.get("/api/state")).json; assert.equal(st.state.clients.length, 1); assert.equal(st.userId, (await reader.get("/api/me")).json.id, "read-only can look");
+    assert.equal((await reader.get("/api/users")).status, 403, "who has access is the owner's to see"); assert.equal((await staff.get("/api/users")).status, 403);
+    const st = (await reader.get("/api/state")).json; assert.equal(st.state.clients.length, 1); assert.deepEqual(st.state.audit, [], "the audit trail is the owner's to read");
+    assert.ok((await owner.get("/api/state")).json.state.audit.length > 0); assert.equal(st.userId, (await reader.get("/api/me")).json.id, "read-only can look");
     assert.equal((await staff.post("/api/act", { fn: "setRetain", args: ["delivered", 0] })).status, 403);
     assert.equal((await owner.post("/api/act", { fn: "setRetain", args: ["delivered", 0] })).status, 200);
-    for (const fn of ["setVerified", "advance", "reset", "blank", "load", "giveConsent", "registerSender", "constructor", "__proto__", "S"]) assert.equal((await owner.post("/api/act", { fn, args: [true] })).status, 404, fn + " is not reachable");
+    for (const fn of ["portalNone", "clientAnswers", "setVerified", "advance", "reset", "blank", "load", "giveConsent", "registerSender", "constructor", "__proto__", "S"]) assert.equal((await owner.post("/api/act", { fn, args: [true] })).status, 404, fn + " is not reachable");
     // The engine's own audit trail names the person who acted.
     const T = createEngine(); T.load(await H.store.readState(firmId)); assert.ok(T.S.audit.some((a: { actor: string }) => a.actor === "Alex Staff"));
     await H.close();

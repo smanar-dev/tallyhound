@@ -35,10 +35,11 @@ A new firm is not checked: nothing is sent or read until `npm run admin -- firm-
 | `src/runtime.ts` | Reads the environment, connects everything, runs database migrations |
 | `src/admin.ts` | `migrate`, `create-firm`, `firm-check`, `firms` |
 | `public/` | Sign-in screens and a holding page. No inline script or style; the Content-Security-Policy forbids it |
-| `test/` | 31 tests. 19 of them run in memory and again on a real Postgres when `DATABASE_URL` is set |
+| `test/` | 33 tests. 21 of them run in memory and again on a real Postgres when `DATABASE_URL` is set |
 
 ## Rules this code keeps
 
+- A client's link key never leaves the server, not even inside the text of a sent message. The audit trail and the list of people go to owners only.
 - A browser can only reach the engine functions listed in `src/actions.ts`. Adding a screen means adding its action there, with a role.
 - Read-only accounts get 403 on every action. Owner-only: how long data is kept, deleting copies, people and roles.
 - A user id is the same in the sign-in table and in the firm's workspace, so the engine's audit trail names the right person.

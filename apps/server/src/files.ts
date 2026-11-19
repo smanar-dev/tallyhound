@@ -38,7 +38,7 @@ export async function pdfText(bytes: Buffer): Promise<string> {
   } catch { return ""; }
 }
 
-export interface InFile { bytes: Buffer; contentType?: string; name?: string; inline?: boolean; width?: number; height?: number; locked?: boolean; text?: string }
+export interface InFile { bytes: Buffer; contentType?: string; name?: string; inline?: boolean; width?: number; height?: number; locked?: boolean; text?: string; refused?: string }
 /** One arriving file, made ready for the pipeline. Used for texts, email, and staff uploads alike. */
 export async function ready(file: InFile, opt: PrepareOpts): Promise<InFile> {
   if (!file.bytes.length) return file;   // the email adapter's marker for a file over the size limit
@@ -46,7 +46,7 @@ export async function ready(file: InFile, opt: PrepareOpts): Promise<InFile> {
   try { p = await kitPrepare.prepare(file, opt); }
   catch { p = { bytes: file.bytes, refused: "damaged", name: file.name, inline: file.inline }; }   // a file that says it is a photo and is not one
   // A file we cannot open or the scanner refused: the client is asked for a photo or PDF instead.
-  if (p.refused) return { bytes: p.bytes as Buffer, contentType: "application/x-unreadable", name: p.name as string | undefined, inline: !!p.inline };
+  if (p.refused) return { bytes: p.bytes as Buffer, contentType: "application/x-unreadable", name: p.name as string | undefined, inline: !!p.inline, refused: String(p.refused) };
   const text = p.contentType === "application/pdf" && !p.locked ? await pdfText(p.bytes) : "";
   return { bytes: p.bytes as Buffer, contentType: p.contentType as string, name: p.name as string | undefined, inline: !!p.inline, width: (p.width ?? file.width) as number | undefined, height: (p.height ?? file.height) as number | undefined, locked: !!p.locked, text: text || undefined };
 }

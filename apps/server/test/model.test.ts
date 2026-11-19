@@ -18,31 +18,35 @@ function api(script: (number | "hang" | Record<string, unknown>)[]) {
   }) as unknown as typeof fetch;
   return { f, calls };
 }
+// Every model call happens inside a firm's turn. This stands in for the pipeline taking the firm's lock.
+const turnStore = trackFirm(kitMemory.memoryStore()); turnStore.firms.set("f1", "{}");
+function inFirm<R>(fn: () => Promise<R>): Promise<R> { let out: R, err: unknown = null; return turnStore.lock("f1", async (j: string | null) => { try { out = await fn(); } catch (e) { err = e; } return j || "{}"; }).then(() => { if (err) throw err; return out!; }); }
 const code = async (p: Promise<unknown>) => { try { await p; return "no error"; } catch (e) { return e instanceof ModelError ? e.code : "other: " + (e as Error).message; } };
 
 test("model: a photo and a PDF go out in the shape the API expects, on the right model for each tier", async () => {
   const A = api([answer('Here you go: {"form":"W2","tax_year":2026}')]), ai = claude({ apiKey: "k", fetch: A.f });
-  assert.deepEqual(await ai.json("Read this", { images: [JPEG, PDF], tier: "default" }), { form: "W2", tax_year: 2026 });
+  assert.equal(await code(ai.json("Read this")), "no_firm", "the model is never called outside a firm's turn"); assert.equal(A.calls.length, 0);
+  assert.deepEqual(await inFirm(() => ai.json("Read this", { images: [JPEG, PDF], tier: "default" })), { form: "W2", tax_year: 2026 });
   const b = A.calls[0]!.body; assert.equal(b.model, MODELS.default); const h = A.calls[0]!.headers; assert.ok([h.get("x-api-key"), h.get("authorization")].some((v) => v && v.includes("k")), "the key is sent as a header");
   assert.deepEqual(b.messages[0].content.map((c: { type: string; source?: { media_type: string } }) => [c.type, c.source?.media_type]), [["image", "image/jpeg"], ["document", "application/pdf"], ["text", undefined]]);
   for (const k of ["temperature", "top_p", "top_k", "thinking"]) assert.ok(!(k in b), k + " is not sent: the current models reject or ignore it");
-  await ai.json("Classify", { tier: "quick" }); assert.equal(A.calls[1]!.body.model, MODELS.quick);
-  assert.equal(await code(ai.json("Read", { images: [Buffer.from("MZ not a picture")] })), "file"); assert.equal(A.calls.length, 2, "a file that is not a photo or PDF is never sent");
+  await inFirm(() => ai.json("Classify", { tier: "quick" })); assert.equal(A.calls[1]!.body.model, MODELS.quick);
+  assert.equal(await code(inFirm(() => ai.json("Read", { images: [Buffer.from("MZ not a picture")] }))), "file"); assert.equal(A.calls.length, 2, "a file that is not a photo or PDF is never sent");
 });
 
 test("model: a failing call is retried twice and then gives up; a bad request is not retried; a slow call is cut off", async () => {
-  const ok = api([500, 429, answer('{"a":1}')]); assert.deepEqual(await claude({ apiKey: "k", fetch: ok.f }).json("x"), { a: 1 }); assert.equal(ok.calls.length, 3);
-  const down = api([500]); assert.equal(await code(claude({ apiKey: "k", fetch: down.f }).json("x")), "api_500"); assert.equal(down.calls.length, 3, "one try and two retries");
-  const bad = api([400]); assert.equal(await code(claude({ apiKey: "k", fetch: bad.f }).json("x")), "api_400"); assert.equal(bad.calls.length, 1);
-  const key = api([401]); assert.equal(await code(claude({ apiKey: "revoked", fetch: key.f }).json("x")), "api_401"); assert.equal(key.calls.length, 1);
-  const slow = api(["hang"]), t0 = Date.now(); assert.equal(await code(claude({ apiKey: "k", fetch: slow.f, timeoutMs: 40, retries: 1 }).json("x")), "network"); assert.equal(slow.calls.length, 2); assert.ok(Date.now() - t0 < 5000);
+  const ok = api([500, 429, answer('{"a":1}')]); assert.deepEqual(await inFirm(() => claude({ apiKey: "k", fetch: ok.f }).json("x")), { a: 1 }); assert.equal(ok.calls.length, 3);
+  const down = api([500]); assert.equal(await code(inFirm(() => claude({ apiKey: "k", fetch: down.f }).json("x"))), "api_500"); assert.equal(down.calls.length, 3, "one try and two retries");
+  const bad = api([400]); assert.equal(await code(inFirm(() => claude({ apiKey: "k", fetch: bad.f }).json("x"))), "api_400"); assert.equal(bad.calls.length, 1);
+  const key = api([401]); assert.equal(await code(inFirm(() => claude({ apiKey: "revoked", fetch: key.f }).json("x"))), "api_401"); assert.equal(key.calls.length, 1);
+  const slow = api(["hang"]), t0 = Date.now(); assert.equal(await code(inFirm(() => claude({ apiKey: "k", fetch: slow.f, timeoutMs: 40, retries: 1 }).json("x"))), "network"); assert.equal(slow.calls.length, 2); assert.ok(Date.now() - t0 < 5000);
 });
 
 test("model: a refusal, a cut-off answer and an answer that is not JSON are errors, never half an answer", async () => {
-  assert.equal(await code(claude({ apiKey: "k", fetch: api([answer("", { stop_reason: "refusal", content: [] })]).f }).json("x")), "refusal");
-  assert.equal(await code(claude({ apiKey: "k", fetch: api([answer('{"form":"W2","tax_ye', { stop_reason: "max_tokens" })]).f }).json("x")), "cut_off");
-  assert.equal(await code(claude({ apiKey: "k", fetch: api([answer("I cannot tell.")]).f }).json("x")), "no_json");
-  assert.equal(await code(claude({ apiKey: "k", fetch: api([answer("{not json}")]).f }).json("x")), "bad_json");
+  assert.equal(await code(inFirm(() => claude({ apiKey: "k", fetch: api([answer("", { stop_reason: "refusal", content: [] })]).f }).json("x"))), "refusal");
+  assert.equal(await code(inFirm(() => claude({ apiKey: "k", fetch: api([answer('{"form":"W2","tax_ye', { stop_reason: "max_tokens" })]).f }).json("x"))), "cut_off");
+  assert.equal(await code(inFirm(() => claude({ apiKey: "k", fetch: api([answer("I cannot tell.")]).f }).json("x"))), "no_json");
+  assert.equal(await code(inFirm(() => claude({ apiKey: "k", fetch: api([answer("{not json}")]).f }).json("x"))), "bad_json");
 });
 
 test("model: the daily cap is per firm, stops calls once reached, says so once, and starts again the next day", async () => {
@@ -59,7 +63,7 @@ test("model: the daily cap is per firm, stops calls once reached, says so once, 
 // ---- T-13 ----
 // One firm on Autopilot, one client being asked for a W-2 and a mortgage statement by text.
 async function firm(ai: unknown) {
-  let t = new Date(2027, 0, 25, 10, 5); const store = kitMemory.memoryStore(), sms = kitMemory.fakeSender(), email = kitMemory.fakeSender(), app = createApp({ store, sms, email, ai, clock: () => t });
+  let t = new Date(2027, 0, 25, 10, 5); const store = trackFirm(kitMemory.memoryStore()), sms = kitMemory.fakeSender(), email = kitMemory.fakeSender(), app = createApp({ store, sms, email, ai, clock: () => t });
   await app.createFirm("f1", { plan: "Practice", name: "Test CPAs", email: "docs@test.example", inbox: "docs@test.example", smsNumber: "+16155550100", senderStatus: "approved", mode: "autopilot", users: [{ id: "u1", first: "Pat", name: "Pat Owner", role: "owner", email: "pat@test.example" }] });
   await app.staff("f1", "u1", (T: Engine) => { T.importRows(T.parseCSV("First,Last,Email,Mobile\nJo,Day,jo@x.example,6155550111")); const e = T.S.engs[0]; T.itemsOf(e.id).find((i: { form: string }) => i.form === "W2").payer = "Acme Logistics"; e.confirmed = true; T.start(e.id); T.giveConsent(T.S.clients[0].id, "page"); });
   const state = () => { const T = createEngine(); T.load(store.read("f1")); return T; };

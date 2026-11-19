@@ -261,11 +261,11 @@
   const LONGDOC = ["1099CONS", "K1", "PRIOR", "PNL", "BALANCE_SHEET", "TRIAL_BALANCE", "BANK_STATEMENT", "PAYROLL_REPORT", "FORMS_ISSUED"];
   const LONGHOW = { en: ["Reply with a photo when you have it.", "It usually runs to several pages, so a PDF by email works best."], es: ["Responda con una foto cuando lo tenga.", "Suele tener varias páginas, así que lo mejor es enviar el PDF por correo electrónico."] };
   /* Links to the client's own pages (consent, upload, check-in). The demo uses a fixed sample link. A production firm has
-     firm.linkBase (the host) and firm.slug (which firm), and each client gets a private key of letters only, so the link never
+     firm.linkBase (the host) and firm.slug (which firm), and each client gets a private key of 28 letters (128 bits), so the link never
      trips the digit check in outputCheck. A key is good for LINK_DAYS; the next message that carries a link after that makes a new one. */
   const LINK_DAYS = 14, LINK_SAMPLE = "go.tallyhound.example";
   const linkHost = () => S.firm.linkBase || LINK_SAMPLE;
-  function linkKey() { const A = "abcdefghijkmnpqrstuvwxyz", b = new Uint8Array(20); globalThis.crypto.getRandomValues(b); let k = ""; for (const x of b) k += A[x % A.length]; return k; }
+  function linkKey() { const A = "abcdefghijkmnpqrstuvwxyz", b = new Uint8Array(28); globalThis.crypto.getRandomValues(b); let k = ""; for (const x of b) k += A[x % A.length]; return k; }
   function linkLive(c) { return !!(c && c.key && c.keyAt && S.now - new Date(c.keyAt) <= LINK_DAYS * DAY); }
   function linkFresh(c) { if (!S.firm.linkBase || !c) return; if (!linkLive(c)) { c.key = linkKey(); c.keyAt = new Date(S.now); } }
   function linkFor(c, kind) { return S.firm.linkBase ? S.firm.linkBase + "/" + kind + "/" + (S.firm.slug ? S.firm.slug + "-" : "") + ((c && c.key) || "") : LINK_SAMPLE + "/" + kind + "/k3x9"; }

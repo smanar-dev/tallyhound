@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { build, KINDS, type Harness } from "./harness.ts";
-import { createEngine, kitMemory, type Engine } from "../src/kit.ts";
+import { createEngine, kitMemory, type Engine, type PrepareOpts } from "../src/kit.ts";
 import { RETRY_AFTER_S } from "../src/queue.ts";
 
 const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(40000, 7)]), PDF = Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.alloc(30000, 32)]);
@@ -12,8 +12,8 @@ const model = () => kitMemory.fakeAI((p: string) => p.startsWith("You read photo
   : p.startsWith("You read text messages") ? { intent: "thanks", item_id: null, summary: "thanks", scope: "documents", sentiment: "calm" }
   : p.startsWith("You read emails") ? { intent: "sending", item_id: null, summary: "Sending documents", scope: "documents", sentiment: "calm" } : null);
 // One firm on Autopilot with an approved number and one client, Jo Day, who has agreed to texts and is being asked for a W-2.
-async function firmWithJo(kind: "memory" | "postgres") {
-  const H = await build(kind, { ai: model() }), { firmId, ownerId } = await H.newFirm();
+async function firmWithJo(kind: "memory" | "postgres", prepare?: PrepareOpts) {
+  const H = await build(kind, { ai: model(), prepare }), { firmId, ownerId } = await H.newFirm();
   await H.app.staff(firmId, ownerId, (T: Engine) => { T.S.firm.hound.mode = "autopilot"; T.S.firm.senderStatus = "approved"; T.S.firm.phone = "(615) 555-0100";
     T.importRows(T.parseCSV("First,Last,Email,Mobile\nJo,Day,jo@x.example,6155550111")); const e = T.S.engs[0]; T.itemsOf(e.id).find((i: { form: string }) => i.form === "W2").payer = "Acme Logistics"; e.confirmed = true; T.start(e.id); T.giveConsent(T.S.clients[0].id, "page"); });
   const state = async () => { const T = createEngine(); T.load(await H.store.readState(firmId)); return T; };
@@ -62,6 +62,27 @@ for (const kind of KINDS) {
     const T = await H.state(), y = T.S.tray.find((t: { why?: string }) => t.why === "Could not be processed"); assert.ok(y, "a person is told"); assert.match(y.text, /ask them to send it again/);
     H.advance(3600); await H.inbox.drain(); assert.equal(H.mediaCalls.filter((c) => c.includes("MM2")).length, 5, "a dead event is not tried again");
     assert.equal(await H.inbox.sweep(), 0); H.advance(31 * 86400); assert.equal(await H.inbox.sweep(), 1); assert.equal(await H.inbox.sweep(), 0);
+    await H.close();
+  });
+
+  test(name("no client link key ever reaches a browser, and a failed store leaves nothing half-queued"), async () => {
+    const H = await firmWithJo(kind), T = await H.state(); assert.match(T.S.clients[0].key, /^[a-z]{28}$/, "the invitation made Jo a link key");
+    const owner = await H.signInAs("pat1@firm1.test"), body = (await owner.get("/api/state")).raw.body; assert.ok(!body.includes(T.S.clients[0].key)); assert.equal((await owner.get("/api/state")).json.state.clients[0].key, undefined);
+    // The row cannot be written: the provider gets an error (and will deliver again), and the stored copy is removed.
+    const real = H.queue.add; H.queue.add = async () => { throw new Error("database is down"); };
+    const files = async () => kind === "memory" ? H.inner.files.size : 0, before = await files();
+    assert.equal((await H.twilioPost("/hooks/twilio", mms(H, "MM9"))).statusCode, 500); assert.equal(await files(), before); H.queue.add = real;
+    assert.equal((await H.twilioPost("/hooks/twilio", mms(H, "MM9"))).statusCode, 200); await H.inbox.drain(); assert.equal(docs(await H.state()).length, 1, "the redelivery is processed");
+    await H.close();
+  });
+
+  test(name("a file that fails the virus scan is not kept, the firm is told, and the rest of the message is still handled"), async () => {
+    const BAD = Buffer.concat([JPEG, Buffer.from("EICAR-TEST")]), H = await firmWithJo(kind, { scan: async (b) => ({ clean: !b.includes("EICAR-TEST"), name: "Eicar-Test-Signature" }) });
+    await H.postmarkPost("/hooks/postmark/inbound", { MessageID: "pmv", OriginalRecipient: INBOX, From: "jo@x.example", Subject: "docs", TextBody: "Two files", Headers: [{ Name: "Authentication-Results", Value: "mx; dmarc=pass" }],
+      Attachments: [{ Name: "w2.jpg", ContentType: "image/jpeg", Content: JPEG.toString("base64") }, { Name: "invoice.jpg", ContentType: "image/jpeg", Content: BAD.toString("base64") }] });
+    await H.inbox.drain(); const T = await H.state();
+    assert.equal(T.S.docs.length, 1, "the clean file was read, the other was not kept"); const y = T.S.tray.find((t: { why?: string }) => t.why === "Blocked by the virus scan"); assert.ok(y, "the firm is told"); assert.match(y.text, /^1 file that arrived by email failed the virus scan/);
+    assert.deepEqual(await H.inbox.counts(), { waiting: 0, dead: 0 });
     await H.close();
   });
 

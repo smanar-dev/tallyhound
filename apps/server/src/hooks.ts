@@ -12,16 +12,21 @@ const addr = (v: unknown) => { const s = String(v || ""), m = /<([^>]+)>/.exec(s
 
 export function handlers({ app, twilio, prepare }: { app: App; twilio: TwilioAdapter | null; prepare?: PrepareOpts }): Record<Kind, Handler | null> {
   const opt = prepare || {};
+  // A file the scanner refused is never kept. The firm is told that it happened (spec TH-CAP-14); the client is asked for a photo or PDF as for any unreadable file.
+  const infected = async (firmId: string, files: { refused?: string }[], channel: "text" | "email") => {
+    const n = files.filter((f) => f.refused === "infected").length; if (!n) return;
+    await app.withFirm(firmId, (T: Engine) => { T.S.tray.push({ id: "yv" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), text: n + (n === 1 ? " file" : " files") + " that arrived by " + channel + " failed the virus scan and " + (n === 1 ? "was" : "were") + " not kept. If you were expecting a document, ask the client to send it again from another device.", from: "Tallyhound", at: new Date(T.S.now), channel, why: "Blocked by the virus scan" }); });
+  };
   return {
     // Photos are fetched here, not in the webhook, and Twilio's copies are deleted only once ours is sealed and the result saved.
-    sms: twilio && (async (payload) => {
-      const params = JSON.parse(payload.toString("utf8")) as Record<string, string>, m = await twilio.inbound(params, { keep: true });
-      await app.inboundSms({ ...m, media: await Promise.all(m.media.map((f) => ready(f, opt))) });
+    sms: twilio && (async (payload, firmId) => {
+      const params = JSON.parse(payload.toString("utf8")) as Record<string, string>, m = await twilio.inbound(params, { keep: true }), media = await Promise.all(m.media.map((f) => ready(f, opt)));
+      await app.inboundSms({ ...m, media }); await infected(firmId, media, "text");
       return { from: m.from, after: async () => { await twilio.forget(params); } };
     }),
-    email: async (payload) => {
-      const m = kitEmailIn.fromPostmark(JSON.parse(payload.toString("utf8")));
-      await app.inboundEmail({ ...m, attachments: await Promise.all(m.attachments.map((f) => ready(f, opt))) });
+    email: async (payload, firmId) => {
+      const m = kitEmailIn.fromPostmark(JSON.parse(payload.toString("utf8"))), attachments = await Promise.all(m.attachments.map((f) => ready(f, opt)));
+      await app.inboundEmail({ ...m, attachments }); await infected(firmId, attachments, "email");
       return { from: m.from };
     }
   };

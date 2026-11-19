@@ -11,6 +11,7 @@
   function say(t) { $("msg").textContent = t; $("msg").hidden = !t; }
   function row(tbody, cells) { var tr = document.createElement("tr"); cells.forEach(function (c) { var td = document.createElement("td"); td.textContent = c; tr.appendChild(td); }); tbody.appendChild(tr); }
   function people(me) {
+    if (me.role !== "owner") { $("people-card").hidden = true; return Promise.resolve(); }
     return api("GET", "/api/users").then(function (list) {
       $("people").textContent = ""; list.forEach(function (u) { row($("people"), [u.name, u.email, ROLE[u.role], u.twoStep ? "On" : "Not set up yet"]); });
       $("f-add").hidden = me.role !== "owner"; $("solo").hidden = !(me.role === "owner" && list.filter(function (u) { return u.role === "owner"; }).length < 2);
