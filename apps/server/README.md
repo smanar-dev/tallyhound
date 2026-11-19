@@ -30,11 +30,12 @@ A new firm is not checked: nothing is sent or read until `npm run admin -- firm-
 | `src/hooks.ts` | Where providers call in: `/hooks/twilio` (texts), `/hooks/twilio/status`, `/hooks/twilio/voice`, `/hooks/postmark/inbound`, `/hooks/postmark/bounce` |
 | `src/queue.ts` | The inbound queue: store, answer, process with retries, hand to a person |
 | `src/files.ts` | Makes an arriving file ready: identify, convert, rotate, shrink, scan, read PDF text |
+| `src/model.ts` | The Claude client: timeout, retries, refusals, a daily spend cap per firm |
 | `src/worker.ts` | Calls `tick` for every firm every five minutes, and works the queue every 15 seconds |
 | `src/runtime.ts` | Reads the environment, connects everything, runs database migrations |
 | `src/admin.ts` | `migrate`, `create-firm`, `firm-check`, `firms` |
 | `public/` | Sign-in screens and a holding page. No inline script or style; the Content-Security-Policy forbids it |
-| `test/` | 23 tests. 19 of them run in memory and again on a real Postgres when `DATABASE_URL` is set |
+| `test/` | 31 tests. 19 of them run in memory and again on a real Postgres when `DATABASE_URL` is set |
 
 ## Rules this code keeps
 

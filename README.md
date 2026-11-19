@@ -14,11 +14,12 @@ Working code and a plan to take Tallyhound from demo to pilot firms by January 1
 | Email in, Twilio webhook, Karbon import (`packages/adapters`) | Built in round 13 with tests on sample payloads. None has been run live. |
 | Production pipeline (`packages/core/pipeline.js`) | Working against fakes. 25 tests cover real sending, including send-once after a failed save, multi-form uploads, locked files, staff uploads and held files while paused, model reading, model writing with the safety check, model outage, Copilot approval, failed sends and two events at once. |
 | Prompts (`packages/core/prompts.js`) | Ported from the demo, where they run against Claude. No accuracy numbers yet: that is ticket T-22. |
-| Claude API and Twilio adapters | Starters. Never run against live services. |
+| Claude API client | Rebuilt on the official SDK in `apps/server/src/model.ts` (round 16): timeout, retries, daily cap per firm. Never run against the live API. The starter in `packages/adapters/anthropic.js` is no longer used by the server. |
+| Twilio adapter | Starter, extended in round 16 for safe retries. Never run against a live account. |
 | Web service (`apps/server`) | Built in round 16: sign-in by emailed link plus authenticator code, recovery codes, sessions, three roles enforced on every action, firm setup in one command, the firm check gate, the timer. Step 2 added the inbound queue, the text and email webhooks, bounce and delivery receipts, file preparation, staff upload and document viewing. 23 tests, 19 of them run in memory and again on a real Postgres. Driven once in a real browser. See `apps/server/README.md`. |
 | Product screens, provider accounts, file bucket, hosting | Not built. See the tickets. |
 
-Run the tests: `npm install` once (one test-only package, an in-process Postgres emulator), then `npm test`. Node 22.18 or later. `npm run check` adds the type check and lint. 244 tests, plus twenty-two that run against a real Postgres when DATABASE_URL is set (the three kit ones passed on PostgreSQL 18 on November 19; all twenty-two passed on PostgreSQL 16 on November 19). `npm run fuzz` runs 200 random seasons; `npm run scale` prints size and timing at 150, 500 and 1,000 clients.
+Run the tests: `npm install` once (one test-only package, an in-process Postgres emulator), then `npm test`. Node 22.18 or later. `npm run check` adds the type check and lint. 252 tests, plus twenty-two that run against a real Postgres when DATABASE_URL is set (the three kit ones passed on PostgreSQL 18 on November 19; all twenty-two passed on PostgreSQL 16 on November 19). `npm run fuzz` runs 200 random seasons; `npm run scale` prints size and timing at 150, 500 and 1,000 clients.
 
 ## How it fits together
 

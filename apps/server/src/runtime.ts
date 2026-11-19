@@ -4,7 +4,8 @@ import { mkdirSync, readFileSync, readdirSync, existsSync } from "node:fs";
 import { readFile, writeFile, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createApp, kitAnthropic, kitCrypto, kitEmailOut, kitPostgres, kitTwilio, type Sender, type TwilioAdapter } from "./kit.ts";
+import { claude, trackFirm } from "./model.ts";
+import { createApp, kitCrypto, kitEmailOut, kitPostgres, kitTwilio, type Sender, type TwilioAdapter } from "./kit.ts";
 import { postgresAuthStore } from "./authstore.ts";
 import { createSignIn, firmSecrets, type Mailer } from "./signin.ts";
 import { createFirms } from "./firms.ts";
@@ -28,14 +29,14 @@ export function runtime() {
   const production = env("NODE_ENV") === "production", appUrl = env("APP_URL") || "http://localhost:" + (env("PORT") || "3000");
   const pool = new pg.Pool({ connectionString: need("DATABASE_URL"), max: 10 });
   const keyring = kitCrypto.localKeyring(need("TH_MASTER_KEY"));   // T-102 replaces this with the cloud key service
-  const store = kitCrypto.encryptedStore(kitPostgres.postgresStore(pool, diskBucket(env("TH_FILES_DIR") || join(ROOT, ".data/files"))), keyring);
+  const store = trackFirm(kitCrypto.encryptedStore(kitPostgres.postgresStore(pool, diskBucket(env("TH_FILES_DIR") || join(ROOT, ".data/files"))), keyring));
   const auth = postgresAuthStore(pool), clock = () => new Date();
   // Ids and outcomes only. The kit names an unconfirmed sender when it logs one; an address never reaches the log.
   const log = (event: string, ...ids: unknown[]) => console.log(JSON.stringify({ at: new Date().toISOString(), event, ids: ids.map((v) => (typeof v === "string" && v.includes("@") ? "[address]" : v)) }));
   const twilio: TwilioAdapter | null = env("TWILIO_ACCOUNT_SID") ? kitTwilio.twilio({ accountSid: env("TWILIO_ACCOUNT_SID"), authToken: need("TWILIO_AUTH_TOKEN"), messagingServiceSid: need("TWILIO_MESSAGING_SERVICE_SID") }) : null;
   const sms = twilio || notConnected("Texting");
   const email = env("POSTMARK_TOKEN") ? kitEmailOut.postmark({ serverToken: env("POSTMARK_TOKEN") }) : notConnected("Email");
-  const ai = env("ANTHROPIC_API_KEY") ? kitAnthropic.anthropic({ apiKey: env("ANTHROPIC_API_KEY") }) : null;   // no key: rules and standard wording
+  const ai = env("ANTHROPIC_API_KEY") ? claude({ apiKey: env("ANTHROPIC_API_KEY"), dailyCapUsd: +(env("TH_MODEL_DAILY_CAP_USD") || 10), log }) : null;   // no key: rules and standard wording
   const app = createApp({ store, sms, email, ai, clock, log });
   if (production && !env("POSTMARK_TOKEN")) throw new Error("Set POSTMARK_TOKEN: without it nobody can be sent a sign-in link");
   const mailer: Mailer = env("POSTMARK_TOKEN")

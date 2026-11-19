@@ -163,7 +163,7 @@ function createApp({ store, sms, email, ai, clock, log, files }) {
     if (!r && pre && pre.form) return { form: pre.form, year: pre.year || 0, payer: "", corrected: pre.corrected, fileKey: key, read: { legible: 0.95, conf: pre.year ? 0.9 : 0.6, note: "Read from the text inside the PDF. The model was not available.", missing: [], by: "text" } };
     if (!r) return { form: "OTHER", year: 0, payer: "", fileKey: key, read: { legible: 0.9, conf: 0, note: "Could not be read automatically", missing: [] } };
     return precheck.reconcile({
-      form: r.is_tax_document === false ? "OTHER" : (T.FORMS[r.form] ? r.form : "OTHER"), year: +r.tax_year || 0, payer: r.payer || "", corrected: !!r.corrected,
+      form: r.is_tax_document === false ? "OTHER" : (typeof r.form === "string" && Object.hasOwn(T.FORMS, r.form) ? r.form : "OTHER"), year: +r.tax_year || 0, payer: r.payer || "", corrected: !!r.corrected,
       recipient: c ? nameMatch(c, r.recipient_name) : "self", recipientName: r.recipient_name || "", fileKey: key,
       read: { legible: +r.legibility || 0, conf: +r.confidence || 0, note: r.note || "", missing: Array.isArray(r.missing_parts) ? r.missing_parts : [] }
     }, pre);
@@ -179,7 +179,7 @@ function createApp({ store, sms, email, ai, clock, log, files }) {
     return "ok";
   }
   const toSpec = (T, c, r, key) => ({
-    form: r.is_tax_document === false ? "OTHER" : (T.FORMS[r.form] ? r.form : "OTHER"), year: +r.tax_year || 0, payer: r.payer || "", corrected: !!r.corrected,
+    form: r.is_tax_document === false ? "OTHER" : (typeof r.form === "string" && Object.hasOwn(T.FORMS, r.form) ? r.form : "OTHER"), year: +r.tax_year || 0, payer: r.payer || "", corrected: !!r.corrected,
     recipient: c ? nameMatch(c, r.recipient_name) : "self", recipientName: r.recipient_name || "", fileKey: key,
     read: { legible: +r.legibility || 0, conf: +r.confidence || 0, note: r.note || "", missing: Array.isArray(r.missing_parts) ? r.missing_parts : [] }
   });

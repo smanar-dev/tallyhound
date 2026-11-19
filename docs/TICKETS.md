@@ -284,6 +284,16 @@ Built in `apps/server` and tested. See `apps/server/README.md`.
 | T-90 Staff upload | Done: `POST /api/clients/:id/documents` |
 | T-11 File access | The access rule is done and tested: `GET /api/documents/:id/file` serves a document only to that firm's signed-in staff, and every view is logged. The bucket itself is still local disk |
 
+### Step 3: the model, guarded (same day)
+
+| Ticket | State |
+|---|---|
+| T-10 Claude client | Rebuilt on the official SDK in `apps/server/src/model.ts`; it replaces the starter `packages/adapters/anthropic.js` in the server. 20 seconds a try, two retries with backoff, a refusal or a cut-off answer is an error, and a daily spend cap per firm (`TH_MODEL_DAILY_CAP_USD`, default 10) past which that firm gets rules and standard wording until the next day. Tested against a stand-in for the API, including "the key is pulled and messages still go out in standard wording". NOT run against the live API: that needs a key (T-136). The cap is counted per server process, from our own price table |
+| T-13 Model safety | Done as far as it can be without the live model: 30 hostile texts and 10 hostile documents, each read by a stand-in model that obeys the attack, writes a forbidden reply or returns rubbish. None changes the checklist, finishes a file, touches consent or settings, or gets an unsafe message sent. Left for the live run: whether the real model is fooled in the first place |
+| Found by T-13 | A form name of `__proto__` or `constructor` from the model passed the pipeline's "is this a known form" test and crashed the engine. Fixed in `packages/core/pipeline.js` (`Object.hasOwn`), two places |
+
+Decisions taken here that you may want to change: thinking and effort are left at each model's default (document reading at the larger model's default will be slower and dearer than it needs to be; tune with T-138's test set). Server-side refusal fallback is not switched on: it is a beta, and a refused read already goes to a person.
+
 **T-143 Server-side PDF page images (week 3, replaces the open part of T-86).** A PDF is sent to the model whole, as a document, which the Claude adapter already does. `readBundle` (several forms in one PDF) needs `file.pages`, one image per page, and nothing produces them on the server yet. Until this is built a multi-form PDF is read as one document.
 
 **T-142 The product screens: how to build them (DECISION, before T-15).** `apps/server/src/actions.ts` and `GET /api/state` are shaped so the demo's interface could run in the browser against the server: the engine draws from the state, and each action is sent to `/api/act`. That reuses `reference/artifact/ui.js` instead of rewriting its 1,180 lines in React. Against it: T-52 asks for a framework that escapes by default, and `ui.js` builds HTML from strings and uses inline handlers the Content-Security-Policy forbids. Decide before starting T-15.
