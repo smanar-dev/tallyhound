@@ -14,6 +14,8 @@ import { cname, DOW, dshort, dt, DSTATE, fname, iname, ISTATE, phone, plural, re
 import type { IconName } from "../lib/icons";
 
 const SRC: Record<string, string> = { prior_year: "From last year", question: "From a client answer", arrived: "Arrived unasked", staff: "Added by staff", template: "From template", recommended: "Suggested" };
+// The engine's log lines, shown in the product's vocabulary (docs/UX.md).
+const houndWords = (t: string) => String(t || "").replace(/\bquiet hours\b/gi, "sending hours").replace(/\bStuck\b/g, "Needs you").replace(/\bstuck\b/g, "waiting on you").replace(/\b[Oo]utreach\b/g, "collecting").replace(/\bhandoffs?\b/gi, "question for you").replace(/\bqueue\b/gi, "Coming up").replace(/\b[Rr]eview\b/g, "a person's check").replace(/\b[Dd]eliver(ed|y)?\b/g, "hand-off").replace(/\bapprovals?\b/gi, "your OK").replace(/\bengagements?\b/gi, "file");
 const cap = (t: string) => String(t || "").replace(/^[a-zà-ÿ]/, (ch) => ch.toUpperCase());
 const formLabel = (form: string) => (form === "OTHER" ? "Other document" : form.replace(/^(\d{4})([A-Z]+)$/, "$1-$2").replace("W2", "W-2"));
 const CHANNEL: Record<string, string> = { text: "text", email: "email", portal: "upload page", staff: "added by staff" };
@@ -35,6 +37,21 @@ function TaskLine({ T, c, t }: { T: Engine; c: Row; t: Row }) {
   return <div className="row" style={{ gap: 8, flexWrap: "nowrap" }}><span className="small grow">{what}</span>{can() ? t.kind === "document" ? <Link className="btn sm pri" to={"/needs-you?task=" + t.id}>Check it</Link> : t.kind === "question" ? <button className="btn sm pri" onClick={() => setParams({ tab: "conversation" })}>Reply</button> : t.kind === "says_none" ? <><button className="btn sm" onClick={() => decide("waive")}>Waive</button><button className="btn sm" onClick={() => decide("reask")}>Ask again</button></> : <button className="btn sm" onClick={() => decide("handled")}>Dismiss</button> : null}</div>;
 }
 
+// The Hound for this client: who has the conversation, the date the documents are needed by, what it has learned, and why it did what it did.
+function HoundCard({ T, e, c }: Ctx) {
+  const { can, act, toast } = useFirm(), s = T.S, H = s.firm.hound, [, setParams] = useSearchParams(), [note, setNote] = useState(""), [mem, setMem] = useState("");
+  const logs: Row[] = s.hlog.filter((h: Row) => h.engId === e.id).slice(0, 3), memory: Row[] = e.memory || [], day = e.target ? e.target.getFullYear() + "-" + String(e.target.getMonth() + 1).padStart(2, "0") + "-" + String(e.target.getDate()).padStart(2, "0") : "";
+  const take = async () => { try { await act("takeover", e.id, "Taken over from the client page"); toast("You have the conversation. The Hound keeps reading and tracking but sends nothing until you hand it back."); setParams({ tab: "conversation" }); } catch { /* said */ } };
+  return <div className="card"><div className="hd"><Icon name="spark" /><h3>The Hound</h3><span className="sp" />{e.takeover ? <Chip tone="warn">A person has it</Chip> : e.quietUntil && e.quietUntil > s.now ? <Chip>Paused to {dshort(e.quietUntil)}</Chip> : <Chip tone={H.mode === "copilot" ? "info" : "good"}>{H.mode === "copilot" ? "Copilot" : "Autopilot"}</Chip>}</div>
+    <div className="bd col" style={{ gap: 12 }}>
+      {e.takeover ? <><p className="small">{e.takeover.by} took over {rel(T, e.takeover.at)}. The Hound keeps reading, checking documents and logging, but sends nothing.</p>{can() ? <><input type="text" aria-label="Note for the Hound" placeholder="Note for the Hound (optional)" value={note} onChange={(ev) => setNote(ev.target.value)} /><button className="btn pri" onClick={() => void act("handback", e.id, note.trim()).then(() => { setNote(""); toast("Handed back. The Hound picks up in about an hour."); }, () => {})}>Hand back to the Hound</button></> : null}</>
+        : can() ? <button className="btn" onClick={take}><Icon name="hand" small />Take over the conversation</button> : null}
+      <label className="f">Documents needed by<input type="date" value={day} disabled={!can()} onChange={(ev) => { const v = ev.target.value; void act("setTarget", e.id, v).then(() => toast(v ? "Saved. The Hound follows up more often as the date gets close." : "Date cleared."), () => {}); }} /></label>
+      <div><h4 style={{ marginBottom: 6 }}>What it knows about {c.first}</h4>{memory.length ? memory.slice(0, 4).map((m, i) => <div className="small" style={{ padding: "3px 0" }} key={i}>{m.text} <span className="faint">{m.source === "Claude" || m.source === "Rules" ? "picked up from a message" : "added by " + m.source}</span></div>) : <div className="small faint">Nothing yet. It learns from replies, and from anything you tell it here.</div>}
+        {can() ? <div className="row" style={{ gap: 6, marginTop: 6, flexWrap: "nowrap" }}><input type="text" aria-label={"Tell the Hound something about " + c.first} placeholder={"Tell it something about " + c.first} style={{ flex: 1, minWidth: 0 }} value={mem} maxLength={200} onChange={(ev) => setMem(ev.target.value)} /><button className="btn sm" onClick={() => void act("rememberNote", e.id, mem).then((r) => { if (r) toast(String(r)); else { setMem(""); toast("Noted. The Hound will use it in future messages."); } }, () => {})}>Add</button></div> : null}</div>
+      {logs.length ? <div><h4 style={{ marginBottom: 6 }}>Why it did that</h4>{logs.map((l, i) => <div className="small" style={{ padding: "3px 0" }} key={i}><b>{houndWords(l.text)}</b>{l.why ? <><br /><span className="muted">{houndWords(l.why)}</span></> : null}</div>)}</div> : null}
+    </div></div>;
+}
 function NextCard({ T, e, c, onHandOff }: Ctx & { onHandOff: () => void }) {
   const { can, act, toast } = useFirm(), s = T.S, it = T.nextItem(e), tasks = openTasks(T).filter((t) => t.engId === e.id);
   // Start, then let the first message be made at once (the same one action the Start collecting dialog uses), so the person sees it now and not at the timer's next pass.
@@ -244,6 +261,7 @@ export function ClientPage() {
         {tab === "checklist" ? <Checklist {...ctx} openDoc={openDoc} /> : tab === "suggested" ? <Suggested {...ctx} /> : tab === "documents" ? <Documents {...ctx} openDoc={openDoc} /> : tab === "conversation" ? <Conversation {...ctx} openDoc={openDoc} /> : tab === "activity" ? <Activity {...ctx} /> : <Details key={c.id + ":" + (c.mobile || "") + (c.email || "")} {...ctx} />}
       </div>
       <div className="col" style={{ gap: 16 }}>
+        <HoundCard {...ctx} />
         <NextCard {...ctx} onHandOff={doHandOff} />
         <div className="card pad row" style={{ gap: 16, flexWrap: "nowrap" }}><Ring done={p.done} total={p.total} size={84} label={"of " + p.total} /><div className="col small" style={{ gap: 3 }}>{["received", "requested", "in_review", "says_none", "expected", "waived"].map((st) => { const n = T.itemsOf(e.id).filter((i: Row) => i.state === st).length; return n ? <span key={st} className="row" style={{ gap: 6 }}><span className="dots"><i className={st} /></span>{n} {(ISTATE[st] || st).toLowerCase()}</span> : null; })}</div></div>
         <div className="card pad small col" style={{ gap: 6 }}><h4>Where finished files go</h4><span>{s.firm.delivery.provider === "Download" ? "A zip you download" : s.firm.delivery.provider + " › " + s.firm.delivery.folder + " › " + e.year + " › " + (c.entity || c.last + ", " + c.first)}</span><span className="muted">{e.delivered ? "Last handed off " + when(T, e.delivered) : "Not handed off yet"}</span></div>

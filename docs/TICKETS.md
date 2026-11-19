@@ -410,4 +410,16 @@ A client's link now leads somewhere. Written as React components, turned into pl
 
 Engine additions, each with tests in `test/engine.test.js`: `consentFromPage`, `declineTexts`, `stopEmail`, `unsubscribeLink`. Pipeline: `clientUpload`, and the unsubscribe line and header on every email (`test/pipeline.test.js`).
 
+### Step 11: the Hound, Progress and the lock (same day)
+
+Every staff screen is now a real one. The holding page is gone.
+
+| Ticket | State |
+|---|---|
+| T-20 Hound console | Done: What it did (the engine's log with the reason for each line, filtered by kind), Coming up (send now, put off a day, who is being held back), Drafts to approve (with approve all), Rules it follows (Copilot or Autopilot, whether Claude writes, tone, when to add email, when to flag a waiting question, the pause after an upset reply, the call task). Rules are owner only and audited. On each client's page: take over and hand back, the date documents are needed by, what it knows, why it did that. NOT built: Ask the Hound |
+| Progress | Done: median days to a complete file, share accepted with no staff touch, messages, opt-outs, documents per day, how documents were handled, where clients are, why files need a person, by preparer |
+| T-83 Lock screens | Done: a paused or expired firm sees the lock page on every screen but Settings, and `/api/act` refuses everything except settings, deleting and resuming. A firm still being checked is not locked. There is no screen to choose a plan or to pause: billing is not built, so the expired page says to write to Tallyhound |
+
+The engine's log lines use several retired words ("quiet hours", "queue", "handoff", "outreach", "review"). The Hound screen and the client page show them in the product's vocabulary; the engine text is unchanged.
+
 Home's buttons for adding a client, the check-in for everyone, a checklist for everyone and starting are now live. Still left out: text registration, the heads-up wording, storage. Next in order: Clients list and add one client (T-16, T-38, T-56), the client page (T-16), the document viewer (T-17), conversation and approvals (T-18).

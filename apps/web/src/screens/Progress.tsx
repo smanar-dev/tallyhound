@@ -1,0 +1,32 @@
+// Progress: how the season is going. The numbers the launch plan says to watch (docs/LAUNCH_PLAN.md), ported from the demo's insights().
+// These are counts of what happened. Nothing here decides anything.
+import { Link } from "react-router-dom";
+import { useFirm } from "../lib/firm";
+import { Page } from "./Shell";
+import { Empty, Icon, UserAvatar } from "../components/ui";
+import { openTasks, type Row } from "../lib/select";
+import { dshort, STAT } from "../lib/fmt";
+
+function Bars({ rows }: { rows: [string, number][] }) { const m = Math.max(1, ...rows.map((r) => r[1])); return <div>{rows.map((r) => <div className="hb" key={r[0]}><span>{r[0]}</span><div className="track"><i style={{ width: (100 * r[1]) / m + "%" }} /></div><b>{r[1]}</b></div>)}</div>; }
+
+export function Progress() {
+  const { T } = useFirm(), s = T.S, docs: Row[] = s.docs.filter((d: Row) => d.engId), checked = new Set<string>(s.tasks.filter((t: Row) => t.docId).map((t: Row) => t.docId)), open = openTasks(T);
+  const done: number[] = s.engs.filter((e: Row) => e.completedAt && e.startedAt).map((e: Row) => (e.completedAt - e.startedAt) / T.DAY).sort((a: number, b: number) => a - b), med = done.length ? done[Math.floor(done.length / 2)]! : null;
+  const days = Array.from({ length: 10 }, (_, k) => { const d = new Date(s.now.getTime() - (9 - k) * T.DAY), on = docs.filter((x) => x.at.toDateString() === d.toDateString()); return { d, n: on.length, t: on.filter((x) => x.channel === "text").length }; }), mx = Math.max(1, ...days.map((x) => x.n));
+  const outs = s.msgs.filter((m: Row) => m.dir === "out" && m.kind === "auto").length, reasons: Record<string, number> = {}; s.engs.filter((e: Row) => e.stuck).forEach((e: Row) => { const k = T.STUCK[e.stuck][0]; reasons[k] = (reasons[k] || 0) + 1; });
+  const preps = s.users.filter((u: Row) => u.role !== "read_only").map((u: Row) => { const es: Row[] = s.engs.filter((e: Row) => (T.client(e.clientId) || {}).preparer === u.id); return { u, n: es.length, done: es.filter((e) => ["complete", "closed"].includes(e.status)).length, wait: open.filter((t) => es.some((e) => e.id === t.engId)).length }; }).filter((x: { n: number }) => x.n);
+  const auto = docs.filter((d) => d.state === "accepted" && !checked.has(d.id)).length, setup = T.setupTime();
+  if (!s.clients.length) return <Page title="Progress"><div className="card"><Empty><div className="big"><Icon name="chart" /></div><b>Nothing to measure yet.</b><br />Once clients are in and collecting, this page shows how fast files complete and how many documents needed a person.<br /><Link className="btn pri" style={{ marginTop: 12 }} to="/add-clients">Add clients</Link></Empty></div></Page>;
+  return <Page title="Progress">
+    {setup !== null ? <div className="card pad row"><span className="ico"><Icon name="clock" small /></span><div className="grow"><b>{setup < 90 ? setup + " minutes" : Math.round(setup / 60) + " hours"} from creating this firm to its first message</b><div className="small muted">The target is under an hour, with no call to us.</div></div></div> : null}
+    <div className="grid g4">{([[med === null ? "n/a" : med.toFixed(1), "Median days to a complete file", "from first message"], [(docs.length ? Math.round((100 * auto) / docs.length) : 0) + "%", "Accepted with no staff touch", docs.length + " documents in"], [outs, "Automated messages sent", s.msgs.filter((m: Row) => m.dir === "in").length + " replies"], [s.clients.filter((c: Row) => c.textConsent === "withdrawn").length, "Opted out of texts", "of " + s.clients.length + " clients"]] as [string | number, string, string][]).map((x) => <div className="card stat" key={x[1]}><b>{x[0]}</b><span>{x[1]}</span><small>{x[2]}</small></div>)}</div>
+    <div className="grid g2">
+      <div className="card pad"><h2>Documents received per day</h2><p className="small muted">Last 10 days.</p><div className="vbars" style={{ margin: "12px 0 26px" }}>{days.map((x) => <div className="vb" key={+x.d} title={dshort(x.d) + ": " + x.n + " (" + x.t + " by text, " + (x.n - x.t) + " other)"}><i style={{ height: (100 * x.n) / mx + "%", background: "var(--ink)" }} /><label>{x.d.getDate()}</label></div>)}</div>
+        <table className="sr"><caption>Documents received per day</caption><tbody>{days.map((x) => <tr key={+x.d}><th>{dshort(x.d)}</th><td>{x.n}</td></tr>)}</tbody></table></div>
+      <div className="card pad"><h2>How documents were handled</h2><div style={{ marginTop: 12 }}><Bars rows={[["Accepted on its own", auto], ["Accepted after a person checked", docs.filter((d) => d.state === "accepted" && checked.has(d.id)).length], ["Asked for again (year, blur, page)", docs.filter((d) => d.state === "rejected").length], ["Incomplete: chased for the rest", docs.filter((d) => (d.findings || []).includes("incomplete")).length], ["Duplicates ignored", docs.filter((d) => d.state === "duplicate").length], ["Waiting for a person", docs.filter((d) => d.state === "in_review").length], ["Discarded", docs.filter((d) => d.state === "discarded").length]]} /></div></div></div>
+    <div className="grid g2">
+      <div className="card pad"><h2>Where clients are</h2><div style={{ marginTop: 12 }}><Bars rows={Object.keys(STAT).map((k) => [STAT[k]![0], s.engs.filter((e: Row) => e.status === k).length] as [string, number]).filter((r) => r[1])} /></div></div>
+      <div className="card pad"><h2>Why files need a person</h2><div style={{ marginTop: 12 }}>{Object.keys(reasons).length ? <Bars rows={Object.keys(reasons).map((k) => [k, reasons[k]!])} /> : <p className="muted">Nobody needs you right now.</p>}</div></div></div>
+    <div className="card"><div className="hd"><h2>By preparer</h2></div><div className="tbl"><table><thead><tr><th>Preparer</th><th className="num">Clients</th><th className="num">Complete</th><th className="num">Waiting on them</th><th>Progress</th></tr></thead><tbody>{preps.map((p: { u: Row; n: number; done: number; wait: number }) => <tr key={p.u.id}><td><span className="row" style={{ gap: 8 }}><UserAvatar user={p.u} small />{p.u.name}</span></td><td className="num">{p.n}</td><td className="num">{p.done}</td><td className="num">{p.wait}</td><td style={{ width: "30%" }}><div className="bar"><i style={{ width: (100 * p.done) / p.n + "%", background: "var(--good)" }} /></div></td></tr>)}</tbody></table></div></div>
+  </Page>;
+}

@@ -17,7 +17,7 @@ React, built with Vite. `npm run build` writes `apps/web/dist`, and the web serv
 ## Rules
 
 - Text goes in as text. No `dangerouslySetInnerHTML`, no inline script. The Content-Security-Policy would block it and `e2e/rules.test.ts` checks it on every screen.
-- A button appears only when it works (`docs/UX.md` rule 6). A screen that is not built says so (`src/screens/Soon.tsx`).
+- A button appears only when it works (`docs/UX.md` rule 6).
 - Use the words in `docs/UX.md`. The retired ones fail the build.
 - Add a new screen's address to `ROUTES` in `e2e/rules.test.ts` so the three cross-screen checks cover it.
 
@@ -34,4 +34,6 @@ React, built with Vite. `npm run build` writes `apps/web/dist`, and the web serv
 | Add clients: the four-step import | T-24 | Done. CSV only |
 | All messages, with unknown senders | | Done |
 | Settings: your firm, people | | Done. The other settings pages are not built |
-| The Hound, Progress | T-20 | Not built: each shows a holding screen |
+| The Hound, and the Hound panel on the client page | T-20 | Done, except Ask the Hound |
+| Progress | | Done |
+| Lock page for a paused or expired firm | T-83 | Done |

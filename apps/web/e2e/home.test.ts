@@ -20,7 +20,7 @@ scene("web: a new owner signs in through the screens and lands on a Home that sa
   // The menu: four things, then More (rule 4). Settings is the owner's.
   assert.deepEqual((await page.locator(".side nav .nav").allTextContents()).map(text), ["Home", "Clients", "Needs you", "The Hound your assistant", "Add clients", "All messages", "Progress", "Settings"]);
   await page.locator(".side").getByRole("link", { name: "Add clients" }).click(); await page.getByText("Where is your client list today?").waitFor(); assert.equal(await page.title(), "Add clients · Tallyhound");
-  await page.locator(".side").getByRole("link", { name: "Progress" }).click(); await page.getByText("This screen is being built.").waitFor();
+  await page.locator(".side").getByRole("link", { name: "Progress" }).click(); await page.getByText("Nothing to measure yet.").waitFor();
   await page.getByRole("button", { name: "Sign out" }).click(); await page.waitForURL("**/signin"); await page.goto(W.url + "/"); await page.waitForURL("**/signin");
 });
 

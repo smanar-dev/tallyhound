@@ -36,6 +36,16 @@ export const ACTIONS: Record<string, Rule> = {
   startMany: { role: "staff", n: 1, run: (T, [ids]) => { let started = 0, capped = 0; const refused: string[] = []; for (const id of Array.isArray(ids) ? ids.slice(0, 5000) : []) { if (!T.eng(id)) continue; const r = T.start(id); if (!r) started++; else if (/free trial/.test(r)) capped++; else refused.push(r); } T.tick(); return { started, capped, refused: [...new Set(refused)] }; } },
   // chase
   start: staff(1), pause: staff(1), resume: staff(1), takeover: staff(2), handback: staff(2), approveMsg: staff(2), rejectMsg: staff(1), manual: staff(2), markHeadsUp: staff(1),
+  // The Hound's schedule and memory, as the demo's Coming up list and client panel change them.
+  sendNow: { role: "staff", n: 1, run: (T, [eid]) => { const e = T.eng(eid); if (!e || !e.next) return "Nothing is planned for this client"; if (!T.allowed(T.S.now)) return "It is outside sending hours. The Hound waits until they begin."; e.lastAutoDay = null; e.next = new Date(T.S.now); T.step(e); T.hlog(e, "decide", T.S.user.name + " sent the next message now", "A person asked for it from Coming up", "Rules"); return null; } },
+  snooze: { role: "staff", n: 1, run: (T, [eid]) => { const e = T.eng(eid); if (!e || !e.next) return "Nothing is planned for this client"; e.next = T.nextAllowed(new Date(new Date(e.next).getTime() + T.DAY)); T.hlog(e, "decide", T.S.user.name + " put the next message off by a day", "A person asked for it from Coming up", "Rules"); return null; } },
+  rememberNote: { role: "staff", n: 2, run: (T, [eid, text]) => { const e = T.eng(eid), t = String(text || "").replace(/[<>]/g, "").trim().slice(0, 200); if (!e || !t) return "Write a few words first"; T.remember(e, t, T.S.user.name); return null; } },
+  setTarget: { role: "staff", n: 2, run: (T, [eid, day]) => { const e = T.eng(eid), m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(day || "")); if (!e) return "No such client"; e.target = m ? new Date(+m[1]!, +m[2]! - 1, +m[3]!, 17) : null; T.hlog(e, "decide", "Date the documents are needed by " + (e.target ? "set" : "cleared"), "The Hound follows up more often as the date gets close", "Rules"); return null; } },
+  // How much the Hound does on its own. Owner only; every change is in the audit trail.
+  setHound: { role: "owner", n: 1, run: (T, [v]) => {
+    const H = T.S.firm.hound, x = (v && typeof v === "object" ? v : {}) as Record<string, unknown>, pick = <V,>(k: string, allowed: V[]) => { if (allowed.includes(x[k] as V) && H[k] !== x[k]) { H[k] = x[k]; changed.push(k); } }, changed: string[] = [];
+    pick("mode", ["copilot", "autopilot"]); pick("tone", ["warm", "brief", "formal"]); pick("emailAfter", [1, 2, 3, 99]); pick("slaHours", [2, 4, 8, 24]); pick("pauseDays", [1, 2, 3, 5, 7]); pick("callTask", [true, false]); pick("aiWrite", [true, false]);
+    if (changed.length) T.audit("settings.hound", "Changed: " + changed.join(", ") + (changed.includes("mode") ? ". Now on " + H.mode : "")); return changed; } },
   // check
   // Correcting what was read on a document that is already accepted, as the demo's viewer does: the old reading is kept as a version.
   correctDoc: { role: "staff", n: 2, run: (T, [id, v]) => {

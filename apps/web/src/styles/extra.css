@@ -38,3 +38,8 @@ button.dcard{display:block;width:100%;font:inherit;color:inherit;cursor:pointer}
 .pastebox{min-height:140px;width:100%;font:12px var(--mono)}
 .card.checkin{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink)}
 .ckrow{padding:5px 0;flex-wrap:nowrap;align-items:flex-start}
+.modecard{box-shadow:none;cursor:pointer;display:block}.modecard.on{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink)}
+.card.pad>textarea{width:100%;min-height:70px;font:inherit}
+.lockcard{gap:12px;text-align:center;align-items:center;padding:36px 28px}
+.lockcard .big{width:56px;height:56px;border-radius:16px;display:grid;place-items:center;background:var(--tint);color:var(--accent-ink)}
+table.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
