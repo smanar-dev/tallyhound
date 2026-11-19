@@ -18,7 +18,7 @@ export const ACTIONS: Record<string, Rule> = {
     return T.importRows(p); } },
   // checklist
   setItem: staff(3), addItem: staff(4), addRecommended: staff(2), dismissRec: staff(2), addFromPrior: staff(2), setCustomEs: staff(2),
-  saveTemplate: staff(1), removeTemplate: staff(1), applyTemplate: staff(3), sendCheckin: staff(1), applyCheckin: staff(2), skipQuestions: staff(2), customSuggest: staff(3),
+  saveTemplate: owner(1), removeTemplate: owner(1), applyTemplate: staff(3), sendCheckin: staff(1), applyCheckin: staff(2), skipQuestions: staff(2), customSuggest: staff(3),
   // Editing a client's details, as the demo's Details tab does it. A changed mobile number is a new number: any OK to text is reset
   // and a wrong-number flag is cleared (spec TH-CON-9). The language is not editable here while Spanish is off for pilots.
   saveClient: { role: "staff", n: 2, run: (T, [cid, v]) => {
@@ -67,6 +67,10 @@ export const ACTIONS: Record<string, Rule> = {
   // alerts: read marks, exactly as the demo's bell sets them
   alertRead: { role: "staff", n: 1, run: (T, [id]) => { const a = (T.S.alerts || []).find((x: { id: string }) => x.id === id); if (a) a.read = true; return !!a; } },
   alertsRead: { role: "staff", n: 0, run: (T) => { (T.S.alerts || []).forEach((a: { read?: boolean }) => { a.read = true; }); return true; } },
+  // The emergency stop: every automated message is held until an owner lifts it. STOP and HELP replies still go (the engine sees to that).
+  stopAll: { role: "owner", n: 0, run: (T) => { T.S.firm.stopped = true; T.audit("emergency.stop", "All automated messages held"); return true; } },
+  // How long after a file is closed its documents and message text are deleted.
+  setCloseRetention: { role: "owner", n: 1, run: (T, [days]) => { T.S.firm.retention = Math.min(730, Math.max(30, Math.round(+(days as number)) || 90)); T.audit("settings.retention", T.S.firm.retention + " days after a file is closed"); return T.S.firm.retention; } },
   // the emergency stop is lifted by an owner
   resumeAll: { role: "owner", n: 0, run: (T) => { T.S.firm.stopped = false; T.audit("emergency.resume", "Messages resumed"); return true; } },
   // The firm's own details. The Tallyhound address is not editable: mail to it is how the firm is found.

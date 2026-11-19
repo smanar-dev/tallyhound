@@ -420,6 +420,10 @@ Every staff screen is now a real one. The holding page is gone.
 | Progress | Done: median days to a complete file, share accepted with no staff touch, messages, opt-outs, documents per day, how documents were handled, where clients are, why files need a person, by preparer |
 | T-83 Lock screens | Done: a paused or expired firm sees the lock page on every screen but Settings, and `/api/act` refuses everything except settings, deleting and resuming. A firm still being checked is not locked. There is no screen to choose a plan or to pause: billing is not built, so the expired page says to write to Tallyhound |
 
+| T-39 Checklist templates | Done: Settings, Checklists. Make, edit and remove a ready-made checklist; removing says how many clients got their list from it. Owner only (T-146) |
+| T-30 Security checklist | The owner's page is done: Settings, Security and data. Copies held and deleted, the four keep-for times and the after-close time inside the engine's limits, what is never kept, the emergency stop, the paragraph for the firm's written security plan, and the log of everything that was done. Not done: the incident plan, the 7216 step |
+| T-146 People and templates | Template edits are owner only. Removing a person still deletes their sign-in row |
+
 The engine's log lines use several retired words ("quiet hours", "queue", "handoff", "outreach", "review"). The Hound screen and the client page show them in the product's vocabulary; the engine text is unchanged.
 
 Home's buttons for adding a client, the check-in for everyone, a checklist for everyone and starting are now live. Still left out: text registration, the heads-up wording, storage. Next in order: Clients list and add one client (T-16, T-38, T-56), the client page (T-16), the document viewer (T-17), conversation and approvals (T-18).

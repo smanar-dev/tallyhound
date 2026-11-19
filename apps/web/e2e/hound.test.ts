@@ -50,3 +50,22 @@ scene("Progress counts what happened; a paused firm sees the lock page everywher
   assert.equal((await W.state(firmId)).S.clients.length, 3, "nothing was added while paused");
   await page.goto(W.url + "/"); await page.getByRole("button", { name: "Resume now" }).click(); await page.getByText(/^Resumed/).waitFor(); await page.locator("h1", { hasText: /^Good / }).waitFor(); assert.equal((await W.state(firmId)).access().ok, true);
 });
+
+scene("settings: an owner makes a ready-made checklist, sets how long copies are kept, and can hold every message", async (W) => {
+  const { firmId } = await busyFirm(W), page = await W.signIn("pat1@firm1.test"); await page.goto(W.url + "/settings?tab=checklists"); await page.getByRole("heading", { name: "Ready-made checklists" }).waitFor();
+  let T: Engine = await W.state(firmId); const before = T.templates().length; assert.equal(await page.locator(".card .list .li").count(), before);
+  await page.getByRole("button", { name: "New checklist" }).click(); const dlg = page.getByRole("dialog"); await dlg.getByRole("button", { name: "Save" }).click(); await dlg.getByRole("alert").waitFor();
+  await dlg.getByLabel("Name").fill("Retired couple"); await dlg.getByLabel("Social Security benefit statement").check(); await dlg.getByLabel(/^1099-R|retirement/i).first().check(); await dlg.getByRole("button", { name: "Save" }).click(); await dlg.waitFor({ state: "detached" });
+  T = await W.state(firmId); const made = T.templates().find((t: { name: string }) => t.name === "Retired couple"); assert.ok(made); assert.ok(made.items.includes("SSA1099")); assert.equal(await page.locator(".card .list .li").count(), before + 1);
+  // It is offered when choosing a checklist for a client.
+  await page.goto(W.url + "/clients?do=assign"); await page.getByRole("dialog").locator("select").first().selectOption({ label: "Retired couple (" + made.items.length + ")" }); await page.keyboard.press("Escape");
+  await page.goto(W.url + "/settings?tab=checklists"); await page.locator(".li", { hasText: "Retired couple" }).getByRole("button", { name: "Remove" }).click(); assert.match(text(await page.getByRole("dialog").textContent()), /No client's list came from it/); await page.getByRole("dialog").getByRole("button", { name: "Remove" }).click(); await page.getByText(/^Checklist removed/).waitFor();
+  // Security and data: the engine's numbers, and its limits.
+  await page.getByRole("tab", { name: "Security and data" }).click(); await page.getByRole("heading", { name: "How long Tallyhound keeps a document" }).waitFor(); const M = (await W.state(firmId)).dataMap();
+  assert.match(text(await page.locator(".statgrid").textContent()), new RegExp("^" + M.docsHeld + "document copies held now" + M.docsDeleted + "already deleted"));
+  await page.getByLabel("After it reaches your storage").fill("0"); await page.getByLabel("Longest any copy is kept, whatever happens").fill("9999"); await page.getByRole("button", { name: "Save", exact: true }).click(); await page.getByText(/^Saved\. Anything already past/).waitFor();
+  T = await W.state(firmId); assert.equal(T.retain().afterDelivery, 0); assert.equal(T.retain().max, 730, "the engine keeps the number inside its limit"); assert.ok(T.S.audit.some((a: { action: string }) => a.action === "settings.retention"));
+  assert.ok((await page.locator(".audit tbody tr").count()) > 5); assert.match(text(await page.locator(".plantext").textContent()), /Service provider: Tallyhound/);
+  await page.getByRole("button", { name: "Hold all messages" }).click(); await page.getByRole("dialog").getByRole("button", { name: "Hold all messages" }).click(); await page.locator(".banner.bad").waitFor();
+  assert.equal((await W.state(firmId)).S.firm.stopped, true); await page.locator(".banner.bad").getByRole("button", { name: "Resume messages" }).click(); await page.locator(".banner.bad").waitFor({ state: "detached" }); assert.equal((await W.state(firmId)).S.firm.stopped, false);
+});

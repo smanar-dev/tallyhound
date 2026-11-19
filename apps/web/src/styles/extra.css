@@ -43,3 +43,7 @@ button.dcard{display:block;width:100%;font:inherit;color:inherit;cursor:pointer}
 .lockcard{gap:12px;text-align:center;align-items:center;padding:36px 28px}
 .lockcard .big{width:56px;height:56px;border-radius:16px;display:grid;place-items:center;background:var(--tint);color:var(--accent-ink)}
 table.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.pickforms{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px 14px;margin:0}
+.statgrid{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.plantext{white-space:pre-wrap;font:12.5px/1.5 var(--body);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px;margin:0}
+.tbl.audit{max-height:420px;overflow:auto}

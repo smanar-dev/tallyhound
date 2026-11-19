@@ -96,7 +96,7 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
   });
   // One staff action: { fn, args }, or several in one turn: { calls: [{ fn, args }] }. The role is checked here, for every call, before any runs.
   // The rules are the engine's. Several calls load and save the firm once, so "assign a checklist to 500 clients" is one request.
-  const WHILE_OFF = ["resumeNow", "saveFirm", "setRetain", "deleteDocsNow", "purge", "alertRead", "alertsRead", "setHound"];
+  const WHILE_OFF = ["resumeNow", "saveFirm", "setRetain", "setCloseRetention", "deleteDocsNow", "purge", "alertRead", "alertsRead", "setHound", "stopAll", "resumeAll"];
   const NO: Record<string, string> = { read_only: "Your account can look but not change things. Ask an owner to change your role.", other: "Only an owner can do that." };
   f.post("/api/act", { preHandler: full }, async (req, reply) => {
     const u = req.who!.user, b = body(req), many = Array.isArray(b.calls), calls = (many ? (b.calls as unknown[]) : [b]).map((c) => (c && typeof c === "object" ? c : {}) as { fn?: unknown; args?: unknown });

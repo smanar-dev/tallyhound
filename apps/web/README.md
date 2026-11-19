@@ -33,7 +33,7 @@ React, built with Vite. `npm run build` writes `apps/web/dist`, and the web serv
 | Needs you, and the document viewer | T-17, T-19, T-40 | Done. PDFs open in their own tab |
 | Add clients: the four-step import | T-24 | Done. CSV only |
 | All messages, with unknown senders | | Done |
-| Settings: your firm, people | | Done. The other settings pages are not built |
+| Settings: your firm, people, checklists, security and data | T-39, T-30 | Done. Not built: message wording, sending hours, where files go, plan |
 | The Hound, and the Hound panel on the client page | T-20 | Done, except Ask the Hound |
 | Progress | | Done |
 | Lock page for a paused or expired firm | T-83 | Done |
