@@ -87,8 +87,8 @@ for (const kind of KINDS) {
     assert.equal((await b.call("POST", "/api/act", add, {})).status, 403, "a plain form post from another site has no header");
     assert.equal((await b.call("POST", "/api/act", add, { "x-tallyhound": "1", origin: "https://evil.example" })).status, 403);
     assert.equal((await b.get("/api/state")).json.state.clients.length, 0);
-    const page = await H.browser().get("/signin"); assert.match(String(page.headers["content-security-policy"]), /default-src 'self'/); assert.ok(!/<script(?![^>]*src=)/.test(page.raw.body) && !/ style=| on[a-z]+=/.test(page.raw.body), "no inline script or style");
-    assert.equal((await H.browser().get("/")).status, 302);
+    const page = await H.browser().get("/signin"); assert.match(String(page.headers["content-security-policy"]), /default-src 'self'/);
+    assert.equal((await H.browser().get("/api/nothing")).status, 404); assert.equal((await H.browser().get("/assets/nothing.js")).status, 404);
     await H.close();
   });
 

@@ -338,4 +338,17 @@ Still different from the specification, each needing a decision or a ticket:
 
 **T-143 Server-side PDF page images (week 3, replaces the open part of T-86).** A PDF is sent to the model whole, as a document, which the Claude adapter already does. `readBundle` (several forms in one PDF) needs `file.pages`, one image per page, and nothing produces them on the server yet. Until this is built a multi-form PDF is read as one document.
 
-**T-142 The product screens: how to build them (DECISION, before T-15).** `apps/server/src/actions.ts` and `GET /api/state` are shaped so the demo's interface could run in the browser against the server: the engine draws from the state, and each action is sent to `/api/act`. That reuses `reference/artifact/ui.js` instead of rewriting its 1,180 lines in React. Against it: T-52 asks for a framework that escapes by default, and `ui.js` builds HTML from strings and uses inline handlers the Content-Security-Policy forbids. Decide before starting T-15.
+**T-142 The product screens: DECIDED by Jordan, November 19: build them in React.** The engine runs in the browser as a read-only model and every change goes through `/api/act`. See `apps/web/README.md`.
+
+### Step 5: the React web app begins (same day)
+
+| Ticket | State |
+|---|---|
+| T-139 Sign-in screens | Rebuilt in React; the plain HTML pages are gone |
+| T-15 App shell | Done: menu, client search, alerts, banners. Home renders from live data |
+| T-41 Pipeline on Home | Done: the five counts are `T.pipeline()` itself, each a link. A browser test compares them with the engine |
+| T-52 Injection test | Done for every screen that exists, in CI: `apps/web/e2e/rules.test.ts`. The Content-Security-Policy has no inline script, and the same test fails if the browser reports a blocked resource |
+| T-65 UX checks | Vocabulary and empty-state checks in CI for every screen. The first-run click count waits for the screens it clicks through |
+| T-53 Keyboard and labels | Not started |
+
+Home leaves out the buttons whose flows are not built yet. Next in order: Clients list and add one client (T-16, T-38, T-56), the client page (T-16), the document viewer (T-17), conversation and approvals (T-18).

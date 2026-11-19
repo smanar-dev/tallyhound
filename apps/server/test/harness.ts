@@ -20,9 +20,9 @@ export const APP_URL = "https://app.tallyhound.test";
 
 export const TWILIO_TOKEN = "twilio-test-token", PM = { user: "postmark", pass: "hook-pass" };
 
-export async function build(kind: "memory" | "postgres" = "memory", opt: { ai?: unknown; prepare?: PrepareOpts } = {}) {
+export async function build(kind: "memory" | "postgres" = "memory", opt: { ai?: unknown; prepare?: PrepareOpts; appUrl?: string } = {}) {
   let t = new Date("2027-01-25T16:05:00Z"); const clock = () => t;
-  const keyring = kitCrypto.localKeyring(randomBytes(32)), schema = "th_test_" + randomBytes(6).toString("hex"); let inner: ReturnType<typeof kitMemory.memoryStore>, queue: QueueStore, auth: AuthStore, pool: pg.Pool | null = null, auditRows: () => Promise<{ action: string; actor: string }[]>;
+  const APP = opt.appUrl || APP_URL, keyring = kitCrypto.localKeyring(randomBytes(32)), schema = "th_test_" + randomBytes(6).toString("hex"); let inner: ReturnType<typeof kitMemory.memoryStore>, queue: QueueStore, auth: AuthStore, pool: pg.Pool | null = null, auditRows: () => Promise<{ action: string; actor: string }[]>;
   if (kind === "postgres") {
     const admin = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
     await admin.query("create schema " + schema); await admin.end();   // its own schema, so test files can run side by side
@@ -42,14 +42,14 @@ export async function build(kind: "memory" | "postgres" = "memory", opt: { ai?: 
   } });
   const inbox = createInbox({ queue, store, app, handlers: handlers({ app, twilio, prepare: opt.prepare }), clock });
   const links: { to: string; url: string }[] = [];
-  const signIn = createSignIn({ auth, secrets: firmSecrets(store, keyring, kitCrypto), mailer: { async signInLink(to, url) { links.push({ to, url }); } }, linkSecret: "test-secret", appUrl: APP_URL, clock });
+  const signIn = createSignIn({ auth, secrets: firmSecrets(store, keyring, kitCrypto), mailer: { async signInLink(to, url) { links.push({ to, url }); } }, linkSecret: "test-secret", appUrl: APP, clock });
   const firms = createFirms({ app, auth, linkHost: "go.tallyhound.test" }), worker = createWorker({ app, auth, clock, inbox });
-  const server = await buildServer({ app, auth, signIn, firms, readState: (id) => store.readState(id), appUrl: APP_URL, secureCookies: true, publicDir: join(HERE, "../public"), prepare: opt.prepare, hooks: { store, inbox, twilioAuthToken: TWILIO_TOKEN, postmarkHook: PM } });
+  const server = await buildServer({ app, auth, signIn, firms, readState: (id) => store.readState(id), appUrl: APP, secureCookies: APP.startsWith("https:"), webDir: join(HERE, "../../web/dist"), prepare: opt.prepare, hooks: { store, inbox, twilioAuthToken: TWILIO_TOKEN, postmarkHook: PM } });
 
   // A browser: keeps its cookie, sends the header our pages send.
   function browser() {
     let cookie = "";
-    const call = async (method: "GET" | "POST" | "DELETE", url: string, body?: unknown, headers: Record<string, string> = { "x-tallyhound": "1", origin: APP_URL }) => {
+    const call = async (method: "GET" | "POST" | "DELETE", url: string, body?: unknown, headers: Record<string, string> = { "x-tallyhound": "1", origin: APP }) => {
       const r = await server.inject({ method, url, payload: body === undefined ? undefined : JSON.stringify(body), headers: { ...(body === undefined ? {} : { "content-type": "application/json" }), ...headers, ...(cookie ? { cookie } : {}) } });
       const set = r.cookies.find((c) => c.name === "th_s"); if (set) cookie = set.value ? "th_s=" + set.value : "";
       let json: any = null; try { json = r.json(); } catch { /* a page, not JSON */ }   // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -59,7 +59,7 @@ export async function build(kind: "memory" | "postgres" = "memory", opt: { ai?: 
   }
   // Twilio calling in, signed the way Twilio signs. badSig: a caller who does not hold the token.
   const twilioPost = (path: string, params: Record<string, string>, badSig = false) => {
-    const sig = createHmac("sha1", badSig ? "wrong" : TWILIO_TOKEN).update(APP_URL + path + Object.keys(params).sort().map((k) => k + params[k]).join("")).digest("base64");
+    const sig = createHmac("sha1", badSig ? "wrong" : TWILIO_TOKEN).update(APP + path + Object.keys(params).sort().map((k) => k + params[k]).join("")).digest("base64");
     return server.inject({ method: "POST", url: path, payload: new URLSearchParams(params).toString(), headers: { "content-type": "application/x-www-form-urlencoded", "x-twilio-signature": sig } });
   };
   const postmarkPost = (path: string, body: unknown, pass = PM.pass) => server.inject({ method: "POST", url: path, payload: JSON.stringify(body), headers: { "content-type": "application/json", authorization: "Basic " + Buffer.from(PM.user + ":" + pass).toString("base64") } });

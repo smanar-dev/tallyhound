@@ -7,7 +7,7 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:18
@@ -26,3 +26,7 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run fuzz
+      # The staff web app: build it, then drive it in a real browser against the real web service.
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e

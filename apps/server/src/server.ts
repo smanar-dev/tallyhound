@@ -3,7 +3,7 @@
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import cookie from "@fastify/cookie";
 import QRCode from "qrcode";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { extname, join } from "node:path";
 import type { App, Engine, Role } from "./kit.ts";
 import type { AuthStore, Session, User } from "./authstore.ts";
@@ -17,13 +17,13 @@ import type { PrepareOpts } from "./kit.ts";
 export interface ServerDeps {
   app: App; auth: AuthStore; signIn: SignIn; firms: Firms;
   readState(firmId: string): Promise<string | null>;
-  appUrl: string; secureCookies: boolean; publicDir: string; prepare?: PrepareOpts;
+  appUrl: string; secureCookies: boolean; webDir: string; prepare?: PrepareOpts;
   health?: () => Record<string, unknown> | Promise<Record<string, unknown>>;
   hooks?: Omit<HookDeps, "app" | "store" | "publicUrl" | "log"> & { store: HookDeps["store"] };
   log?: (event: string, ...ids: unknown[]) => void;
 }
 const COOKIE = "th_s";
-const TYPES: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml" };
+const TYPES: Record<string, string> = { ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".woff2": "font/woff2", ".png": "image/png" };
 declare module "fastify" { interface FastifyRequest { who?: { user: User; session: Session } } }
 
 export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
@@ -127,12 +127,16 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
   f.post("/api/users/:id/role", { preHandler: full }, async (req) => { const u = req.who!.user; await d.firms.setRole(u.firmId, u, (req.params as { id: string }).id, str(body(req).role) as Role); return { ok: true }; });
   f.delete("/api/users/:id", { preHandler: full }, async (req) => { const u = req.who!.user; await d.firms.removeUser(u.firmId, u, (req.params as { id: string }).id); return { ok: true }; });
 
-  // ---- pages: plain files, no inline script ----
-  const pages = new Map<string, { type: string; bytes: Buffer }>();
-  for (const name of readdirSync(d.publicDir)) if (TYPES[extname(name)]) pages.set("/" + name, { type: TYPES[extname(name)]!, bytes: readFileSync(join(d.publicDir, name)) });
-  const page = (name: string) => async (_req: FastifyRequest, reply: FastifyReply) => { const p = pages.get(name)!; return reply.type(p.type).send(p.bytes); };
-  for (const name of pages.keys()) if (!name.endsWith(".html")) f.get(name, page(name));
-  f.get("/signin", page("/signin.html")); f.get("/signin/open", page("/signin.html"));
-  f.get("/", async (req, reply) => { const w = await who(req); if (!w || w.session.stage !== "full") return reply.redirect("/signin"); return page("/home.html")(req, reply); });
+  // ---- the staff web app (apps/web, built by `npm run build`) ----
+  // Files under /assets carry a fingerprint in their name, so a browser may keep them. Every other address gets the app's one page,
+  // which works out what to show and asks /api/me who is signed in. Nothing here is built from data: it is the same file for everyone.
+  const assets = join(d.webDir, "assets"), files = new Map<string, { type: string; bytes: Buffer }>(), index = existsSync(join(d.webDir, "index.html")) ? readFileSync(join(d.webDir, "index.html")) : null;
+  if (existsSync(assets)) for (const name of readdirSync(assets)) if (TYPES[extname(name)]) files.set(name, { type: TYPES[extname(name)]!, bytes: readFileSync(join(assets, name)) });
+  f.get("/assets/:name", async (req, reply) => { const a = files.get((req.params as { name: string }).name); if (!a) return reply.code(404).send("Not found"); return reply.header("cache-control", "public, max-age=31536000, immutable").type(a.type).send(a.bytes); });
+  f.setNotFoundHandler(async (req, reply) => {
+    if (req.method !== "GET" || /^\/(api|auth|hooks|assets)\//.test(req.url)) return reply.code(404).send({ error: "not_found", message: "There is nothing at that address." });
+    if (!index) return reply.code(503).type("text/plain").send("The web app has not been built. Run: npm run build");
+    return reply.type("text/html; charset=utf-8").send(index);
+  });
   return f;
 }

@@ -18,6 +18,11 @@ export const ACTIONS: Record<string, Rule> = {
   start: staff(1), pause: staff(1), resume: staff(1), takeover: staff(2), handback: staff(2), approveMsg: staff(2), rejectMsg: staff(1), manual: staff(2), markHeadsUp: staff(1),
   // check
   decideTask: staff(3), deliver: staff(1), closeEng: staff(1),
+  // alerts: read marks, exactly as the demo's bell sets them
+  alertRead: { role: "staff", n: 1, run: (T, [id]) => { const a = (T.S.alerts || []).find((x: { id: string }) => x.id === id); if (a) a.read = true; return !!a; } },
+  alertsRead: { role: "staff", n: 0, run: (T) => { (T.S.alerts || []).forEach((a: { read?: boolean }) => { a.read = true; }); return true; } },
+  // the emergency stop is lifted by an owner
+  resumeAll: { role: "owner", n: 0, run: (T) => { T.S.firm.stopped = false; T.audit("emergency.resume", "Messages resumed"); return true; } },
   // owner only: how long data is kept, deleting copies, ending a pause
   setRetain: owner(2), deleteDocsNow: owner(1), purge: owner(1), resumeNow: owner(0)
 };

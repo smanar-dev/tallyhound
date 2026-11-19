@@ -1,0 +1,82 @@
+// What every staff screen sits in: the menu, the bar with client search and alerts, and the banners (docs/UX.md rule 4: four things in the main menu).
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { useFirm } from "../lib/firm";
+import { api } from "../lib/api";
+import { draftsToApprove, needsYou, type Row } from "../lib/select";
+import { cname, STAT, when } from "../lib/fmt";
+import { Avatar, Chip, Icon, UserAvatar } from "../components/ui";
+import type { IconName } from "../lib/icons";
+
+const ROLE = { owner: "Owner", staff: "Staff", read_only: "Read-only" } as const;
+
+export function Side({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { T, me, can } = useFirm(), s = T.S, loc = useLocation();
+  const waiting = needsYou(T).length + draftsToApprove(T).length;
+  const item = (to: string, label: ReactNode, icon: IconName, n?: number) => <NavLink key={to} to={to} end={to === "/"} className={({ isActive }) => "nav" + (isActive || (to === "/clients" && loc.pathname.startsWith("/clients/")) ? " on" : "")} onClick={onClose}><Icon name={icon} />{label}{n ? <span className="n">{n}</span> : null}</NavLink>;
+  const signOut = () => api.post("/auth/signout").finally(() => window.location.replace("/signin"));
+  return <>
+    <aside className={"side" + (open ? " open" : "")}>
+      <Link className="logo" to="/" onClick={onClose}><span className="mark" />tallyhound</Link>
+      <div className="firm"><b>{s.firm.name}</b><span>Tax year {s.firm.taxYear || 2026} · {s.engs.length} clients</span></div>
+      <nav className="col" style={{ gap: 4 }} aria-label="Main">
+        {item("/", "Home", "home")}{item("/clients", "Clients", "users")}{item("/needs-you", "Needs you", "review", waiting)}
+        {item("/hound", <>The Hound <small style={{ fontWeight: 500, opacity: 0.6, marginLeft: 4 }}>your assistant</small></>, "spark")}
+        <div className="navsec">More</div>
+        {item("/add-clients", "Add clients", "upload")}{item("/messages", "All messages", "inbox", s.tray.length)}{item("/progress", "Progress", "chart")}
+        {can("owner") ? item("/settings", "Settings", "gear") : null}
+      </nav>
+      <div className="grow" />
+      <div className="who"><UserAvatar user={s.user} small /><span className="me trunc">{me.name}<small>{ROLE[me.role]}</small></span><button className="btn sm ghost" onClick={signOut}>Sign out</button></div>
+    </aside>
+    <div className={"scrim" + (open ? " on" : "")} onClick={onClose} />
+  </>;
+}
+
+function Bell() {
+  const { T, act } = useFirm(), nav = useNavigate(), [open, setOpen] = useState(false), box = useRef<HTMLDivElement>(null);
+  const alerts: Row[] = T.S.alerts || [], unread = alerts.filter((a) => !a.read).length, LV: Record<string, string> = { high: "bad", medium: "warn", low: "", info: "info" };
+  useEffect(() => { if (!open) return; const out = (ev: MouseEvent) => { if (box.current && !box.current.contains(ev.target as Node)) setOpen(false); }, esc = (ev: KeyboardEvent) => { if (ev.key === "Escape") setOpen(false); }; document.addEventListener("mousedown", out); document.addEventListener("keydown", esc); return () => { document.removeEventListener("mousedown", out); document.removeEventListener("keydown", esc); }; }, [open]);
+  const go = (a: Row) => { setOpen(false); void act("alertRead", a.id).catch(() => {}); if (a.engId) nav("/clients/" + a.engId + "?tab=" + (a.kind === "handoff" || a.kind === "sla" ? "conversation" : "checklist")); };
+  return <div className="rel" ref={box}>
+    <button className="btn icon ghost" style={{ position: "relative" }} aria-label={unread ? "Alerts, " + unread + " unread" : "Alerts"} aria-expanded={open} onClick={() => setOpen(!open)}><Icon name="bell" />{unread ? <span className="badge-dot">{unread}</span> : null}</button>
+    {open ? <div className="menu-pop" style={{ width: "min(380px,90vw)", maxHeight: 420, overflow: "auto" }}>
+      <div className="row" style={{ padding: "6px 10px" }}><b>Alerts</b><span className="sp" />{unread ? <button className="btn sm ghost" onClick={() => void act("alertsRead").catch(() => {})}>Mark all read</button> : null}</div>
+      {alerts.length ? alerts.slice(0, 10).map((a) => <button key={a.id} style={{ alignItems: "flex-start", opacity: a.read ? 0.6 : 1 }} onClick={() => go(a)}><Chip tone={LV[a.level]}>{a.level}</Chip><span style={{ fontWeight: 500, whiteSpace: "normal" }}>{a.text}<br /><span className="small faint">{when(T, a.at)}</span></span></button>) : <div className="small muted" style={{ padding: 10 }}>No alerts. Failed sends, questions past their reply time and storage problems show up here.</div>}
+    </div> : null}
+  </div>;
+}
+
+function Search() {
+  const { T } = useFirm(), nav = useNavigate(), [q, setQ] = useState(""), t = q.trim().toLowerCase();
+  const res: Row[] = t ? T.S.clients.filter((c: Row) => (c.first + " " + c.last + " " + (c.email || "") + " " + (c.mobile || "")).toLowerCase().includes(t)).slice(0, 6) : [];
+  return <div className="search">
+    <input type="search" placeholder="Find a client by name, email or phone" aria-label="Find a client" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") setQ(""); }} />
+    <Icon name="search" small />
+    {t ? <div className="sres">{res.length ? res.map((c) => { const e = T.engOf(c.id); return e ? <button key={c.id} onClick={() => { setQ(""); nav("/clients/" + e.id); }}><Avatar first={c.first} last={c.last} small /><span><b>{cname(c)}</b><br /><span className="small muted">{(STAT[e.status] || [e.status])[0]} · {c.email || c.mobile}</span></span></button> : null; }) : <div className="small muted" style={{ padding: 8 }}>No client matches.</div>}</div> : null}
+  </div>;
+}
+
+export function Banners() {
+  const { T, can, act } = useFirm(), f = T.S.firm, acc = T.access(), nav = useNavigate();
+  return <>
+    {acc.state === "trial" && (acc.daysLeft <= 7 || acc.clientsLeft === 0) ? <div className="banner info" style={{ display: "flex" }}><Icon name="clock" small /><span>Free trial: {acc.daysLeft} day{acc.daysLeft === 1 ? "" : "s"} left{acc.clientsLeft === 0 ? ", and all " + T.TRIAL_CLIENTS + " trial clients are in use" : ""}. Collecting stops when it ends unless you choose a plan.</span>{can("owner") ? <button className="btn sm" onClick={() => nav("/settings?tab=plan")}>See plans</button> : null}</div> : null}
+    {acc.state === "checking" ? <div className="banner info" style={{ display: "flex" }}><Icon name="clock" small /><span>{acc.reason} Nothing is sent to clients until it is done.</span></div> : null}
+    {f.stopped ? <div className="banner bad"><Icon name="alert" small />All automated messages are stopped. Nothing is sent until an owner resumes.{can("owner") ? <button className="btn sm" onClick={() => void act("resumeAll").then(() => undefined, () => undefined)}>Resume messages</button> : null}</div> : null}
+    {f.senderStatus === "submitted" ? <div className="banner note"><Icon name="alert" small />Your text number is waiting for carrier approval. Clients are reached by email with the upload link until then.</div> : null}
+  </>;
+}
+
+/** One screen: its title bar, the banners, and a scrolling page. */
+export function Page({ title, actions, children }: { title: string; actions?: ReactNode; children: ReactNode }) {
+  const [navOpen, setNavOpen] = useState(false);
+  useEffect(() => { document.title = title + " · Tallyhound"; }, [title]);
+  return <>
+    <Side open={navOpen} onClose={() => setNavOpen(false)} />
+    <div className="main">
+      <div className="topbar"><button className="btn icon ghost menu" aria-label="Menu" onClick={() => setNavOpen(true)}><Icon name="menu" /></button><h2 className="hide-s" style={{ whiteSpace: "nowrap" }}>{title}</h2><Search /><span className="sp" />{actions}<Bell /></div>
+      <Banners />
+      <div className="scroll" id="scroll"><div className="page col" style={{ gap: 20 }}>{children}</div></div>
+    </div>
+  </>;
+}

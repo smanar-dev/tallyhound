@@ -12,6 +12,7 @@ You need Node 22.18 or later and a Postgres server. TypeScript runs directly; th
     set -a; . ./.env; set +a
     npm run admin -- create-firm --name "Larkin & Poe CPAs" --inbox larkinpoe@docs.tallyhound.com \
         --zone America/Chicago --owner-name "Pat Larkin" --owner-email pat@larkinpoe.com --sms 6155550100
+    npm run build                 # the staff web app, served by the web service
     npm start
 
 `create-firm` brings the database up to date first. Open http://localhost:3000, enter the owner's email, and copy the sign-in link from the terminal (it is only printed when no email service is connected, and never in production).
@@ -34,7 +35,6 @@ A new firm is not checked: nothing is sent or read until `npm run admin -- firm-
 | `src/worker.ts` | Calls `tick` for every firm every five minutes, and works the queue every 15 seconds |
 | `src/runtime.ts` | Reads the environment, connects everything, runs database migrations |
 | `src/admin.ts` | `migrate`, `create-firm`, `firm-check`, `firms` |
-| `public/` | Sign-in screens and a holding page. No inline script or style; the Content-Security-Policy forbids it |
 | `test/` | 33 tests. 21 of them run in memory and again on a real Postgres when `DATABASE_URL` is set |
 
 ## Rules this code keeps

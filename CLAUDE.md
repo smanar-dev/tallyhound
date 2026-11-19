@@ -14,7 +14,7 @@ Every document must pass three checks, and `T.verdict(doc)` is the only place th
 - Sending is claim, send, record (`withFirm` in `packages/core/pipeline.js`). A message is marked and saved before the provider is called. Never add a code path that calls a provider for a message that has not been claimed and saved, and never resend a claimed message automatically.
 - Pricing is flat by client count (`docs/PRICING.md`). Do not build per-return, per-document or per-message billing.
 - `packages/engine/engine.js` is the source of truth for every product rule. It is the same file the demo runs. Do not rewrite it. Change it in small steps, and add a test in `test/engine.test.js` for every change.
-- Run `npm run check` (type check, lint, all tests) before and after every change. All tests must pass before a ticket is done. Set `DATABASE_URL` to a throwaway Postgres to include the tests that need a real server.
+- Run `npm run check` (type check, lint, all tests, the web build and the browser tests) before and after every change. All tests must pass before a ticket is done. Set `DATABASE_URL` to a throwaway Postgres to include the tests that need a real server.
 - The engine never talks to the outside world. Texting, email, storage and the model live behind the interfaces in `packages/core/pipeline.js`. Keep it that way.
 - The model reads and writes. Code decides. Never let model output trigger an action without the engine's checks: `outputCheck`, `composeDone`, and the opt-out rule in `inboundText`.
 - Opt-out wording always wins. Consent replies (STOP, START, HELP) always send immediately, in every mode.
@@ -30,6 +30,7 @@ Every document must pass three checks, and `T.verdict(doc)` is the only place th
 - `packages/core/crypto.js` key per firm, sealing, the encrypted store wrapper
 - `packages/adapters` Claude API, Twilio (send, webhook signature, media), inbound email, Postgres store, Karbon import. None run live yet
 - `apps/server` the web service (TypeScript, runs without a build step): sign-in, `/api/state`, role-checked actions, the timer, the admin command. See `apps/server/README.md`. A browser reaches only the engine functions listed in `apps/server/src/actions.ts`
+- `apps/web` the staff web app (React, built with Vite into `apps/web/dist`, which the web service serves). The engine runs in the browser as a read-only model of the firm's state (`src/lib/firm.tsx`), so every status, count and check on screen is the engine's own; every change is one call to `/api/act`. Never set HTML from data and never add an inline script: `apps/web/e2e/rules.test.ts` plants a payload in every stored field and visits every screen. Add each new screen's address to `ROUTES` there. Words on screen follow the vocabulary in `docs/UX.md`; the same file checks them
 - `db/schema.sql` the Postgres schema; later changes go in `db/migrations`, applied by `npm run admin -- migrate`
 - `reference/artifact` the working demo: use it as the design and behavior reference for every screen
 - `docs` launch plan and tickets

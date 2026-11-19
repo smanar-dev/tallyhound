@@ -1,0 +1,20 @@
+/* Rules the demo did not need: fonts served from our own host, the sign-in pages, and a few classes that replace the demo's inline styles. */
+.auth{max-width:440px;margin:0 auto;padding:48px 20px;width:100%;display:flex;flex-direction:column;gap:16px;overflow-y:auto}
+.auth label{font-weight:600}
+.auth input{width:100%;font:inherit;padding:10px 12px;border:1px solid #C9C2B2;border-radius:10px;background:#fff;color:var(--ink)}
+.auth input.code{font:600 24px/1 var(--mono);letter-spacing:.3em;text-align:center}
+.auth .btn{justify-content:center;padding:10px 16px}
+.logo.dark{color:var(--ink);padding:0;margin:0}
+.linklike{border:0;background:none;padding:0;font:inherit;color:inherit;text-decoration:underline;cursor:pointer}
+.qr{display:block;width:200px;height:200px;margin:0 auto;border:1px solid var(--line);border-radius:8px;background:#fff}
+.secret{display:block;font-weight:600;word-break:break-all;background:var(--bg);border-radius:8px;padding:8px 10px;margin-top:6px}
+.codes{display:grid;grid-template-columns:1fr 1fr;gap:6px 18px;font-weight:600;font-size:15px;list-style:none;padding:12px 14px;margin:0;background:var(--bg);border-radius:8px}
+ol.steps{padding-left:20px;margin:0}ol.steps li{margin-bottom:6px}
+.swatch{width:10px;height:10px;border-radius:3px;display:inline-block;flex:none}
+.soon{max-width:560px}
+.badge-dot{position:absolute;top:2px;right:2px;background:var(--bad);color:#fff;border-radius:99px;font-size:10px;font-weight:700;padding:0 5px;line-height:16px}
+a.nav,a.logo{text-decoration:none}
+.who .btn{color:inherit}
+a.pstep{text-decoration:none;color:inherit}
+a.btn{text-decoration:none}
+.who .me{flex:1;min-width:0;line-height:1.25;color:#fff;font-weight:600;font-size:13px}.who .me small{display:block;font-weight:500;color:#8C9AB0}
