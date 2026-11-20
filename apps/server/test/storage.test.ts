@@ -35,7 +35,7 @@ for (const kind of KINDS) {
     const G = google(), H = await build(kind, { ai: model(), google: G.f }), { firmId, ownerId } = await H.newFirm(), owner = await H.signInAs("pat1@firm1.test");
     await owner.post("/api/users", { name: "Alex Staff", email: "alex@firm1.test", role: "staff" }); const alex = await H.signInAs("alex@firm1.test");
     const state = async () => { const T = createEngine(); T.load(await H.store.readState(firmId)); return T; };
-    assert.deepEqual((await owner.get("/api/storage")).json, { available: true, connected: false, provider: null, since: null });
+    assert.deepEqual((await owner.get("/api/storage")).json, { available: true, offered: ["Google Drive", "Microsoft OneDrive", "SharePoint", "Dropbox"], connected: false, provider: null, since: null, site: null });
     // Start: only an owner, and the address asks Google for the one narrow permission and for nothing else.
     assert.equal((await alex.get("/api/storage/google/start")).status, 403);
     const go = await owner.get("/api/storage/google/start"); assert.equal(go.status, 303); const to = new URL(String(go.headers.location)); assert.equal(to.host, "accounts.google.com"); assert.equal(to.searchParams.get("scope"), "https://www.googleapis.com/auth/drive.file"); assert.equal(to.searchParams.get("access_type"), "offline"); assert.match(to.searchParams.get("redirect_uri")!, /\/api\/storage\/google\/callback$/);
@@ -68,10 +68,73 @@ test("storage: when Google says the permission is gone, filing fails in words an
   const G = google(), H = await build("memory", { google: G.f }), { firmId } = await H.newFirm(), owner = await H.signInAs("pat1@firm1.test");
   const st = new URL(String((await owner.get("/api/storage/google/start")).headers.location)).searchParams.get("state")!; await owner.get("/api/storage/google/callback?code=good-code&state=" + encodeURIComponent(st));
   H.advance(2 * 3600); G.refuse = true;   // the first token has aged out, and Google refuses a new one
-  await assert.rejects((H.storage as any).files.put({ firmId, provider: "Google Drive", folder: "a", name: "b", bytes: JPEG }), (e: unknown) => e instanceof StorageError && e.code === "revoked" && /Connect the drive again/.test(e.message));
-  await assert.rejects((H.storage as any).files.put({ firmId, provider: "Dropbox", folder: "a", name: "b", bytes: JPEG }), /Dropbox is not connected/);
+  await assert.rejects((H.storage as any).files.put({ firmId, provider: "Google Drive", folder: "a", name: "b", bytes: JPEG }), (e: unknown) => e instanceof StorageError && e.code === "revoked" && /Connect it again in Settings/.test(e.message));
+  await assert.rejects((H.storage as any).files.put({ firmId, provider: "Dropbox", folder: "a", name: "b", bytes: JPEG }), /not connected/);
   // The state value expires.
   const again = await H.signInAs("pat1@firm1.test"), old = new URL(String((await again.get("/api/storage/google/start")).headers.location)).searchParams.get("state")!; H.advance(11 * 60); G.refuse = false;
   assert.equal((await again.get("/api/storage/google/callback?code=good-code&state=" + encodeURIComponent(old))).headers.location, "/settings?tab=files&problem=state"); await H.close();
   const N = await build("memory"); await N.newFirm(); const o = await N.signInAs("pat1@firm1.test"); assert.equal((await o.get("/api/storage")).json.available, false); assert.equal((await o.get("/api/storage/google/start")).headers.location, "/settings?tab=files&problem=unavailable"); await N.close();
+});
+
+// Microsoft (sign-in and Graph) and Dropbox, as far as Tallyhound uses them.
+function others() {
+  const O = { calls: [] as string[], items: new Map<string, { path: string; bytes: number }>(), folders: new Set<string>(), n: 0, revoked: 0, sessions: new Map<string, { path: string; got: number; total: number }>(), scope: "" };
+  const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { "content-type": "application/json" } });
+  const f = (async (url: unknown, init: RequestInit = {}) => {
+    const u = new URL(String(url)), h = new Headers(init.headers), body = typeof init.body === "string" ? init.body : "", m = init.method || "GET", size = init.body && typeof init.body !== "string" ? (init.body as Uint8Array).length : 0; O.calls.push(m + " " + u.host + decodeURIComponent(u.pathname));
+    if (u.host === "login.microsoftonline.com") { const p = new URLSearchParams(body); O.scope = p.get("scope") || ""; if (p.get("client_id") !== "ms-1" || p.get("client_secret") !== "ms-shh") return json({ error: "invalid_client" }, 401); return p.get("grant_type") === "authorization_code" ? (p.get("code") === "ms-code" ? json({ access_token: "ms-access", refresh_token: "ms-refresh-1", expires_in: 3600 }) : json({ error: "invalid_grant" }, 400)) : json({ access_token: "ms-access", refresh_token: "ms-refresh-2", expires_in: 3600 }); }
+    if (u.host === "api.dropboxapi.com" && u.pathname === "/oauth2/token") { const p = new URLSearchParams(body); return p.get("client_id") === "dbx-1" ? json(p.get("grant_type") === "authorization_code" ? { access_token: "dbx-access", refresh_token: "dbx-refresh", expires_in: 14400 } : { access_token: "dbx-access", expires_in: 14400 }) : json({ error: "invalid_client" }, 401); }
+    if (u.host === "upload.example") { const s = O.sessions.get(u.pathname)!, r = /bytes (\d+)-(\d+)\/(\d+)/.exec(h.get("content-range") || "")!; s.total = +r[3]!; s.got += +r[2]! - +r[1]! + 1; if (s.got < s.total) return json({ nextExpectedRanges: [s.got + "-"] }, 202); const id = "item" + ++O.n; O.items.set(id, { path: s.path, bytes: s.got }); return json({ id }, 201); }
+    if (!/^Bearer (ms|dbx)-access$/.test(h.get("authorization") || "")) return json({ error: "no token" }, 401);
+    if (u.host === "graph.microsoft.com") {
+      const p = decodeURIComponent(u.pathname).replace("/v1.0", "");
+      if (p === "/sites/acme.sharepoint.com:/sites/Tax") return json({ id: "acme.sharepoint.com,site1,web1" }); if (p.startsWith("/sites/") && p.endsWith("/drive")) return json({ id: "drive-sp" }); if (p.startsWith("/sites/")) return json({ error: "itemNotFound" }, 404);
+      const root = p.startsWith("/drives/drive-sp/") ? "/drives/drive-sp/root" : "/me/drive/special/approot", rest = p.slice(root.length), where = (rest.startsWith(":/") ? rest.slice(2) : "").replace(/:(\/content|\/createUploadSession|\/children)?$/, ""), tail = /:(\/\w+)?$/.exec(rest)?.[1] || (rest === "/children" ? "/children" : "");
+      if (p.includes("/items/") && m === "PATCH") { const id = p.split("/items/")[1]!, j = JSON.parse(body), it = O.items.get(id); if (!it) return json({}, 404); const parent = [...O.folders].find((x) => "fld:" + x === j.parentReference.id) || ""; it.path = root + ":" + parent + "/" + j.name; return json({ id }); }
+      if (tail === "/content") { const id = "item" + ++O.n; O.items.set(id, { path: root + ":" + where, bytes: size }); return json({ id }, 201); }
+      if (tail === "/createUploadSession") { const k = "/s" + ++O.n; O.sessions.set(k, { path: root + ":" + where, got: 0, total: 0 }); return json({ uploadUrl: "https://upload.example" + k }); }
+      if (tail === "/children" && m === "POST") { const full = (where ? where + "/" : "") + JSON.parse(body).name; O.folders.add(full); return json({ id: "fld:" + full }, 201); }
+      if (m === "GET") return O.folders.has(where) ? json({ id: "fld:" + where }) : json({ error: "itemNotFound" }, 404);
+    }
+    if (u.host === "content.dropboxapi.com") { const a = JSON.parse(h.get("dropbox-api-arg")!), id = "id:dbx" + ++O.n; O.items.set(id, { path: a.path, bytes: size }); return json({ id }); }
+    if (u.host === "api.dropboxapi.com" && u.pathname === "/2/files/move_v2") { const j = JSON.parse(body), it = O.items.get(j.from_path); if (!it) return json({ error: "not_found" }, 409); it.path = j.to_path; return json({ metadata: { id: j.from_path } }); }
+    if (u.host === "api.dropboxapi.com" && u.pathname === "/2/auth/token/revoke") { O.revoked++; return json({}); }
+    return json({ error: "not found" }, 404);
+  }) as unknown as typeof fetch;
+  return Object.assign(O, { f });
+}
+const connect = async (H: Awaited<ReturnType<typeof build>>, b: any, service: string, code: string, extra = "") => { const go = await b.get("/api/storage/" + service + "/start" + extra), to = new URL(String(go.headers.location)); return { to, back: await b.get("/api/storage/" + service + "/callback?code=" + code + "&state=" + encodeURIComponent(to.searchParams.get("state")!)) }; };
+
+test("storage: OneDrive, SharePoint and Dropbox each connect by a visit to the service and back, file into their own place, and move a file when it is accepted", async () => {
+  const O = others(), H = await build("memory", { google: O.f }), { firmId } = await H.newFirm(), owner = await H.signInAs("pat1@firm1.test"), S = H.storage as any, big = Buffer.alloc(9 * 1024 * 1024, 1), small = Buffer.from("small file");
+  const state = async () => { const T = createEngine(); T.load(await H.store.readState(firmId)); return T; };
+  // OneDrive: only Tallyhound's own folder is asked for.
+  let c = await connect(H, owner, "onedrive", "ms-code"); assert.equal(c.to.host, "login.microsoftonline.com"); assert.equal(c.to.searchParams.get("scope"), "Files.ReadWrite.AppFolder offline_access"); assert.match(c.to.searchParams.get("redirect_uri")!, /\/api\/storage\/onedrive\/callback$/); assert.equal(c.back.headers.location, "/settings?tab=files&connected=1");
+  assert.equal((await state()).S.firm.delivery.provider, "Microsoft OneDrive"); assert.equal((await owner.get("/api/storage")).json.provider, "Microsoft OneDrive");
+  const one = await S.files.put({ firmId, provider: "Microsoft OneDrive", folder: "Client Tax Docs/2026/Day, Jo/_To check", name: "arrived.jpg", bytes: small }); assert.equal(O.items.get(one)!.path, "/me/drive/special/approot:Client Tax Docs/2026/Day, Jo/_To check/arrived.jpg");
+  assert.ok(O.folders.has("Client Tax Docs/2026/Day, Jo/_To check"), "each folder on the way was made"); const made = O.folders.size; await S.files.put({ firmId, provider: "Microsoft OneDrive", folder: "Client Tax Docs/2026/Day, Jo/_To check", name: "b.jpg", bytes: small }); assert.equal(O.folders.size, made, "and not made twice");
+  await S.files.move({ firmId, provider: "Microsoft OneDrive", id: one, folder: "Client Tax Docs/2026/Day, Jo", name: "Day_Jo_2026_W2.pdf" }); assert.equal(O.items.get(one)!.path, "/me/drive/special/approot:Client Tax Docs/2026/Day, Jo/Day_Jo_2026_W2.pdf");
+  // A large file goes up in pieces.
+  const sess = O.calls.length; const bigId = await S.files.put({ firmId, provider: "Microsoft OneDrive", folder: "Client Tax Docs", name: "big.pdf", bytes: big }); assert.equal(O.items.get(bigId)!.bytes, big.length); assert.ok(O.calls.slice(sess).filter((x) => x.startsWith("PUT upload.example")).length >= 2);
+  // The token is refreshed when it ages out, and the newer long-lived token Microsoft hands back is the one kept.
+  H.advance(2 * 3600); await S.files.put({ firmId, provider: "Microsoft OneDrive", folder: "x", name: "c.jpg", bytes: small }); assert.equal(O.scope, "Files.ReadWrite.AppFolder offline_access");
+  // Another service's name is refused while OneDrive is the one connected.
+  await assert.rejects(S.files.put({ firmId, provider: "Dropbox", folder: "a", name: "b", bytes: small }), /not connected/);
+  // SharePoint: the owner names the site; a site that is not on sharepoint.com, or cannot be found, connects nothing.
+  const again = await H.signInAs("pat1@firm1.test");
+  assert.equal((await connect(H, again, "sharepoint", "ms-code", "?site=" + encodeURIComponent("https://evil.example/sites/Tax"))).back.headers.location, "/settings?tab=files&problem=site"); assert.equal((await connect(H, again, "sharepoint", "ms-code", "?site=" + encodeURIComponent("https://acme.sharepoint.com/sites/Nope"))).back.headers.location, "/settings?tab=files&problem=site");
+  assert.equal((await state()).S.firm.delivery.provider, "Microsoft OneDrive", "still the last one that worked");
+  c = await connect(H, again, "sharepoint", "ms-code", "?site=" + encodeURIComponent("https://acme.sharepoint.com/sites/Tax/")); assert.equal(c.to.searchParams.get("scope"), "Sites.ReadWrite.All offline_access"); assert.equal(c.back.headers.location, "/settings?tab=files&connected=1");
+  const st = (await again.get("/api/storage")).json; assert.equal(st.provider, "SharePoint"); assert.equal(st.site, "https://acme.sharepoint.com/sites/Tax");
+  const sp = await S.files.put({ firmId, provider: "SharePoint", folder: "Client Tax Docs/2026", name: "a.jpg", bytes: small }); assert.equal(O.items.get(sp)!.path, "/drives/drive-sp/root:Client Tax Docs/2026/a.jpg");
+  await S.files.move({ firmId, provider: "SharePoint", id: sp, folder: "Client Tax Docs/2026/Done", name: "final.pdf" }); assert.equal(O.items.get(sp)!.path, "/drives/drive-sp/root:Client Tax Docs/2026/Done/final.pdf");
+  // Dropbox: connecting it gives up the one before; files keep their id when moved; disconnecting takes the permission away at Dropbox.
+  c = await connect(H, again, "dropbox", "dbx-code"); assert.equal(c.to.host, "www.dropbox.com"); assert.equal(c.to.searchParams.get("token_access_type"), "offline"); assert.equal(c.back.headers.location, "/settings?tab=files&connected=1"); assert.equal((await state()).S.firm.delivery.provider, "Dropbox");
+  const dbx = await S.files.put({ firmId, provider: "Dropbox", folder: "Client Tax Docs/2026/Ruiz, Ana", name: "arrived ñ.jpg", bytes: small }); assert.equal(O.items.get(dbx)!.path, "/Client Tax Docs/2026/Ruiz, Ana/arrived ñ.jpg", "a name with an accent survives the header");
+  await S.files.move({ firmId, provider: "Dropbox", id: dbx, folder: "Client Tax Docs/2026/Ruiz, Ana", name: "Ruiz_Ana_2026_W2.pdf" }); assert.equal(O.items.get(dbx)!.path, "/Client Tax Docs/2026/Ruiz, Ana/Ruiz_Ana_2026_W2.pdf");
+  await assert.rejects(S.files.put({ firmId, provider: "SharePoint", folder: "a", name: "b", bytes: small }), /not connected/);
+  assert.equal((await again.post("/api/storage/disconnect")).status, 200); assert.equal(O.revoked, 1); assert.equal((await state()).S.firm.delivery.provider, "Download"); assert.equal((await again.get("/api/storage")).json.connected, false);
+  // A service nobody set up cannot be started.
+  assert.equal((await again.get("/api/storage/box/start")).headers.location, "/settings?tab=files&problem=unavailable");
+  await H.close();
 });

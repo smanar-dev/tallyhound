@@ -2,7 +2,7 @@
 // It holds no product rules: every action runs the engine through the pipeline (app.staff), which loads, decides, saves and sends.
 import { kitRegistration } from "./kit.ts";
 import { BillingError, type Billing } from "./billing.ts";
-import { GOOGLE, StorageError, type Storage } from "./storage.ts";
+import { SLUG, StorageError, type Storage } from "./storage.ts";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import cookie from "@fastify/cookie";
 import QRCode from "qrcode";
@@ -202,21 +202,21 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
 
   // ---- the firm's own storage (owner only). Connecting is a visit to Google and back; nothing else can mark a drive as connected. ----
   const ownerOnly = (req: FastifyRequest, reply: FastifyReply) => (req.who!.user.role === "owner" ? null : reply.code(403).send({ error: "role", message: NO.other }));
-  const useStorage = async (firmId: string, userId: string, on: boolean) => d.app.staff(firmId, userId, (T: Engine) => { const dl = T.S.firm.delivery; dl.provider = on ? GOOGLE : "Download"; dl.auto = on ? "on" : "off"; if (on && !dl.when) dl.when = "arrival"; T.audit("settings.delivery", on ? GOOGLE + " connected" : "Storage disconnected. Finished files are handed off as a zip"); });
-  f.get("/api/storage", { preHandler: full }, async (req) => { const st = d.storage ? await d.storage.status(req.who!.user.firmId) : { connected: false, provider: null, since: null }; return { available: !!d.storage, ...st }; });
-  f.get("/api/storage/google/start", { preHandler: full }, async (req, reply) => {
-    if (ownerOnly(req, reply)) return reply; if (!d.storage) return reply.redirect("/settings?tab=files&problem=unavailable", 303);
-    const u = req.who!.user; return reply.header("cache-control", "no-store").redirect(d.storage.startUrl(u.firmId, u.id), 303);
+  const useStorage = async (firmId: string, userId: string, name: string | null) => d.app.staff(firmId, userId, (T: Engine) => { const dl = T.S.firm.delivery; dl.provider = name || "Download"; dl.auto = name ? "on" : "off"; if (name && !dl.when) dl.when = "arrival"; T.audit("settings.delivery", name ? name + " connected" : "Storage disconnected. Finished files are handed off as a zip"); });
+  f.get("/api/storage", { preHandler: full }, async (req) => { const st = d.storage ? await d.storage.status(req.who!.user.firmId) : { connected: false, provider: null, since: null, site: null }, offered = d.storage ? d.storage.offered() : []; return { available: offered.length > 0, offered, ...st }; });
+  f.get("/api/storage/:service/start", { preHandler: full }, async (req, reply) => {
+    if (ownerOnly(req, reply)) return reply; const name = SLUG[(req.params as { service: string }).service]; if (!d.storage || !name || !d.storage.offered().includes(name)) return reply.redirect("/settings?tab=files&problem=unavailable", 303);
+    const u = req.who!.user; try { return reply.header("cache-control", "no-store").redirect(d.storage.startUrl(u.firmId, u.id, name, str((req.query as { site?: string }).site).slice(0, 300)), 303); } catch { return reply.redirect("/settings?tab=files&problem=unavailable", 303); }
   });
-  f.get("/api/storage/google/callback", { preHandler: full }, async (req, reply) => {
-    if (ownerOnly(req, reply)) return reply; const u = req.who!.user, q = req.query as { code?: string; state?: string; error?: string };
-    if (!d.storage) return reply.redirect("/settings?tab=files&problem=unavailable", 303);
-    try { await d.storage.finish(u.firmId, u.id, q); await useStorage(u.firmId, u.id, true); await d.auth.audit(u.firmId, u.id, "storage.connected", GOOGLE); return reply.header("cache-control", "no-store").redirect("/settings?tab=files&connected=1", 303); }
+  f.get("/api/storage/:service/callback", { preHandler: full }, async (req, reply) => {
+    if (ownerOnly(req, reply)) return reply; const u = req.who!.user, q = req.query as { code?: string; state?: string; error?: string }, name = SLUG[(req.params as { service: string }).service];
+    if (!d.storage || !name) return reply.redirect("/settings?tab=files&problem=unavailable", 303);
+    try { await d.storage.finish(u.firmId, u.id, q, name); await useStorage(u.firmId, u.id, name); await d.auth.audit(u.firmId, u.id, "storage.connected", name); return reply.header("cache-control", "no-store").redirect("/settings?tab=files&connected=1", 303); }
     catch (err) { const code = err instanceof StorageError ? err.code : "error"; say("storage_connect_failed", u.firmId, code); return reply.header("cache-control", "no-store").redirect("/settings?tab=files&problem=" + encodeURIComponent(code), 303); }
   });
   f.post("/api/storage/disconnect", { preHandler: full }, async (req, reply) => {
     if (ownerOnly(req, reply)) return reply; const u = req.who!.user; if (d.storage) await d.storage.disconnect(u.firmId);
-    await useStorage(u.firmId, u.id, false); await d.auth.audit(u.firmId, u.id, "storage.disconnected"); return { ok: true };
+    await useStorage(u.firmId, u.id, null); await d.auth.audit(u.firmId, u.id, "storage.disconnected"); return { ok: true };
   });
 
   // Ask the Hound: a question about the firm's own collecting, answered from a read-only copy of its state. Anyone signed in may ask.

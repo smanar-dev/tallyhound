@@ -37,7 +37,7 @@ export async function build(kind: "memory" | "postgres" = "memory", opt: { ai?: 
     auditRows = async () => (await pool!.query("select action, actor from audit_log order by id")).rows as { action: string; actor: string }[];
   } else { inner = kitMemory.memoryStore(); const m = memoryAuthStore(() => [...inner.firms.keys()]); auth = m; queue = memoryQueue(); auditRows = async () => m.auditRows; }
   const store = kitCrypto.encryptedStore(inner, keyring), sms = kitMemory.fakeSender(), email = kitMemory.fakeSender();
-  const storage = opt.google ? createStorage({ store: pool ? postgresStorageStore(pool) : memoryStorageStore(), secrets: firmSecrets(store, keyring, kitCrypto), clientId: "client-1", clientSecret: "shh", appUrl: APP, stateSecret: "test-secret", clock, fetch: opt.google }) : undefined;
+  const storage = opt.google ? createStorage({ store: pool ? postgresStorageStore(pool) : memoryStorageStore(), secrets: firmSecrets(store, keyring, kitCrypto), google: { clientId: "client-1", clientSecret: "shh" }, microsoft: { clientId: "ms-1", clientSecret: "ms-shh" }, dropbox: { clientId: "dbx-1", clientSecret: "dbx-shh" }, appUrl: APP, stateSecret: "test-secret", clock, fetch: opt.google }) : undefined;
   const app = createApp({ store, sms, email, ai: opt.ai || null, clock, files: storage ? storage.files : undefined });
   // A stand-in for Twilio's media store: what it holds, what was asked of it, and a switch to make it fail.
   const media = new Map<string, Buffer>(), mediaCalls: string[] = []; let mediaDown = false;

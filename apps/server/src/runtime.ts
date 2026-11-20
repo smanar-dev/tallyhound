@@ -57,8 +57,9 @@ export function runtime() {
   const email = env("POSTMARK_TOKEN") ? kitEmailOut.postmark({ serverToken: env("POSTMARK_TOKEN") }) : notConnected("Email");
   const ops = postgresOpsStore(pool);
   const ai = env("ANTHROPIC_API_KEY") ? claude({ apiKey: env("ANTHROPIC_API_KEY"), dailyCapUsd: +(env("TH_MODEL_DAILY_CAP_USD") || 10), log, record: (c) => { void ops.modelCall(c).catch((err: Error) => log("model_record_failed", c.firmId, err.message)); } }) : null;   // no key: rules and standard wording
-  // A firm's own Google Drive (T-111). On once GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set; until then finished files are handed off as a zip.
-  const storage = env("GOOGLE_CLIENT_ID") ? createStorage({ store: postgresStorageStore(pool), secrets: firmSecrets(store, keyring, kitCrypto), clientId: env("GOOGLE_CLIENT_ID")!, clientSecret: need("GOOGLE_CLIENT_SECRET"), appUrl, stateSecret: need("TH_LINK_SECRET"), clock, log }) : undefined;
+  // A firm's own storage (T-111). Each service is on once its keys are set: GOOGLE_CLIENT_ID, MICROSOFT_CLIENT_ID (OneDrive and SharePoint), DROPBOX_APP_KEY, each with its secret. With none, finished files are handed off as a zip.
+  const keysOf = (id: string, secret: string) => (env(id) ? { clientId: env(id)!, clientSecret: need(secret) } : undefined), sk = { google: keysOf("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"), microsoft: keysOf("MICROSOFT_CLIENT_ID", "MICROSOFT_CLIENT_SECRET"), dropbox: keysOf("DROPBOX_APP_KEY", "DROPBOX_APP_SECRET") };
+  const storage = sk.google || sk.microsoft || sk.dropbox ? createStorage({ store: postgresStorageStore(pool), secrets: firmSecrets(store, keyring, kitCrypto), ...sk, appUrl, stateSecret: need("TH_LINK_SECRET"), clock, log }) : undefined;
   const app = createApp({ store, sms, email, ai, clock, log, files: storage ? storage.files : undefined });
   if (production && !env("POSTMARK_TOKEN")) throw new Error("Set POSTMARK_TOKEN: without it nobody can be sent a sign-in link");
   const mailer: Mailer & StaffMailer = env("POSTMARK_TOKEN")
