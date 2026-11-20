@@ -26,10 +26,11 @@ export function postgresBillingStore(pool: Db): BillingStore {
 }
 
 export class BillingError extends Error { status: number; constructor(message: string, status = 400) { super(message); this.status = status; } }
-export interface BillingDeps { store: BillingStore; app: App; secretKey: string; webhookSecret: string; /** Stripe price id for each plan name, e.g. { Solo: "price_...", Practice: "price_..." } */ prices: Record<string, string>; appUrl: string; clock: () => Date; fetch?: typeof fetch; log?: (event: string, ...ids: unknown[]) => void }
+export interface BillingDeps { store: BillingStore; app: App; secretKey: string; webhookSecret: string; /** Stripe price id for each plan name, e.g. { Solo: "price_...", Practice: "price_..." } */ prices: Record<string, string>; /** The second price list (T-97), for firms on it. A plan missing here is not on sale to them. */ pricesB?: Record<string, string>; appUrl: string; clock: () => Date; fetch?: typeof fetch; log?: (event: string, ...ids: unknown[]) => void }
 
 export function createBilling(d: BillingDeps) {
-  const f = d.fetch || fetch, base = d.appUrl.replace(/\/$/, ""), say = d.log || (() => {}), planOf = (priceId: string) => Object.keys(d.prices).find((p) => d.prices[p] === priceId) || null;
+  const f = d.fetch || fetch, base = d.appUrl.replace(/\/$/, ""), say = d.log || (() => {}), B = d.pricesB || {}, planOf = (priceId: string) => Object.keys(d.prices).find((p) => d.prices[p] === priceId) || Object.keys(B).find((p) => B[p] === priceId) || null;
+  const bookOf = async (firmId: string) => ((await d.app.withFirm(firmId, (T: Engine) => T.S.firm.priceBook)) === "B" ? B : d.prices);
   // Stripe takes form fields, with brackets for nesting. A key makes a repeated request safe.
   async function stripe(path: string, fields: Record<string, string>, key?: string): Promise<Record<string, any>> {   // eslint-disable-line @typescript-eslint/no-explicit-any
     const r = await f("https://api.stripe.com/v1/" + path, { method: "POST", headers: { authorization: "Bearer " + d.secretKey, "content-type": "application/x-www-form-urlencoded", ...(key ? { "idempotency-key": key } : {}) }, body: new URLSearchParams(fields).toString(), signal: AbortSignal.timeout(20000) });
@@ -44,15 +45,15 @@ export function createBilling(d: BillingDeps) {
     plans: Object.keys(d.prices),
     async status(firmId: string) {
       const r = await d.store.get(firmId), until = r && r.pastDueSince ? new Date(r.pastDueSince.getTime() + GRACE_DAYS * 86400000) : null;
-      return { available: true, plans: Object.keys(d.prices), paying: !!(r && r.subscriptionId && r.status !== "cancelled" && r.status !== "ended"), pastDue: !!(r && r.pastDueSince), graceEnds: until };
+      return { available: true, plans: Object.keys(await bookOf(firmId)), paying: !!(r && r.subscriptionId && r.status !== "cancelled" && r.status !== "ended"), pastDue: !!(r && r.pastDueSince), graceEnds: until };
     },
     /** The address of Stripe's checkout page for this firm and plan. Nothing changes here until Stripe says the payment went through. */
     async checkout(firmId: string, who: { id: string; email: string }, plan: string): Promise<string> {
-      if (!d.prices[plan]) throw new BillingError("That plan is not on offer.");
+      const book = await bookOf(firmId); if (!book[plan]) throw new BillingError("That plan is not on offer.");
       const fit = (await d.app.withFirm(firmId, (T: Engine) => { const p = (T.PLANS as [string, number, number][]).find((x) => x[0] === plan); return !p ? "Unknown plan" : T.S.clients.length > p[2] ? plan + " covers up to " + p[2] + " clients. You have " + T.S.clients.length + "." : null; })) as string | null;
       if (fit) throw new BillingError(fit);
       const row = await d.store.get(firmId); if (row && row.subscriptionId && (row.status === "active" || row.status === "past_due")) throw new BillingError("This firm already has a plan. Change it under Manage billing.");
-      const s = await stripe("checkout/sessions", { mode: "subscription", "line_items[0][price]": d.prices[plan]!, "line_items[0][quantity]": "1", success_url: base + "/settings?tab=plan&paid=1", cancel_url: base + "/settings?tab=plan", client_reference_id: firmId, "metadata[firm_id]": firmId, "metadata[plan]": plan, "subscription_data[metadata][firm_id]": firmId, "subscription_data[metadata][plan]": plan, ...(row ? { customer: row.customerId } : { customer_email: who.email }) });
+      const s = await stripe("checkout/sessions", { mode: "subscription", "line_items[0][price]": book[plan]!, "line_items[0][quantity]": "1", success_url: base + "/settings?tab=plan&paid=1", cancel_url: base + "/settings?tab=plan", client_reference_id: firmId, "metadata[firm_id]": firmId, "metadata[plan]": plan, "subscription_data[metadata][firm_id]": firmId, "subscription_data[metadata][plan]": plan, ...(row ? { customer: row.customerId } : { customer_email: who.email }) });
       if (typeof s.url !== "string" || !/^https:\/\/[a-z.]*stripe\.com\//.test(s.url)) throw new BillingError("The payment page could not be opened. Try again.", 502);
       say("checkout_started", firmId, plan); return s.url;
     },
@@ -72,7 +73,7 @@ export function createBilling(d: BillingDeps) {
       const o = (ev.data && ev.data.object) || {}, now = d.clock(); if (!ev.id || !ev.type) return { ok: false, status: 400 };
       if (!(await d.store.claimEvent(ev.id, now))) return { ok: true, status: 200 };   // a repeat: already done
       if (ev.type === "checkout.session.completed") {
-        const firmId = String(o.client_reference_id || (o.metadata && o.metadata.firm_id) || ""), plan = String((o.metadata && o.metadata.plan) || ""); if (!firmId || !d.prices[plan] || !o.customer) { say("stripe_event_skipped", ev.type); return { ok: true, status: 200 }; }
+        const firmId = String(o.client_reference_id || (o.metadata && o.metadata.firm_id) || ""), plan = String((o.metadata && o.metadata.plan) || ""); if (!firmId || !(d.prices[plan] || B[plan]) || !o.customer) { say("stripe_event_skipped", ev.type); return { ok: true, status: 200 }; }
         const other = await d.store.byCustomer(String(o.customer)); if (other && other.firmId !== firmId) { say("stripe_event_skipped", ev.type, "customer belongs to another firm"); return { ok: true, status: 200 }; }
         await d.store.put({ firmId, customerId: String(o.customer), subscriptionId: o.subscription ? String(o.subscription) : null, plan, status: "active", pastDueSince: null, paused: false, updatedAt: now });
         const r = await lift(firmId, plan, "paid by card"); say("plan_started", firmId, plan, r || "ok");

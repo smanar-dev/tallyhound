@@ -19,6 +19,9 @@ import { kmsKeyring } from "./keys.ts";
 import { createClosure } from "./closure.ts";
 import { twilioLookup } from "./lookup.ts";
 import { createAsk } from "./ask.ts";
+import { twilioVoice } from "./voice.ts";
+import { createDomains } from "./domain.ts";
+import { postgresSignupStore } from "./signup.ts";
 import { createBilling, postgresBillingStore } from "./billing.ts";
 import { createStorage, postgresStorageStore } from "./storage.ts";
 import { createEngine, wallTime } from "./kit.ts";
@@ -60,7 +63,8 @@ export function runtime() {
   // A firm's own storage (T-111). Each service is on once its keys are set: GOOGLE_CLIENT_ID, MICROSOFT_CLIENT_ID (OneDrive and SharePoint), DROPBOX_APP_KEY, each with its secret. With none, finished files are handed off as a zip.
   const keysOf = (id: string, secret: string) => (env(id) ? { clientId: env(id)!, clientSecret: need(secret) } : undefined), sk = { google: keysOf("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"), microsoft: keysOf("MICROSOFT_CLIENT_ID", "MICROSOFT_CLIENT_SECRET"), dropbox: keysOf("DROPBOX_APP_KEY", "DROPBOX_APP_SECRET") };
   const storage = sk.google || sk.microsoft || sk.dropbox ? createStorage({ store: postgresStorageStore(pool), secrets: firmSecrets(store, keyring, kitCrypto), ...sk, appUrl, stateSecret: need("TH_LINK_SECRET"), clock, log }) : undefined;
-  const app = createApp({ store, sms, email, ai, clock, log, files: storage ? storage.files : undefined });
+  const voice = env("TWILIO_ACCOUNT_SID") && env("TH_VOICE") === "on" ? twilioVoice({ accountSid: env("TWILIO_ACCOUNT_SID")!, authToken: need("TWILIO_AUTH_TOKEN") }) : undefined;   // T-50: off unless TH_VOICE=on
+  const app = createApp({ store, sms, email, ai, clock, log, files: storage ? storage.files : undefined, voice });
   if (production && !env("POSTMARK_TOKEN")) throw new Error("Set POSTMARK_TOKEN: without it nobody can be sent a sign-in link");
   const mailer: Mailer & StaffMailer = env("POSTMARK_TOKEN")
     ? { async signInLink(to, url) { await email.send({ from: need("TH_SIGNIN_FROM"), fromName: "Tallyhound", to, subject: "Your Tallyhound sign-in link", body: "Open this link to sign in to Tallyhound. It works once and expires in 15 minutes.\n\n" + url + "\n\nIf you did not ask for this, ignore this email." }); },
@@ -72,12 +76,15 @@ export function runtime() {
   const prepare = prepareOpts({ clamav: env("CLAMAV_HOST") ? { host: env("CLAMAV_HOST"), port: +(env("CLAMAV_PORT") || 3310) } : undefined });
   if (production && !env("CLAMAV_HOST")) log("warning_no_virus_scanner");
   // Card billing (T-81). On once STRIPE_SECRET_KEY is set, with the webhook secret and one price id per plan on offer.
-  const prices: Record<string, string> = {}; for (const p of ["Solo", "Practice", "Firm", "Large"]) { const id = env("STRIPE_PRICE_" + p.toUpperCase()); if (id) prices[p] = id; }
-  const billing = env("STRIPE_SECRET_KEY") ? createBilling({ store: postgresBillingStore(pool), app, secretKey: env("STRIPE_SECRET_KEY")!, webhookSecret: need("STRIPE_WEBHOOK_SECRET"), prices, appUrl, clock, log }) : undefined;
+  const prices: Record<string, string> = {}, pricesB: Record<string, string> = {}; for (const p of ["Solo", "Practice", "Firm", "Large"]) { const id = env("STRIPE_PRICE_" + p.toUpperCase()); if (id) prices[p] = id; const idB = env("STRIPE_PRICE_" + p.toUpperCase() + "_B"); if (idB) pricesB[p] = idB; }
+  const billing = env("STRIPE_SECRET_KEY") ? createBilling({ store: postgresBillingStore(pool), app, secretKey: env("STRIPE_SECRET_KEY")!, webhookSecret: need("STRIPE_WEBHOOK_SECRET"), prices, pricesB, appUrl, clock, log }) : undefined;
   if (billing && !Object.keys(prices).length) throw new Error("Set STRIPE_PRICE_SOLO, STRIPE_PRICE_PRACTICE, STRIPE_PRICE_FIRM or STRIPE_PRICE_LARGE: card billing has no plan to sell");
   const inbox = createInbox({ queue: postgresQueue(pool), store, app, handlers: handlers({ app, twilio, prepare }), clock, log });
   const hooks = { store, inbox, twilioAuthToken: env("TWILIO_AUTH_TOKEN") || undefined, postmarkHook: env("POSTMARK_HOOK_PASSWORD") ? { user: env("POSTMARK_HOOK_USER") || "postmark", pass: env("POSTMARK_HOOK_PASSWORD") } : undefined };
   return { production, appUrl, pool, store, auth, app, signIn, firms, inbox, hooks, prepare, clock, log, root: ROOT, mailer, notify: createNotifier({ appUrl }), ops, lookup, storage, billing,
+    domains: env("POSTMARK_ACCOUNT_TOKEN") ? createDomains({ app, accountToken: env("POSTMARK_ACCOUNT_TOKEN")!, log }) : undefined,   // T-110
+    // Public sign-up (TH_SIGNUP=on) and the price page. New sign-ups go on the second price list when TH_PRICE_TEST=on (T-97).
+    signup: { store: postgresSignupStore(pool), open: env("TH_SIGNUP") === "on", inboxDomain: env("TH_INBOX_DOMAIN") || "docs.tallyhound.com", priceBook: (env("TH_PRICE_TEST") === "on" ? "B" : "A") as "A" | "B", clock, inboxTaken: async (a: string) => !!(await store.firmIdByInbox(a)), mail: (to: string, subject: string, body: string) => mailer.staff(to, subject, body), tell: env("TH_ALERT_EMAIL") ? (subject: string, body: string) => mailer.staff(env("TH_ALERT_EMAIL")!, "Tallyhound: " + subject, body) : undefined },
     ask: ai ? createAsk({ model: ai, readState: (id) => store.readState(id), createEngine, wallNow: (T) => (T.S.firm.iana ? wallTime(clock(), T.S.firm.iana) : clock()) }) : undefined, closure: createClosure({ store, auth, markers: bucket, clock, log }),
     // TH_ALERT_EMAIL: where the developer is told that sends are failing, a firm's turn failed, or an arriving message was lost.
     watch: env("TH_ALERT_EMAIL") ? createWatch({ to: env("TH_ALERT_EMAIL")!, send: (to, subject, body) => mailer.staff(to, subject, body), clock, log }) : undefined };

@@ -101,6 +101,7 @@
       M11: "Thanks, we already have that one. Nothing more needed for it.",
       M12: "Thanks. I've passed that to {preparer} at {firm}, who will take a look.",
       M13: "That's everything. {firm} has all {n} documents for your {year} return. Thank you.",
+      M33: "This is a message for {first} from {firm}. We are still waiting for documents for your {year} tax return. Please look for our text or email, or call our office. Thank you.",
       M32: "{firm} has every document on your list. One last thing: did anything change this year that we have not asked about, such as a new job, a move or a sale? Reply YES or NO.",
       M14: "Good question. I've passed it to {preparer}, who will get back to you.",
       M15: "Your {plain_name} comes from {issuer}. {where_hint} If you have an online account with them, look under tax documents.",
@@ -141,6 +142,7 @@
       M11: "Gracias, ya tenemos ese documento. No necesitamos nada más de ese.",
       M12: "Gracias. Se lo pasé a {preparer} de {firm}, quien lo revisará.",
       M13: "Eso es todo. {firm} tiene los {n} documentos para su declaración de {year}. Gracias.",
+      M33: "Este es un mensaje para {first} de {firm}. Seguimos esperando documentos para su declaración de {year}. Busque nuestro mensaje de texto o correo, o llame a nuestra oficina. Gracias.",
       M32: "{firm} ya tiene todos los documentos de su lista. Una última cosa: ¿cambió algo este año que no le hayamos preguntado, como un trabajo nuevo, una mudanza o una venta? Responda SÍ o NO.",
       M14: "Buena pregunta. Se la pasé a {preparer}, quien le responderá.",
       M15: "Su {plain_name} lo envía {issuer}. {where_hint} Si tiene una cuenta en línea con ellos, busque en documentos de impuestos.",
@@ -161,7 +163,7 @@
       M31: "{firm} no está recibiendo documentos aquí por ahora. Comuníquese con {firm} directamente: llame al {firm_phone} o escriba a {firm_email}."
     }
   };
-  const TPL_USE = { M32: "The closing question", M31: "Auto-reply while the firm is paused", M30L: "Locked PDF", M30T: "A file we cannot open", M30K: "A link instead of a file", M1: "Invitation to text (email)", M1R: "Invitation reminder (email)", M2: "Texting turned on", M3: "First request", M4: "Next request", M5: "Reminder", M6: "Final reminder", M7: "Wrong year", M8: "Photo too hard to read", M8L: "Photo too hard to read, second time", M9: "Missing page", M10: "Did anything change this year?", M11: "Duplicate", M12: "Passed to your team", M13: "Everything is in", M14: "Question passed to a person", M15: "Where to find a form", M16: "Texting turned off (STOP)", M16H: "Reply to HELP", M19: "Client has none, next request", M19X: "Client has none", M20: "Will send later", M21: "Unknown sender", M26: "What is still needed", M27: "Document arrived before we asked", M28: "Check-in invitation", M28R: "Check-in reminder", M29: "Check-in thanks", M22: "Part of a document is missing", M22R: "Reminder for the missing part", M23: "One reply for several documents", M24: "Passed to a person", M25: "Pause when a client is upset" };
+  const TPL_USE = { M33: "Voicemail after the final reminder", M32: "The closing question", M31: "Auto-reply while the firm is paused", M30L: "Locked PDF", M30T: "A file we cannot open", M30K: "A link instead of a file", M1: "Invitation to text (email)", M1R: "Invitation reminder (email)", M2: "Texting turned on", M3: "First request", M4: "Next request", M5: "Reminder", M6: "Final reminder", M7: "Wrong year", M8: "Photo too hard to read", M8L: "Photo too hard to read, second time", M9: "Missing page", M10: "Did anything change this year?", M11: "Duplicate", M12: "Passed to your team", M13: "Everything is in", M14: "Question passed to a person", M15: "Where to find a form", M16: "Texting turned off (STOP)", M16H: "Reply to HELP", M19: "Client has none, next request", M19X: "Client has none", M20: "Will send later", M21: "Unknown sender", M26: "What is still needed", M27: "Document arrived before we asked", M28: "Check-in invitation", M28R: "Check-in reminder", M29: "Check-in thanks", M22: "Part of a document is missing", M22R: "Reminder for the missing part", M23: "One reply for several documents", M24: "Passed to a person", M25: "Pause when a client is upset" };
   const COMPLIANCE = ["M1", "M1R", "M2", "M16", "M16H", "M21"];
   const SCOPE = { documents: "Documents", tax_question: "Tax question", billing: "Billing", scheduling: "Scheduling", personal: "Personal", complaint: "Complaint", other: "Other" };
 
@@ -316,6 +318,15 @@
   /* ---------- billing: a short trial, then a paid plan; an off-season pause that only stores data ---------- */
   // Plans go by client count only. Prices are working figures. See docs/PRICING.md for the cost model behind them.
   const PLANS = [["Solo", 99, 150, 1], ["Practice", 249, 500, 5], ["Firm", 599, 1000, 15], ["Large", 999, 2500, 99]];
+  /* T-97: the price test. Firms that sign themselves up after the pilot may be put on the second price list. A firm's list never
+     changes by itself: pilot firms stay on the first. T-98: above the largest plan the price goes up by one block per 1,000 clients. */
+  const PRICE_B = { Solo: 149, Practice: 349, Firm: 799, Large: 1299 }, QUOTE_BLOCK = 1000, QUOTE_BLOCK_PRICE = 350;
+  const plans = () => PLANS.map((p) => (S.firm.priceBook === "B" ? [p[0], PRICE_B[p[0]], p[2], p[3]] : p.slice()));
+  function quoteFor(n) {
+    n = Math.floor(+n); if (!(n >= 1) || n > 100000) return null; const L = plans(), fit = L.find((p) => n <= p[2]);
+    if (fit) return { plan: fit[0], monthly: fit[1], clients: fit[2], blocks: 0 };
+    const top = L[L.length - 1], blocks = Math.ceil((n - top[2]) / QUOTE_BLOCK); return { plan: top[0], monthly: top[1] + blocks * QUOTE_BLOCK_PRICE, clients: top[2] + blocks * QUOTE_BLOCK, blocks };
+  }
   const TRIAL_DAYS = 14, TRIAL_CLIENTS = 10, TRIAL_DOCS = 100, PAUSE_MAX_DAYS = 90;
   // Fair use: a yearly allowance per plan, sized at more than twice normal use. Going over never cuts a firm off.
   const FAIR = { segs: 60, docs: 25 };   // text segments and document reads per client on the plan, per 12 months
@@ -476,8 +487,23 @@
     const H = S.firm.hound;
     if (e.step >= H.emailAfter && channelFor(c, e) === "text" && c.email && c.emailOk) { send(e, code, Object.assign({}, x, { why: e.step + " text reminders unanswered, so adding email" }), "email"); hlog(e, "escalate", "Also sent by email, because texts went unanswered", e.step + " text reminders without a reply", "Rules"); }
   }
+  /* T-50: one recorded reminder by phone, after the final written reminder has gone unanswered. Three things must all be true:
+     the firm's owner has switched it on, the firm is on Autopilot, and this client has said calls are fine (setCallOk). The words
+     are fixed wording, never written by the model, and pass the same check as every message. At most one per client per season.
+     A STOP by text ends calls too. COUNSEL: a recorded call to a mobile needs the client's agreement; confirm how the firm records it. */
+  function setCallOk(cid, on, how) {
+    const c = client(cid); if (!c) return "Unknown client"; if (!may()) return "Not allowed"; if (on && !c.mobile) return "No phone number on file";
+    if (on && c.textConsent === "withdrawn") return c.first + " has asked us to stop. Only " + c.first + " can change that";
+    c.callOk = !!on; c.consentLog = c.consentLog || []; c.consentLog.push({ at: new Date(S.now), what: (on ? "Agreed to reminder calls" : "Reminder calls turned off") + ", recorded by " + S.user.name + (how ? ": " + String(how).slice(0, 120) : ""), channel: "call" }); audit("consent.calls", c.first + " " + c.last + (on ? " agreed" : " off")); return null;
+  }
+  function voicemail(e, c) {
+    const H = S.firm.hound; if (H.voicemail !== true || H.mode !== "autopilot" || !c.callOk || !c.mobile || c.mobileBad || c.textConsent === "withdrawn" || e.voicemailAt || e.takeover || halted()) return null;
+    const body = fill("M33", c, e, {}), errs = outputCheck(body, "email", { year: e.year }).filter((x) => !x.startsWith("digit run")); if (errs.length) { audit("message.blocked", "M33 for " + c.last + ": " + errs.join(", "), "Tallyhound"); return null; }
+    const m = { id: id("m"), engId: e.id, dir: "out", kind: "auto", tpl: "M33", body, base: body, channel: "voice", at: new Date(nextAllowedC(S.now, c)), status: "delivered", after: "delivered", itemId: null, why: "The final reminder went unanswered", ctx: { use: TPL_USE.M33 } };
+    S.msgs.push(m); e.voicemailAt = new Date(S.now); meter("voice"); hlog(e, "message", "Reminder call with a recorded message", m.why, "Rules"); audit("message.sent", "M33 to " + c.first + " " + c.last[0] + ". by phone", "Tallyhound"); return m;
+  }
   function finalNote(e, c) {
-    send(e, "M6", { why: GAPS.length + " reminders unanswered" }); setStuck(e, "no_reply");
+    send(e, "M6", { why: GAPS.length + " reminders unanswered" }); setStuck(e, "no_reply"); voicemail(e, c);
     if (S.firm.hound.callTask) { const open = openItems(e.id); addTask({ kind: "call", reason: "Call the client", engId: e.id, script: "Hi " + c.first + ", it's " + ((S.users.find((u) => u.id === c.preparer) || {}).first || "your preparer") + " at " + S.firm.name + ". We're still missing " + open.length + " document" + (open.length === 1 ? "" : "s") + " for your return: " + open.map((i) => FORMS[i.form].plain + (i.payer ? " from " + i.payer : "")).join(", ") + ". Is there anything making these hard to get? You can text photos to the same number we've been using." }); alertx(e, "medium", "call", c.first + " " + c.last + " has not replied to " + GAPS.length + " reminders. A call task with a script is ready.", "call" + e.id); }
   }
   function tick() {
@@ -730,7 +756,7 @@
     }
     if (k === "stop") {
       if (c.textConsent === "withdrawn") { timeline(e, "Client sent STOP again", c.first); return k; }
-      c.textConsent = "withdrawn"; c.consentLog.push({ at: new Date(S.now), what: "Withdrawn by STOP", channel: "text" }); send(e, "M16", {}, "text");
+      c.textConsent = "withdrawn"; c.consentLog.push({ at: new Date(S.now), what: "Withdrawn by STOP", channel: "text" }); if (c.callOk) { c.callOk = false; c.consentLog.push({ at: new Date(S.now), what: "Reminder calls turned off by STOP", channel: "call" }); } send(e, "M16", {}, "text");
       S.msgs.forEach((x) => { if (x.engId === e.id && ["approval", "approved", "writing"].includes(x.status) && x.channel === "text") { x.status = "discarded"; x.note = "Client opted out of texts"; } });
       timeline(e, "Client opted out of texts", c.first); audit("consent.withdrawn", c.first + " " + c.last, c.first);
       if (!(c.email && c.emailOk)) { e.status = "opted_out"; e.stuck = "opted_out"; e.next = null; } else if (e.status === "in_progress") e.next = nextAllowed(new Date(S.now.getTime() + DAY));
@@ -1445,7 +1471,7 @@
     if (e.status === "complete" && open) { e.status = "in_progress"; e.completedAt = null; e.step = 0; if (!e.next) e.next = nextAllowed(S.now); timeline(e, "Reopened: a document is outstanding again"); }
     else if (["in_progress", "stuck"].includes(e.status) && !open && any) { if (checkComplete(e)) finished(e); }
   }
-  window.TH = { areaZone, zoneFor, addContact, removeContact, planEnded, setLine, isLandline, RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
+  window.TH = { setCallOk, plans, quoteFor, areaZone, zoneFor, addContact, removeContact, planEnded, setLine, isLandline, RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
     dump, load, blank, setNow, setUser, linkFor, linkLive, LINK_DAYS, consentFromPage, declineTexts, stopEmail, unsubscribeLink, CONSENT_WORDING,
     get S() { return S; }, FORMS, TPL, TPL_USE, QUESTIONS, STUCK, DAY, HOUR, MIN,
     client, eng, engOf, itemsOf, openItems, progress, fill, outputCheck, channelFor, allowed, nextAllowed, live, nextItem,

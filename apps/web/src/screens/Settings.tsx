@@ -83,7 +83,7 @@ function ChecklistsTab() {
 }
 
 // The words Tallyhound uses. One message at a time: the standard wording, the firm's own if it has one, and what a client would see.
-const WORD_GROUPS: [string, string[]][] = [["Getting started", ["M1", "M1R", "M2", "M28", "M28R", "M29", "M27"]], ["Asking and reminding", ["M3", "M4", "M5", "M6", "M10", "M26", "M13"]], ["When a document has a problem", ["M7", "M8", "M8L", "M9", "M22", "M22R", "M11", "M30L", "M30T", "M30K"]], ["Answering the client", ["M15", "M19", "M19X", "M20", "M23", "M32"]], ["Passing to a person", ["M12", "M14", "M24", "M25", "M21"]], ["Required by law", ["M16", "M16H", "M31"]]];
+const WORD_GROUPS: [string, string[]][] = [["Getting started", ["M1", "M1R", "M2", "M28", "M28R", "M29", "M27"]], ["Asking and reminding", ["M3", "M4", "M5", "M6", "M33", "M10", "M26", "M13"]], ["When a document has a problem", ["M7", "M8", "M8L", "M9", "M22", "M22R", "M11", "M30L", "M30T", "M30K"]], ["Answering the client", ["M15", "M19", "M19X", "M20", "M23", "M32"]], ["Passing to a person", ["M12", "M14", "M24", "M25", "M21"]], ["Required by law", ["M16", "M16H", "M31"]]];
 const BLANK: Record<string, string> = { "{first}": "Client's first name", "{firm}": "Firm name", "{n}": "How many documents", "{k}": "How many are still missing", "{year}": "Tax year", "{plain_name}": "Document name", "{from_payer}": "Who it comes from", "{where_hint}": "Where to find it", "{issuer}": "Who sends it", "{doc_year}": "Year on the document", "{question}": "The question", "{preparer}": "Preparer's name", "{link}": "The client's private link", "{missing}": "The missing part", "{fix}": "What to send", "{list}": "The list of documents", "{date}": "The date", "{summary}": "What was received", "{firm_phone}": "Office phone", "{firm_email}": "Your Tallyhound address", "{verify}": "How to check the message is real", "{for_entity}": "The business or trust name" };
 function WordingTab() {
   const { T, act, toast } = useFirm(), f = T.S.firm, std: Record<string, string> = T.TPL.en, own: Record<string, string> = (f.templates && f.templates.en) || {}, known = new Set(Object.keys(std));
@@ -149,6 +149,29 @@ function TextingTab() {
   </div>;
 }
 
+// Requests from the firm's own domain instead of its Tallyhound address. Three DNS records, then a check.
+type DomainNow = { name: string; from: string; verified: boolean; records: { kind: string; type: string; host: string; value: string; ok: boolean }[] };
+function DomainTab() {
+  const { T, toast, reload } = useFirm(), f = T.S.firm, [st, setSt] = useState<{ available?: boolean; domain: DomainNow | null } | null>(null), [v, setV] = useState({ name: "", local: "documents" }), [why, setWhy] = useState(""), [busy, setBusy] = useState(false), [gone, setGone] = useState(false);
+  const load = () => api.get<{ available?: boolean; domain: DomainNow | null }>("/api/domain").then(setSt, (e: Error) => { setSt({ available: false, domain: null }); toast(e.message); });
+  useEffect(() => { void load(); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
+  const run = async (go: () => Promise<{ domain: DomainNow | null }>, done: (d: DomainNow | null) => string) => { setWhy(""); setBusy(true); try { const r = await go(); setSt({ domain: r.domain }); toast(done(r.domain)); await reload(); } catch (e) { setWhy((e as Error).message); } finally { setBusy(false); } };
+  const dm = st?.domain, copy = (t: string) => navigator.clipboard.writeText(t).then(() => toast("Copied."), () => undefined);
+  return <div className="col" style={{ gap: 16 }}>
+    <div className="card pad col"><h2>The address your requests come from</h2>
+      <p className="small muted">Today clients see email from <span className="mono">{dm?.verified ? dm.from : f.email}</span>. {dm?.verified ? "Replies still come to Tallyhound, so nothing changes in how documents arrive." : "That works everywhere and needs nothing from you. If you would rather clients saw your own domain, add it here. Replies still come to Tallyhound, which never connects to your mailbox."}</p>
+      {why ? <div className="note bad" role="alert">{why}</div> : null}
+      {st === null ? <p className="small muted" role="status">Checking…</p> : st.available === false ? <div className="note info"><Icon name="clock" small /><span>Sending from your own domain is not switched on for Tallyhound yet.</span></div>
+        : !dm ? <><div className="grid g2"><label className="f">The part before the @<input type="text" value={v.local} maxLength={40} onChange={(ev) => setV({ ...v, local: ev.target.value })} /></label><label className="f">Your firm's domain<input type="text" placeholder="larkinpoe.com" value={v.name} maxLength={253} onChange={(ev) => setV({ ...v, name: ev.target.value })} /></label></div>
+          <div><button className="btn pri" disabled={busy || !v.name.trim()} onClick={() => void run(() => api.post("/api/domain", v), () => "Added. Now add the three records below where your domain is managed.")}>Add this domain</button></div></>
+        : <><div className={"note " + (dm.verified ? "good" : "info")} role="status"><Icon name={dm.verified ? "check" : "clock"} small /><span>{dm.verified ? "Requests come from " + dm.from + "." : "Waiting for the records below. Until they are found, requests keep coming from your Tallyhound address."}</span></div>
+          <div className="tbl"><table><thead><tr><th>Record</th><th>Type</th><th>Name</th><th>Value</th><th></th></tr></thead><tbody>{dm.records.map((r) => <tr key={r.kind}><td><b>{r.kind}</b></td><td>{r.type}</td><td className="mono small">{r.host}</td><td className="mono small" style={{ overflowWrap: "anywhere" }}>{r.value}</td><td><span className="row" style={{ gap: 6, flexWrap: "nowrap" }}>{r.ok ? <Chip tone="good">Found</Chip> : <Chip tone="warn">Not found yet</Chip>}<button className="btn sm ghost" aria-label={"Copy the " + r.kind + " value"} onClick={() => void copy(r.value)}>Copy</button></span></td></tr>)}</tbody></table></div>
+          <p className="small muted">Add these where your domain's DNS is managed (often GoDaddy, Cloudflare or whoever hosts your website), or send this page to whoever looks after it. Changes can take up to a day to show. The DMARC record is advised, not required; if your domain already has one, leave it as it is.</p>
+          <div className="row"><button className="btn pri" disabled={busy} onClick={() => void run(() => api.post("/api/domain/check", {}), (x) => (x?.verified ? "Found. Requests now come from " + x.from + "." : "Not found yet. Records can take up to a day to show."))}>Check now</button><button className="btn ghost" onClick={() => setGone(true)}>Remove this domain</button></div></>}</div>
+    {gone && dm ? <Modal title={"Stop using " + dm.name + "?"} onClose={() => setGone(false)} footer={<><button className="btn" onClick={() => setGone(false)}>Cancel</button><button className="btn bad" onClick={() => { setGone(false); void run(async () => { await api.del("/api/domain"); return { domain: null }; }, () => "Removed. Requests come from your Tallyhound address."); }}>Remove</button></>}><p>Requests go back to coming from {f.email} straight away. You can remove the DNS records afterwards.</p></Modal> : null}
+  </div>;
+}
+
 // Where finished files go: the firm's own Google Drive, or a zip a preparer downloads. Connecting is a visit to Google and back;
 // this page only starts it and shows the result.
 const PROBLEM: Record<string, string> = { state: "That did not come from a sign-in you started here. Try connecting again.", declined: "Permission was not given, so nothing was connected.", token: "The connection did not finish. Try again.", scope: "Tallyhound needs the permission to add files. Connect again and leave that box ticked.", site: "That SharePoint site could not be found, or you cannot open it. Check the address, which looks like https://yourfirm.sharepoint.com/sites/Tax.", unavailable: "That storage cannot be connected yet. Finished files are handed off as a zip.", error: "That did not work. Try again." };
@@ -187,7 +210,7 @@ function FilesTab() {
 // The firm's plan: what it is on, how much of it is used, and a pause for the quiet months. Card billing is not built, so a plan
 // is started or changed by Tallyhound and invoiced; nothing on this page takes money.
 function PlanTab() {
-  const { T, act, toast } = useFirm(), s = T.S, b = T.billing(), a = T.access(), u = T.usage(), plans: [string, number, number, number][] = T.PLANS, mine = plans.find((p) => p[0] === b.plan), n = s.clients.length, left = T.pauseLeft();
+  const { T, act, toast } = useFirm(), s = T.S, b = T.billing(), a = T.access(), u = T.usage(), plans: [string, number, number, number][] = T.plans(), mine = plans.find((p) => p[0] === b.plan), n = s.clients.length, left = T.pauseLeft();
   const [until, setUntil] = useState(""), [why, setWhy] = useState(""), [params] = useSearchParams(), [bill, setBill] = useState<{ available: boolean; plans: string[]; paying: boolean; pastDue: boolean; graceEnds: string | null } | null>(null), [going, setGoing] = useState(false);
   useEffect(() => { api.get<typeof bill>("/api/billing").then(setBill, () => setBill({ available: false, plans: [], paying: false, pastDue: false, graceEnds: null })); }, []);
   // Paying and managing cards happen on the payment service's own pages. Tallyhound never sees a card.
@@ -239,12 +262,12 @@ function SecurityTab() {
   </div>;
 }
 
-const TABS: [string, string][] = [["firm", "Your firm"], ["people", "People"], ["checklists", "Checklists"], ["wording", "Message wording"], ["hours", "Sending hours"], ["texting", "Text number"], ["files", "Finished files"], ["plan", "Your plan"], ["security", "Security and data"]];
+const TABS: [string, string][] = [["firm", "Your firm"], ["people", "People"], ["checklists", "Checklists"], ["wording", "Message wording"], ["hours", "Sending hours"], ["texting", "Text number"], ["domain", "Email address"], ["files", "Finished files"], ["plan", "Your plan"], ["security", "Security and data"]];
 export function Settings() {
   const { can } = useFirm(), [params, setParams] = useSearchParams(), tab = TABS.some((t) => t[0] === params.get("tab")) ? params.get("tab")! : "firm";
   if (!can("owner")) return <Page title="Settings"><div className="card pad"><p>Settings are for owners. Ask an owner at your firm if something here needs changing.</p></div></Page>;
   return <Page title="Settings">
     <div className="tabs" role="tablist">{TABS.map((t) => <button key={t[0]} role="tab" aria-selected={tab === t[0]} className={tab === t[0] ? "on" : ""} onClick={() => setParams(t[0] === "firm" ? {} : { tab: t[0] })}>{t[1]}</button>)}</div>
-    {tab === "firm" ? <FirmTab /> : tab === "people" ? <PeopleTab /> : tab === "checklists" ? <ChecklistsTab /> : tab === "wording" ? <WordingTab /> : tab === "hours" ? <HoursTab /> : tab === "texting" ? <TextingTab /> : tab === "files" ? <FilesTab /> : tab === "plan" ? <PlanTab /> : <SecurityTab />}
+    {tab === "firm" ? <FirmTab /> : tab === "people" ? <PeopleTab /> : tab === "checklists" ? <ChecklistsTab /> : tab === "wording" ? <WordingTab /> : tab === "hours" ? <HoursTab /> : tab === "texting" ? <TextingTab /> : tab === "domain" ? <DomainTab /> : tab === "files" ? <FilesTab /> : tab === "plan" ? <PlanTab /> : <SecurityTab />}
   </Page>;
 }

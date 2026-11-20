@@ -204,3 +204,14 @@ test("T-118: a text from an unknown number is kept with the number it came from;
   const a = await x.app.inboundEmail({ to: "docs@test.example", from: "Partner <PARTNER@home.example>", body: "Here it is.", attachments: [{ bytes: Buffer.from("pdf"), contentType: "application/pdf" }], providerId: "e1" }); assert.equal(a.client, x.state().S.clients[0].id);
   const n = x.state().S.tray.length, b = await x.app.inboundEmail({ to: "docs@test.example", from: "partner@home.example", body: "Again.", trusted: false, attachments: [{ bytes: Buffer.from("pdf2"), contentType: "application/pdf" }], providerId: "e2" }); assert.ok(!b.client); assert.ok(x.state().S.tray.length > n, "it waits for a person");
 });
+
+test("T-50: a recorded reminder call is placed once through the voice service, with the fixed wording; with no voice service it fails in the open and nothing is called", async () => {
+  const placed = [], voice = { async call(c) { placed.push(c); return "CA" + placed.length; } };
+  const mk = async (v) => { let t = new Date(2027, 0, 25, 10, 5, 0); const store = memoryStore(), sms = fakeSender(), email = fakeSender(), app = createApp({ store, sms, email, ai: null, clock: () => t, voice: v });
+    await app.createFirm("f1", { name: "Test CPAs", email: "docs@test.example", smsNumber: FIRM_NO, senderStatus: "approved", mode: "autopilot", plan: "Practice", users: [{ id: "u1", first: "Pat", name: "Pat Owner", role: "owner", email: "pat@test.example" }] });
+    await app.staff("f1", "u1", (T) => { T.S.firm.hound.voicemail = true; T.importRows(T.parseCSV("First,Last,Email,Mobile\nJo,Day,jo@x.example,6155550111")); const e = T.S.engs[0]; e.confirmed = true; T.start(e.id); T.giveConsent(T.S.clients[0].id, "page"); T.setCallOk(T.S.clients[0].id, true, "asked on intake"); });
+    for (let i = 0; i < 40; i++) { t = new Date(t.getTime() + 86400000); await app.tick("f1"); } const T = createEngine(); T.load(store.read("f1")); return T; };
+  const T = await mk(voice); assert.equal(placed.length, 1); assert.equal(placed[0].to, "6155550111"); assert.match(placed[0].say, /^This is a message for Jo from Test CPAs/); assert.ok(placed[0].idempotencyKey);
+  const m = T.S.msgs.find((x) => x.channel === "voice"); assert.ok(m.sentAt || m.providerId, "recorded as placed");
+  placed.length = 0; const U = await mk(undefined), n = U.S.msgs.find((x) => x.channel === "voice"); assert.equal(placed.length, 0); assert.ok(n.failed || n.status === "failed", "marked as failed, for a person to see");
+});

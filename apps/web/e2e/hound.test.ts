@@ -1,7 +1,7 @@
 // The Hound screen and the Hound panel on a client's page (T-20).
 import { after } from "node:test";
 import assert from "node:assert/strict";
-import { busyFirm, closeBrowser, scene } from "./world.ts";
+import { busyFirm, closeBrowser, DNS, scene } from "./world.ts";
 import type { Engine } from "../../server/src/kit.ts";
 
 after(closeBrowser);
@@ -160,4 +160,14 @@ scene("Next season: an owner starts the next tax year; finished clients carry fo
   await page.goto(W.url + "/clients/" + T.engOf(jo.id).id + "?tab=details"); await page.getByRole("heading", { name: "Earlier years" }).waitFor(); assert.match(text(await page.locator(".card", { hasText: "Earlier years" }).textContent()), new RegExp(year + " ?\\d+ of \\d+ documents received"));
   // Staff cannot do this.
   await page.request.post(W.url + "/api/users", { data: { name: "Alex Staff", email: "alex@firm1.test", role: "staff" }, headers: { "x-tallyhound": "1" } }); const alex = await W.signIn("alex@firm1.test"); assert.equal((await alex.request.post(W.url + "/api/act", { data: { fn: "rollSeason", args: [year + 2] }, headers: { "x-tallyhound": "1" } })).status(), 403);
+});
+
+scene("Email address: an owner adds the firm's domain, sees the three records, and requests come from it once they are found", async (W) => {
+  DNS.found = false; const { firmId } = await busyFirm(W), page = await W.signIn("pat1@firm1.test"); await page.goto(W.url + "/settings?tab=domain"); await page.getByRole("heading", { name: "The address your requests come from" }).waitFor();
+  await page.getByLabel("Your firm's domain").fill("gmail.com"); await page.getByRole("button", { name: "Add this domain" }).click(); await page.getByRole("alert").getByText(/not a domain your firm controls/).waitFor();
+  await page.getByLabel("Your firm's domain").fill("larkinpoe.example"); await page.getByRole("button", { name: "Add this domain" }).click(); await page.getByText(/Waiting for the records below/).waitFor();
+  assert.equal(await page.locator("tbody tr").count(), 3); assert.equal(await page.getByText("Not found yet", { exact: true }).count(), 3); assert.match(text(await page.locator("tbody").textContent()), /DKIM ?TXT ?pm\._domainkey\.larkinpoe\.example/);
+  await page.getByRole("button", { name: "Check now" }).click(); await page.getByText("Not found yet. Records can take up to a day to show.").waitFor(); assert.equal((await W.state(firmId)).S.firm.domain.verified, false);
+  DNS.found = true; await page.getByRole("button", { name: "Check now" }).click(); await page.getByRole("status").getByText("Requests come from documents@larkinpoe.example.").waitFor(); assert.equal((await W.state(firmId)).S.firm.domain.verified, true);
+  await page.getByRole("button", { name: "Remove this domain" }).click(); await page.getByRole("dialog").getByRole("button", { name: "Remove" }).click(); await page.getByLabel("Your firm's domain").waitFor(); assert.equal((await W.state(firmId)).S.firm.domain, null);
 });

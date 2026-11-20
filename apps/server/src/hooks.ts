@@ -95,7 +95,7 @@ export function registerHooks(f: FastifyInstance, d: HookDeps): void {
     });
     // A hard bounce or a spam complaint: stop emailing that address and tell the firm (T-60, T-103).
     f.post("/hooks/postmark/bounce", { preHandler: known }, async (req) => {
-      const j = (req.body || {}) as Record<string, unknown>, b = kitEmailOut.bounceEvent(j), firmId = b.hard && b.email ? await d.store.firmIdByInbox(addr(j.From)) : null;
+      const j = (req.body || {}) as Record<string, unknown>, b = kitEmailOut.bounceEvent(j), firmId = b.hard && b.email ? (await d.store.firmIdByInbox(b.inbox || addr(j.From))) || (await d.store.firmIdByInbox(addr(j.From))) : null;   // mail sent from a firm's own domain carries its Tallyhound address with it
       if (firmId) await d.app.withFirm(firmId, (T: Engine) => bounced(T, b.email, b.kind));
       return { ok: true };
     });

@@ -1,4 +1,6 @@
 // Builds the whole service for a test: in memory, or on a real Postgres when DATABASE_URL is set (each in its own schema, dropped at the end).
+import { createDomains } from "../src/domain.ts";
+import { memorySignupStore, postgresSignupStore } from "../src/signup.ts";
 import { createBilling, memoryBillingStore, postgresBillingStore } from "../src/billing.ts";
 import { createStorage, memoryStorageStore, postgresStorageStore } from "../src/storage.ts";
 import { createAsk, type Converse } from "../src/ask.ts";
@@ -26,7 +28,7 @@ export const APP_URL = "https://app.tallyhound.test";
 
 export const TWILIO_TOKEN = "twilio-test-token", PM = { user: "postmark", pass: "hook-pass" };
 
-export async function build(kind: "memory" | "postgres" = "memory", opt: { ai?: unknown; prepare?: PrepareOpts; appUrl?: string; lookup?: Lookup; converse?: Converse; google?: typeof fetch; stripe?: typeof fetch } = {}) {
+export async function build(kind: "memory" | "postgres" = "memory", opt: { ai?: unknown; prepare?: PrepareOpts; appUrl?: string; lookup?: Lookup; converse?: Converse; google?: typeof fetch; stripe?: typeof fetch; signup?: { open: boolean; priceBook?: "A" | "B" }; postmarkAccount?: typeof fetch; dnsTxt?: (host: string) => Promise<string[][]> } = {}) {
   let t = new Date("2027-01-25T16:05:00Z"); const clock = () => t;
   const APP = opt.appUrl || APP_URL, keyring = kitCrypto.localKeyring(randomBytes(32)), schema = "th_test_" + randomBytes(6).toString("hex"); let inner: ReturnType<typeof kitMemory.memoryStore>, queue: QueueStore, auth: AuthStore, pool: pg.Pool | null = null, auditRows: () => Promise<{ action: string; actor: string }[]>;
   if (kind === "postgres") {
@@ -50,9 +52,10 @@ export async function build(kind: "memory" | "postgres" = "memory", opt: { ai?: 
   const inbox = createInbox({ queue, store, app, handlers: handlers({ app, twilio, prepare: opt.prepare }), clock });
   const links: { to: string; url: string }[] = [], lockMails: { to: string; minutes: number }[] = [];
   const signIn = createSignIn({ auth, secrets: firmSecrets(store, keyring, kitCrypto), mailer: { async signInLink(to, url) { links.push({ to, url }); }, async locked(to, minutes) { lockMails.push({ to, minutes }); } }, linkSecret: "test-secret", appUrl: APP, clock });
-  const billing = opt.stripe ? createBilling({ store: pool ? postgresBillingStore(pool) : memoryBillingStore(), app, secretKey: "sk_test_x", webhookSecret: "whsec_test", prices: { Solo: "price_solo", Practice: "price_practice" }, appUrl: APP, clock, fetch: opt.stripe }) : undefined;
+  const billing = opt.stripe ? createBilling({ store: pool ? postgresBillingStore(pool) : memoryBillingStore(), app, secretKey: "sk_test_x", webhookSecret: "whsec_test", prices: { Solo: "price_solo", Practice: "price_practice" }, pricesB: { Solo: "price_solo_b", Practice: "price_practice_b", Firm: "price_firm_b" }, appUrl: APP, clock, fetch: opt.stripe }) : undefined;
   const firms = createFirms({ app, auth, store, linkHost: "go.tallyhound.test" }), staffMails: { to: string; subject: string; body: string }[] = [], devMails: { subject: string; body: string }[] = [], ops = pool ? postgresOpsStore(pool) : memoryOpsStore(), watch = createWatch({ to: "dev@tallyhound.test", send: async (_to, subject, body) => { devMails.push({ subject, body }); }, clock }), worker = createWorker({ app, auth, clock, inbox, ops, watch, billing, lines: opt.lookup ? (id) => checkLines(app, (f) => store.readState(f), createEngine, opt.lookup!, id) : undefined, notify: createNotifier({ appUrl: APP }), mailer: { async staff(to, subject, body) { staffMails.push({ to, subject, body }); } } });
-  const server = await buildServer({ billing, storage, ask: opt.converse ? createAsk({ model: opt.converse, readState: (id) => store.readState(id), createEngine, wallNow: () => clock() }) : undefined, app, auth, signIn, firms, readState: (id) => store.readState(id), getFile: (id, key) => store.getFile(id, key), appUrl: APP, secureCookies: APP.startsWith("https:"), webDir: join(HERE, "../../web/dist"), prepare: opt.prepare, clientPages: { store, inbox, clock, lookup: opt.lookup }, hooks: { store, inbox, twilioAuthToken: TWILIO_TOKEN, postmarkHook: PM } });
+  const signupMails: { to: string; subject: string; body: string }[] = [], told: { subject: string; body: string }[] = [];
+  const server = await buildServer({ domains: opt.postmarkAccount ? createDomains({ app, accountToken: "acct-token", fetch: opt.postmarkAccount, resolveTxt: opt.dnsTxt || (async () => []) }) : undefined, signup: opt.signup ? { store: pool ? postgresSignupStore(pool) : memorySignupStore(), open: opt.signup.open, priceBook: opt.signup.priceBook, inboxDomain: "docs.tallyhound.test", clock, inboxTaken: async (a) => !!(await store.firmIdByInbox(a)), mail: async (to, subject, body) => { signupMails.push({ to, subject, body }); }, tell: async (subject, body) => { told.push({ subject, body }); } } : undefined, billing, storage, ask: opt.converse ? createAsk({ model: opt.converse, readState: (id) => store.readState(id), createEngine, wallNow: () => clock() }) : undefined, app, auth, signIn, firms, readState: (id) => store.readState(id), getFile: (id, key) => store.getFile(id, key), appUrl: APP, secureCookies: APP.startsWith("https:"), webDir: join(HERE, "../../web/dist"), prepare: opt.prepare, clientPages: { store, inbox, clock, lookup: opt.lookup }, hooks: { store, inbox, twilioAuthToken: TWILIO_TOKEN, postmarkHook: PM } });
 
   // A browser: keeps its cookie, sends the header our pages send.
   function browser() {
@@ -85,7 +88,7 @@ export async function build(kind: "memory" | "postgres" = "memory", opt: { ai?: 
   }
   const advance = (seconds: number) => { t = new Date(t.getTime() + seconds * 1000); };
   const newFirm = (n = 1, verified = true) => firms.create({ name: "Test CPAs " + n, inbox: "test" + n + "@docs.tallyhound.test", smsNumber: "615555010" + n, iana: "America/Chicago", ownerName: "Pat Owner", ownerEmail: "pat" + n + "@firm" + n + ".test", plan: "Practice", verified });
-  return { kind, server, app, auth, firms, worker, inbox, queue, inner, media, mediaCalls, mediaDown: (on: boolean) => { mediaDown = on; }, twilioPost, postmarkPost, store, sms, email, links, lockMails, staffMails, devMails, ops, storage, get billing() { return billing; }, browser, signInAs, codeFor, token, unbase32, secrets, advance, clock, newFirm, auditRows, async close() { await inbox.drain(); await server.close(); if (pool) { await pool.query("drop schema " + schema + " cascade"); await pool.end(); } } };
+  return { kind, server, app, auth, firms, worker, inbox, queue, inner, media, mediaCalls, mediaDown: (on: boolean) => { mediaDown = on; }, twilioPost, postmarkPost, store, sms, email, links, lockMails, staffMails, devMails, signupMails, told, ops, storage, get billing() { return billing; }, browser, signInAs, codeFor, token, unbase32, secrets, advance, clock, newFirm, auditRows, async close() { await inbox.drain(); await server.close(); if (pool) { await pool.query("drop schema " + schema + " cascade"); await pool.end(); } } };
 }
 export type Harness = Awaited<ReturnType<typeof build>>;
 

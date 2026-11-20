@@ -25,6 +25,9 @@ export async function world() {
   const reading: { doc: Record<string, unknown>; text: Record<string, unknown> } = { doc: CLEAN_W2, text: SAYS_NONE };
   const ai = kitMemory.fakeAI((p: string) => (p.startsWith("You read photos") ? reading.doc : p.startsWith("You read text messages") ? reading.text : null));
   const port = await freePort(), url = "http://127.0.0.1:" + port, H = await build("memory", { ai, appUrl: url,
+    // A stand-in for the mail service's Domains API: one domain, whose records are "found" once DNS.found is set.
+    postmarkAccount: (async (u: unknown, init: RequestInit = {}) => { const p = new URL(String(u)).pathname, ok = (v: unknown, st = 200) => new Response(JSON.stringify(v), { status: st, headers: { "content-type": "application/json" } }); if (p === "/domains" && init.method === "POST") DNS.name = JSON.parse(String(init.body)).Name; if (init.method === "DELETE") return ok({});
+      return ok({ ID: 7, Name: DNS.name, DKIMVerified: DNS.found, DKIMPendingHost: "pm._domainkey." + DNS.name, DKIMPendingTextValue: "k=rsa; p=MIGf", ReturnPathDomain: "pm-bounces." + DNS.name, ReturnPathDomainCNAMEValue: "pm.mtasv.net", ReturnPathDomainVerified: DNS.found }); }) as unknown as typeof fetch, dnsTxt: async () => (DNS.found ? [["v=DMARC1; p=none;"]] : []),
     // A stand-in for Stripe: it hands back the address of a payment page, which the tests never visit.
     stripe: (async (u: unknown) => new Response(JSON.stringify({ id: "x_1", url: String(u).includes("portal") ? "https://billing.stripe.com/p/session/x_1" : "https://checkout.stripe.com/c/pay/x_1" }), { status: 200, headers: { "content-type": "application/json" } })) as unknown as typeof fetch,
     // A stand-in for Google's token service, enough to connect and disconnect a drive.
@@ -51,6 +54,7 @@ export async function world() {
   const state = async (firmId: string): Promise<Engine> => { const T = createEngine(); T.load(await H.store.readState(firmId)); return T; };
   return Object.assign(H, { url, signIn, state, errors, reading, CLEAN_W2, async end() { for (const p of pages) await p.context().close(); await H.close(); } });
 }
+export const DNS = { name: "", found: false };
 export type World = Awaited<ReturnType<typeof world>>;
 export async function closeBrowser() { if (browser) await browser.close(); browser = null; }
 

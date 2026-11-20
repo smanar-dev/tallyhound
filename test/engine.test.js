@@ -317,3 +317,26 @@ test("T-47: with no state or zone on file, the area code is the guess; a zone st
   T.setZone(c.id, "ET"); assert.equal(T.zoneFor(c), "ET"); assert.equal(T.allowedC(at(7), c), true, "staff said Eastern, whatever the number says");
   T.setZone(c.id, ""); c.mobile = "8005550100"; assert.equal(T.zoneFor(c), null); assert.equal(T.allowedC(at(8), c), true); assert.equal(T.allowedC(at(7, 30), c), false);
 });
+test("T-97, T-98: a firm on the second price list sees those prices and no other firm does; above the largest plan the price goes up by blocks of 1,000 clients", () => {
+  const { T } = firm(); assert.deepEqual(T.plans().map((p) => p[1]), [99, 249, 599, 999]); assert.deepEqual(T.plans(), T.PLANS); assert.notEqual(T.plans(), T.PLANS, "a copy, so nothing can change the list");
+  T.S.firm.priceBook = "B"; assert.deepEqual(T.plans().map((p) => [p[0], p[1], p[2]]), [["Solo", 149, 150], ["Practice", 349, 500], ["Firm", 799, 1000], ["Large", 1299, 2500]]); assert.deepEqual(T.PLANS.map((p) => p[1]), [99, 249, 599, 999]);
+  T.S.firm.priceBook = "A"; assert.deepEqual(T.quoteFor(120), { plan: "Solo", monthly: 99, clients: 150, blocks: 0 }); assert.deepEqual(T.quoteFor(2500), { plan: "Large", monthly: 999, clients: 2500, blocks: 0 });
+  assert.deepEqual(T.quoteFor(2501), { plan: "Large", monthly: 1349, clients: 3500, blocks: 1 }); assert.deepEqual(T.quoteFor(6200), { plan: "Large", monthly: 999 + 4 * 350, clients: 6500, blocks: 4 });
+  assert.equal(T.quoteFor(0), null); assert.equal(T.quoteFor("many"), null); assert.equal(T.quoteFor(1e9), null);
+});
+test("T-50: one recorded reminder call after the final reminder, only when the owner switched it on, the firm is on Autopilot and the client agreed to calls; STOP ends it", () => {
+  const run = (prep) => { const x = started(); x.T.setUser("u1"); prep(x); for (let i = 0; i < 40 && x.e.status !== "stuck"; i++) { x.T.setNow(new Date(x.T.S.now.getTime() + x.T.DAY)); x.T.tick(); } return x; };
+  const calls = (x) => x.T.S.msgs.filter((m) => m.channel === "voice");
+  // Off, which is how every firm starts. And on, but this client never agreed to calls.
+  const A = run(() => {}); assert.equal(A.e.status, "stuck"); assert.equal(calls(A).length, 0);
+  const B = run((x) => { x.T.S.firm.hound.voicemail = true; x.T.S.firm.hound.mode = "autopilot"; }); assert.equal(calls(B).length, 0);
+  // On, Autopilot, and the client agreed: one call, fixed wording, and never a second.
+  const C = run((x) => { x.T.S.firm.hound.voicemail = true; x.T.S.firm.hound.mode = "autopilot"; assert.equal(x.T.setCallOk(x.c.id, true, "said so on the phone"), null); });
+  assert.equal(calls(C).length, 1); const m = calls(C)[0]; assert.equal(m.tpl, "M33"); assert.equal(m.status, "delivered"); assert.match(m.body, /^This is a message for Jo from /); assert.doesNotMatch(m.body, /refund|owe|penalt/i); assert.match(C.c.consentLog.find((l) => l.channel === "call").what, /Agreed to reminder calls, recorded by .*: said so on the phone/);
+  assert.equal(C.T.allowedC(new Date(m.at), C.c), true, "placed inside sending hours");
+  for (let i = 0; i < 20; i++) { C.T.setNow(new Date(C.T.S.now.getTime() + C.T.DAY)); C.T.tick(); } assert.equal(calls(C).length, 1);
+  // Copilot never places a call by itself.
+  const D = run((x) => { x.T.S.firm.hound.voicemail = true; x.T.S.firm.hound.mode = "copilot"; x.T.setCallOk(x.c.id, true); }); assert.equal(calls(D).length, 0);
+  // STOP ends calls as well as texts, and staff cannot turn calls back on for someone who said stop.
+  const E = started(); E.T.setUser("u1"); E.T.setCallOk(E.c.id, true); E.T.inboundText(E.c.id, "STOP", null); assert.equal(E.c.callOk, false); assert.match(E.T.setCallOk(E.c.id, true), /Only Jo can change that/);
+});

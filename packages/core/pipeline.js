@@ -51,7 +51,7 @@ function ownerOf(T, list, spec, fallback) {
 }
 // Files read per firm per day from senders nobody has confirmed. Enough for a busy spouse, too few to be worth abusing.
 const UNKNOWN_FILES_PER_DAY = 20;
-function createApp({ store, sms, email, ai, clock, log, files }) {
+function createApp({ store, sms, email, ai, clock, log, files, voice }) {
   const now = clock || (() => new Date());
   const say = log || (() => {});
   const ask = async (prompt, opts) => { if (!ai) return null; try { const r = await ai.json(prompt, opts || {}); return r && typeof r === "object" ? r : null; } catch (err) { say("ai_error", String(err && err.message || err)); return null; } };
@@ -84,7 +84,8 @@ function createApp({ store, sms, email, ai, clock, log, files }) {
     }
     const done = [];
     for (const j of jobs) {
-      try { done.push({ id: j.id, providerId: j.channel === "text" ? await sms.send({ from: j.from, to: j.to, body: j.body, idempotencyKey: j.id }) : await email.send({ from: j.from, fromName: j.fromName, to: j.to, subject: j.subject, body: j.body, idempotencyKey: j.id, unsubscribe: j.unsubscribe }) }); }
+      try { if (j.channel === "voice" && !voice) throw new Error("Calls are not connected");
+        done.push({ id: j.id, providerId: j.channel === "voice" ? await voice.call({ from: j.from, to: j.to, say: j.body, idempotencyKey: j.id }) : j.channel === "text" ? await sms.send({ from: j.from, to: j.to, body: j.body, idempotencyKey: j.id }) : await email.send({ from: j.from, replyTo: j.replyTo, fromName: j.fromName, to: j.to, subject: j.subject, body: j.body, idempotencyKey: j.id, unsubscribe: j.unsubscribe }) }); }
       catch (err) { done.push({ id: j.id, error: String(err && err.message || err), code: err && err.code }); }
     }
     await store.lock(firmId, async (json) => {
@@ -138,9 +139,11 @@ function createApp({ store, sms, email, ai, clock, log, files }) {
       const e = T.eng(m.engId), c = e && T.client(e.clientId); if (!c) continue;
       m.claimedAt = now().getTime();
       if (m.channel === "text") { jobs.push({ id: m.id, channel: "text", from: S.firm.smsNumber, to: c.mobile, body: m.body }); continue; }
+      // A recorded reminder call (T-50). Claimed and saved before the call is placed, like every send, and never placed twice.
+      if (m.channel === "voice") { jobs.push({ id: m.id, channel: "voice", from: S.firm.smsNumber, to: c.mobile, body: m.body }); continue; }
       // Every email carries a way to stop them: a line at the foot, and the address the mail provider puts in the one-click header.
       const un = T.unsubscribeLink ? T.unsubscribeLink(c) : "", foot = un ? "\n\nYou're getting this because " + S.firm.name + " prepares your taxes. To stop these emails: https://" + un : "";
-      jobs.push({ id: m.id, channel: "email", from: S.firm.email, fromName: S.firm.sender, to: c.email, subject: S.firm.sender + ": your " + e.year + " tax documents", body: m.body + foot, unsubscribe: un ? "https://" + un : undefined });
+      jobs.push({ id: m.id, channel: "email", from: S.firm.domain && S.firm.domain.verified && S.firm.domain.from ? S.firm.domain.from : S.firm.email, replyTo: S.firm.email, fromName: S.firm.sender, to: c.email, subject: S.firm.sender + ": your " + e.year + " tax documents", body: m.body + foot, unsubscribe: un ? "https://" + un : undefined });
     }
     return jobs;
   }

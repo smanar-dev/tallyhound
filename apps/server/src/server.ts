@@ -1,5 +1,7 @@
 // The web service. Sign-in, the firm's state for the web app, and one endpoint per kind of staff action.
 // It holds no product rules: every action runs the engine through the pipeline (app.staff), which loads, decides, saves and sends.
+import { DomainError, type Domains } from "./domain.ts";
+import { registerSignup, type SignupDeps } from "./signup.ts";
 import { kitRegistration } from "./kit.ts";
 import { BillingError, type Billing } from "./billing.ts";
 import { SLUG, StorageError, type Storage } from "./storage.ts";
@@ -26,6 +28,10 @@ export interface ServerDeps {
   appUrl: string; secureCookies: boolean; webDir: string; prepare?: PrepareOpts;
   /** The client's own pages. Present whenever there is a queue to put uploads on. */
   clientPages?: Omit<PublicDeps, "app" | "auth" | "log">;
+  /** Sending from a firm's own domain. Absent until the mail service's account token is set. */
+  domains?: Domains;
+  /** The public sign-up and price pages. */
+  signup?: Omit<SignupDeps, "auth" | "firms" | "app" | "appUrl" | "log" | "requestSignInLink">;
   /** Card billing. Absent until Stripe is set up: plans are then started with the admin command and invoiced by hand. */
   billing?: Billing;
   /** A firm's own storage. Absent when no Google sign-in has been set up for this service. */
@@ -81,6 +87,7 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
   // 503 when the service says it is not well (the timer has stopped), so an uptime check pages someone.
   f.get("/healthz", async (_req, reply) => { const h = d.health ? await d.health() : {}, ok = h.ok !== false; return reply.code(ok ? 200 : 503).send({ ...h, ok }); });
   if (d.hooks) registerHooks(f, { ...d.hooks, app: d.app, publicUrl: d.appUrl, log: d.log });
+  if (d.signup) registerSignup(f, { ...d.signup, auth: d.auth, firms: d.firms, app: d.app, appUrl: d.appUrl, log: d.log, requestSignInLink: (email) => d.signIn.requestLink(email) });
   if (d.clientPages) await registerPublic(f, { ...d.clientPages, app: d.app, auth: d.auth, log: d.log });
 
   // ---- sign-in ----
@@ -191,6 +198,13 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
     const T = createEngine(); T.load(json); const fm = T.S.firm, n = String(fm.smsNumber || "");
     return kitRegistration.headsUp({ name: fm.name }, { number: fm.senderStatus === "approved" && n.length === 10 ? "(" + n.slice(0, 3) + ") " + n.slice(3, 6) + "-" + n.slice(6) : undefined, address: fm.email || undefined });
   });
+
+  // ---- sending from the firm's own domain (owner only, T-110) ----
+  const dom = async (req: FastifyRequest, reply: FastifyReply, go: (u: User) => Promise<unknown>) => { const u = req.who!.user; if (u.role !== "owner") return reply.code(403).send({ error: "role", message: NO.other }); if (!d.domains) return reply.code(503).send({ error: "not_connected", message: "Sending from your own domain is not switched on yet." }); try { return { domain: await go(u) }; } catch (err) { if (err instanceof DomainError) return reply.code(err.status).send({ error: "domain", message: err.message + "." }); throw err; } };
+  f.get("/api/domain", { preHandler: full }, async (req, reply) => (d.domains ? dom(req, reply, (u) => d.domains!.status(u.firmId)) : { available: false, domain: null }));
+  f.post("/api/domain", { preHandler: full }, async (req, reply) => dom(req, reply, (u) => d.domains!.start(u.firmId, u.id, { name: str(body(req).name), local: str(body(req).local) })));
+  f.post("/api/domain/check", { preHandler: full }, async (req, reply) => dom(req, reply, (u) => d.domains!.check(u.firmId, u.id)));
+  f.delete("/api/domain", { preHandler: full }, async (req, reply) => dom(req, reply, async (u) => { await d.domains!.remove(u.firmId, u.id); return null; }));
 
   // ---- card billing (owner only). Paying and managing cards happen on Stripe's own pages; these hand the browser their address. ----
   f.get("/api/billing", { preHandler: full }, async (req) => (d.billing ? d.billing.status(req.who!.user.firmId) : { available: false, plans: [], paying: false, pastDue: false, graceEnds: null }));

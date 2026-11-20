@@ -48,7 +48,7 @@ export const ACTIONS: Record<string, Rule> = {
   // How much the Hound does on its own. Owner only; every change is in the audit trail.
   setHound: { role: "owner", n: 1, run: (T, [v]) => {
     const H = T.S.firm.hound, x = (v && typeof v === "object" ? v : {}) as Record<string, unknown>, pick = <V,>(k: string, allowed: V[]) => { if (allowed.includes(x[k] as V) && H[k] !== x[k]) { H[k] = x[k]; changed.push(k); } }, changed: string[] = [];
-    pick("mode", ["copilot", "autopilot"]); pick("tone", ["warm", "brief", "formal"]); pick("emailAfter", [1, 2, 3, 99]); pick("slaHours", [2, 4, 8, 24]); pick("pauseDays", [1, 2, 3, 5, 7]); pick("callTask", [true, false]); pick("aiWrite", [true, false]); pick("closingQ", [true, false]);
+    pick("mode", ["copilot", "autopilot"]); pick("tone", ["warm", "brief", "formal"]); pick("emailAfter", [1, 2, 3, 99]); pick("slaHours", [2, 4, 8, 24]); pick("pauseDays", [1, 2, 3, 5, 7]); pick("callTask", [true, false]); pick("aiWrite", [true, false]); pick("closingQ", [true, false]); pick("voicemail", [true, false]);
     if (changed.length) T.audit("settings.hound", "Changed: " + changed.join(", ") + (changed.includes("mode") ? ". Now on " + H.mode : "")); return changed; } },
   // check
   // Correcting what was read on a document that is already accepted, as the demo's viewer does: the old reading is kept as a version.
@@ -59,6 +59,8 @@ export const ACTIONS: Record<string, Rule> = {
     (d.versions = d.versions || []).push({ v: d.versions.length + 1, by: T.S.user.name, form: d.form, year: d.year, payer: d.payer }); T.audit("document.correct", d.form); return null; } },
   decideTask: staff(3), deliver: staff(1), closeEng: staff(1),
   // Unknown senders: a person says whose it is, and it is then checked exactly as if that client had sent it (the demo's assign).
+  // T-50: staff record that a client said reminder calls are fine, or turn them off. The engine keeps the record and refuses after a STOP.
+  setCallOk: { role: "staff", n: 3, run: (T, [cid, on, how]) => T.setCallOk(String(cid || ""), on === true, String(how ?? "").replace(/[<>]/g, "").trim().slice(0, 120)) },
   // A client's second contact (T-118): matched on the way in, never sent to. The engine checks the number or address.
   addContact: { role: "staff", n: 3, run: (T, [cid, kind, value]) => T.addContact(String(cid || ""), String(kind || ""), String(value ?? "").slice(0, 254)) },
   removeContact: staff(2),
