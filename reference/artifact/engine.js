@@ -635,6 +635,7 @@
   function recordConsent(cid, how) {
     const c = client(cid); if (!may()) return "Not allowed"; if (!c || !c.mobile) return "No mobile number on file";
     if (c.mobileBad) return "Check " + c.first + "'s mobile number first. Someone replied that it is the wrong number.";
+    if (isLandline(c)) return "The number on file for " + c.first + " is a landline, which cannot get texts. Ask for a mobile number.";
     if (c.textConsent === "withdrawn") return c.first + " opted out. Only " + c.first + " can turn texts back on, by texting START.";
     if (c.textConsent === "given") return null;
     giveConsent(cid, "recorded by " + S.user.name + ": " + (String(how || "").trim() || "agreed with the firm directly")); return null;
@@ -648,6 +649,7 @@
     const mob = String(o.mobile || "").replace(/\D/g, "").replace(/^1(\d{10})$/, "$1"); if (mob.length !== 10 || /^[01]/.test(mob)) return { ok: false, why: "Enter a 10-digit mobile number" };
     if (c.textConsent === "given" && c.mobile === mob) return { ok: true, already: true };
     if (c.mobile !== mob) { c.mobile = mob; c.mobileBad = false; if (c.textConsent === "given" || c.textConsent === "withdrawn") c.consentLog.push({ at: new Date(S.now), what: "Reset: the client gave a new mobile number on their page", channel: "text" }); c.textConsent = "none"; }
+    if (isLandline(c)) return { ok: false, why: "That number is a landline, which cannot get texts. Enter a mobile number" };
     giveConsent(cid, "page"); if (c.textConsent !== "given") return { ok: false, why: "Texts could not be turned on" };
     Object.assign(c.consentLog[c.consentLog.length - 1], { wording: CONSENT_WORDING.v, shown: CONSENT_WORDING.text.replace("{firm}", S.firm.name), mobile: mob, ip: String(o.ip || "").slice(0, 60), agent: String(o.agent || "").slice(0, 200) });
     return { ok: true };
@@ -864,8 +866,13 @@
     addTask({ kind: "says_none", reason: "Client says none", engId: e.id, itemId: it.id, msgId: m.id }); timeline(e, "Client says they don't have: " + FORMS[it.form].plain + " (upload page)", c.first);
     if (!nextItem(e) && !itemsOf(e.id).some((i) => i.state === "in_review")) setStuck(e, "client_says_none");
   }
+  /* T-119: what kind of line a client's number is, as the phone company reports it. A landline cannot get a text, so it can
+     never be given consent. The answer belongs to the number it was asked about: a new number starts unknown again. */
+  const LINES = ["mobile", "landline", "voip", "unknown"];
+  function setLine(cid, kind) { const c = client(cid); if (!c || !c.mobile || !LINES.includes(kind)) return false; const was = isLandline(c); c.line = kind; c.lineFor = c.mobile; if (isLandline(c) && !was) { audit("client.landline", c.first + " " + c.last, "Rules"); if (c.textConsent === "given") { c.textConsent = "none"; c.consentLog.push({ at: new Date(S.now), what: "Texting stopped: this number is a landline", channel: "text" }); } } return true; }
+  const isLandline = (c) => !!c && c.line === "landline" && !!c.mobile && c.lineFor === c.mobile;
   function giveConsent(cid, source) {
-    const c = client(cid), e = engOf(cid);
+    const c = client(cid), e = engOf(cid); if (isLandline(c)) return;
     // A number someone called wrong stays off until the client confirms it on their own page, or staff correct it.
     if (c.mobileBad) { if (source === "page") c.mobileBad = false; else return; }
     c.textConsent = "given"; c.consentLog.push({ at: new Date(S.now), what: "Given (" + source + "), wording v1", channel: "text" });
@@ -1394,7 +1401,7 @@
     if (e.status === "complete" && open) { e.status = "in_progress"; e.completedAt = null; e.step = 0; if (!e.next) e.next = nextAllowed(S.now); timeline(e, "Reopened: a document is outstanding again"); }
     else if (["in_progress", "stuck"].includes(e.status) && !open && any) { if (checkComplete(e)) send(e, "M13", {}); }
   }
-  window.TH = { RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
+  window.TH = { setLine, isLandline, RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
     dump, load, blank, setNow, setUser, linkFor, linkLive, LINK_DAYS, consentFromPage, declineTexts, stopEmail, unsubscribeLink, CONSENT_WORDING,
     get S() { return S; }, FORMS, TPL, TPL_USE, QUESTIONS, STUCK, DAY, HOUR, MIN,
     client, eng, engOf, itemsOf, openItems, progress, fill, outputCheck, channelFor, allowed, nextAllowed, live, nextItem,

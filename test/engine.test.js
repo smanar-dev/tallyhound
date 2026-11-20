@@ -259,3 +259,14 @@ test("T-47: Arizona and Hawaii keep standard time, so in summer their clients ar
   // And a firm in Phoenix with a client in Chicago: one hour ahead in winter, two in summer.
   T.S.firm.tz = "AZ"; T.setZone(c.id, "CT"); assert.equal(T.allowedC(at(0, 26, 7), c), true); assert.equal(T.allowedC(at(0, 26, 6, 30), c), false); assert.equal(T.allowedC(at(6, 13, 6), c), true); assert.equal(T.allowedC(at(6, 13, 5, 30), c), false);
 });
+test("T-119: a number known to be a landline can never be given consent for texts; a new number starts unknown again", () => {
+  const { T, c, e } = firm(); e.confirmed = true; T.start(e.id); assert.equal(T.setLine(c.id, "fax"), false, "only the kinds the engine knows");
+  assert.equal(T.setLine(c.id, "landline"), true); assert.equal(T.isLandline(c), true); assert.ok(T.S.audit.some((a) => a.action === "client.landline"));
+  const texts = () => T.S.msgs.filter((m) => m.channel === "text" && m.dir === "out").length, n = texts();
+  T.giveConsent(c.id, "keyword"); assert.notEqual(c.textConsent, "given"); assert.match(T.consentFromPage(c.id, { mobile: c.mobile }).why, /landline/); T.setUser("u1"); assert.match(T.recordConsent(c.id, "letter"), /landline/); assert.equal(texts(), n, "nothing was texted");
+  // The client types a different number on their page: the landline answer was about the old one.
+  const r = T.consentFromPage(c.id, { mobile: "6155550199" }); assert.equal(r.ok, true); assert.equal(c.textConsent, "given"); assert.equal(T.isLandline(c), false);
+  // Consent already given, and the number turns out to be a landline: texting stops and the record says why.
+  T.setLine(c.id, "landline"); assert.equal(c.textConsent, "none"); assert.match(c.consentLog.at(-1).what, /this number is a landline/); assert.notEqual(T.channelFor(c, e), "text");
+  T.setLine(c.id, "mobile"); assert.equal(T.isLandline(c), false);
+});

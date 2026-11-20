@@ -15,7 +15,7 @@ import * as pages from "./clientpages.ts";
 
 const CSS = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../assets/client.css")), JS = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../assets/client.js"));
 export const MAX_FILE = 25 * 1024 * 1024, MAX_FILES = 10, PER_LINK_A_MINUTE = 30, PER_ADDRESS_A_MINUTE = 60;
-export interface PublicDeps { app: App; store: KitStore; auth: AuthStore; inbox: Inbox; clock: () => Date; log?: (event: string, ...ids: unknown[]) => void }
+export interface PublicDeps { lookup?: { lineType(mobile10: string): Promise<string> } | null; app: App; store: KitStore; auth: AuthStore; inbox: Inbox; clock: () => Date; log?: (event: string, ...ids: unknown[]) => void }
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Found = { firmId: string; firm: pages.FirmView; T: Engine; c: any | null; e: any | null };
 
@@ -59,7 +59,9 @@ export async function registerPublic(f: FastifyInstance, d: PublicDeps): Promise
     const t = params(req).t, x = await find(t, "c"), b = fields(req); if (!x || !x.c) return gone(reply, x);
     if (b.choice === "email") { await d.app.withFirm(x.firmId, (T: Engine) => T.declineTexts(x.c.id)); return html(reply, pages.emailInstead(x.firm)); }
     const mobile = String(b.mobile || "").trim() || (x.c.mobileBad ? "" : x.c.mobile) || "";
-    const r = (await d.app.withFirm(x.firmId, (T: Engine) => T.consentFromPage(x.c.id, { mobile, ip: req.ip, agent: String(req.headers["user-agent"] || "") }))) as { ok: boolean; why?: string };
+    // A number we have not asked about yet is asked about now, before it can be agreed for (T-119). No answer changes nothing.
+    const ten = mobile.replace(/\D/g, "").replace(/^1(\d{10})$/, "$1"), line = d.lookup && ten.length === 10 && x.c.lineFor !== ten ? await d.lookup.lineType(ten) : null;
+    const r = (await d.app.withFirm(x.firmId, (T: Engine) => { const c = T.client(x.c.id); if (line === "landline" && c && c.mobile !== ten) return { ok: false, why: "That number is a landline, which cannot get texts. Enter a mobile number" }; if (line && c && c.mobile === ten) T.setLine(c.id, line); const out = T.consentFromPage(x.c.id, { mobile, ip: req.ip, agent: String(req.headers["user-agent"] || "") }); if (out.ok && line && line !== "landline") T.setLine(x.c.id, line); return out; })) as { ok: boolean; why?: string };
     if (!r.ok) return html(reply, consentView(x, t, (r.why || "That did not work") + "."), 400);
     return reply.redirect("/c/" + t, 303);   // a reload shows "You're set", and cannot agree twice
   });

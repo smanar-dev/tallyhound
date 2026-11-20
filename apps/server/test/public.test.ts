@@ -1,4 +1,5 @@
 // The client's pages: agree to texts, send documents, stop emails, and the firm's public page. No login, no script, no cookie.
+import type { Lookup } from "../src/lookup.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { build, KINDS } from "./harness.ts";
@@ -7,8 +8,8 @@ import { createEngine, kitMemory, type Engine } from "../src/kit.ts";
 const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(30000, 7)]);
 const model = () => kitMemory.fakeAI((p: string) => p.startsWith("You read photos") ? { is_tax_document: true, form: "W2", tax_year: 2026, payer: "Acme Logistics", recipient_name: "JO DAY", legibility: 0.95, confidence: 0.97, missing_parts: [], note: "A W-2" } : null);
 // One firm on Autopilot with an approved number. Jo has been invited to text; her invitation email carries her private link.
-async function firmWithJo(kind: "memory" | "postgres") {
-  const H = await build(kind, { ai: model() }), { firmId, ownerId, slug } = await H.newFirm();
+async function firmWithJo(kind: "memory" | "postgres", lookup?: Lookup) {
+  const H = await build(kind, { ai: model(), lookup }), { firmId, ownerId, slug } = await H.newFirm();
   await H.app.staff(firmId, ownerId, (T: Engine) => { T.S.firm.hound.mode = "autopilot"; T.S.firm.senderStatus = "approved"; T.S.firm.phone = "(615) 555-0100";
     T.importRows(T.parseCSV("First,Last,Email,Mobile\nJo,Day,jo@x.example,6155550111\nSam,Lee,sam@x.example,6155550122")); for (const e of T.S.engs) { T.itemsOf(e.id).find((i: { form: string }) => i.form === "W2").payer = "Acme Logistics"; e.confirmed = true; T.start(e.id); } });
   const state = async () => { const T = createEngine(); T.load(await H.store.readState(firmId)); return T; };
@@ -23,6 +24,20 @@ const words = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/&#x27;/g,
 
 for (const kind of KINDS) {
   const name = (s: string) => "client pages (" + kind + "): " + s;
+
+  test(name("T-119: a landline is found before the first text: the timer flags numbers on the list, and the consent page will not take one"), async () => {
+    const asked: string[] = [], H = await firmWithJo(kind, { async lineType(n) { asked.push(n); return n === "6155550111" ? "landline" : n === "6155550122" ? "mobile" : n === "6155550188" ? "landline" : "unknown"; } });
+    await H.worker.pass(); let T = await H.state(); const jo = () => T.S.clients[0], sam = () => T.S.clients[1];
+    assert.equal(T.isLandline(jo()), true); assert.equal(sam().line, "mobile"); assert.deepEqual(asked.sort(), ["6155550111", "6155550122"]);
+    await H.worker.pass(); assert.equal(asked.length, 2, "each number is asked about once");
+    // Jo opens the page. The number on file is a landline: agreeing with it is refused in words, and nothing is texted.
+    const texts = H.sms.sent.length, no = await H.form("/c/" + H.link, {}); assert.equal(no.statusCode, 400); assert.match(words(no.body), /That number is a landline, which cannot get texts\. Enter a mobile number\./);
+    const no2 = await H.form("/c/" + H.link, { mobile: "(615) 555-0188" }); assert.equal(no2.statusCode, 400); assert.match(words(no2.body), /landline/); T = await H.state(); assert.equal(jo().mobile, "6155550111", "a landline typed in is not saved over the number on file"); assert.equal(H.sms.sent.length, texts);
+    // A real mobile number goes through, and is remembered as asked about.
+    const ok = await H.form("/c/" + H.link, { mobile: "615-555-0177" }); assert.equal(ok.statusCode, 303); T = await H.state(); assert.equal(jo().textConsent, "given"); assert.equal(jo().mobile, "6155550177"); assert.equal(jo().lineFor, "6155550177"); assert.equal(H.sms.sent.length, texts + 1);
+    const n = asked.length; await H.worker.pass(); assert.equal(asked.length, n, "not asked again");
+    await H.close();
+  });
 
   test(name("the link in the invitation opens the consent page, which shows the wording in full and never the whole phone number"), async () => {
     const H = await firmWithJo(kind); assert.match(H.link, /^[a-z]+-[a-z]{28}$/); assert.ok(H.link.startsWith(H.slug + "-"));

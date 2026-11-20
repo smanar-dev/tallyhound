@@ -17,6 +17,7 @@ import { prepareOpts } from "./files.ts";
 import { s3Bucket } from "./bucket.ts";
 import { kmsKeyring } from "./keys.ts";
 import { createClosure } from "./closure.ts";
+import { twilioLookup } from "./lookup.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const env = (k: string) => (process.env[k] || "").trim();
@@ -48,6 +49,7 @@ export function runtime() {
   const log = (event: string, ...ids: unknown[]) => console.log(JSON.stringify({ at: new Date().toISOString(), event, ids: ids.map((v) => (typeof v === "string" && v.includes("@") ? "[address]" : v)) }));
   const twilio: TwilioAdapter | null = env("TWILIO_ACCOUNT_SID") ? kitTwilio.twilio({ accountSid: env("TWILIO_ACCOUNT_SID"), authToken: need("TWILIO_AUTH_TOKEN"), messagingServiceSid: need("TWILIO_MESSAGING_SERVICE_SID") }) : null;
   const sms = twilio || notConnected("Texting");
+  const lookup = env("TWILIO_ACCOUNT_SID") && env("TH_LINE_LOOKUP") !== "off" ? twilioLookup({ accountSid: env("TWILIO_ACCOUNT_SID")!, authToken: need("TWILIO_AUTH_TOKEN") }) : null;   // T-119, a fraction of a cent a number, once
   const email = env("POSTMARK_TOKEN") ? kitEmailOut.postmark({ serverToken: env("POSTMARK_TOKEN") }) : notConnected("Email");
   const ops = postgresOpsStore(pool);
   const ai = env("ANTHROPIC_API_KEY") ? claude({ apiKey: env("ANTHROPIC_API_KEY"), dailyCapUsd: +(env("TH_MODEL_DAILY_CAP_USD") || 10), log, record: (c) => { void ops.modelCall(c).catch((err: Error) => log("model_record_failed", c.firmId, err.message)); } }) : null;   // no key: rules and standard wording
@@ -64,7 +66,7 @@ export function runtime() {
   if (production && !env("CLAMAV_HOST")) log("warning_no_virus_scanner");
   const inbox = createInbox({ queue: postgresQueue(pool), store, app, handlers: handlers({ app, twilio, prepare }), clock, log });
   const hooks = { store, inbox, twilioAuthToken: env("TWILIO_AUTH_TOKEN") || undefined, postmarkHook: env("POSTMARK_HOOK_PASSWORD") ? { user: env("POSTMARK_HOOK_USER") || "postmark", pass: env("POSTMARK_HOOK_PASSWORD") } : undefined };
-  return { production, appUrl, pool, store, auth, app, signIn, firms, inbox, hooks, prepare, clock, log, root: ROOT, mailer, notify: createNotifier({ appUrl }), ops, closure: createClosure({ store, auth, markers: bucket, clock, log }),
+  return { production, appUrl, pool, store, auth, app, signIn, firms, inbox, hooks, prepare, clock, log, root: ROOT, mailer, notify: createNotifier({ appUrl }), ops, lookup, closure: createClosure({ store, auth, markers: bucket, clock, log }),
     // TH_ALERT_EMAIL: where the developer is told that sends are failing, a firm's turn failed, or an arriving message was lost.
     watch: env("TH_ALERT_EMAIL") ? createWatch({ to: env("TH_ALERT_EMAIL")!, send: (to, subject, body) => mailer.staff(to, subject, body), clock, log }) : undefined };
 }
