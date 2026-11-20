@@ -18,6 +18,8 @@ import { s3Bucket } from "./bucket.ts";
 import { kmsKeyring } from "./keys.ts";
 import { createClosure } from "./closure.ts";
 import { twilioLookup } from "./lookup.ts";
+import { createAsk } from "./ask.ts";
+import { createEngine, wallTime } from "./kit.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const env = (k: string) => (process.env[k] || "").trim();
@@ -66,7 +68,8 @@ export function runtime() {
   if (production && !env("CLAMAV_HOST")) log("warning_no_virus_scanner");
   const inbox = createInbox({ queue: postgresQueue(pool), store, app, handlers: handlers({ app, twilio, prepare }), clock, log });
   const hooks = { store, inbox, twilioAuthToken: env("TWILIO_AUTH_TOKEN") || undefined, postmarkHook: env("POSTMARK_HOOK_PASSWORD") ? { user: env("POSTMARK_HOOK_USER") || "postmark", pass: env("POSTMARK_HOOK_PASSWORD") } : undefined };
-  return { production, appUrl, pool, store, auth, app, signIn, firms, inbox, hooks, prepare, clock, log, root: ROOT, mailer, notify: createNotifier({ appUrl }), ops, lookup, closure: createClosure({ store, auth, markers: bucket, clock, log }),
+  return { production, appUrl, pool, store, auth, app, signIn, firms, inbox, hooks, prepare, clock, log, root: ROOT, mailer, notify: createNotifier({ appUrl }), ops, lookup,
+    ask: ai ? createAsk({ model: ai, readState: (id) => store.readState(id), createEngine, wallNow: (T) => (T.S.firm.iana ? wallTime(clock(), T.S.firm.iana) : clock()) }) : undefined, closure: createClosure({ store, auth, markers: bucket, clock, log }),
     // TH_ALERT_EMAIL: where the developer is told that sends are failing, a firm's turn failed, or an arriving message was lost.
     watch: env("TH_ALERT_EMAIL") ? createWatch({ to: env("TH_ALERT_EMAIL")!, send: (to, subject, body) => mailer.staff(to, subject, body), clock, log }) : undefined };
 }

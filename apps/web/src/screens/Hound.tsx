@@ -1,6 +1,7 @@
 // The Hound: what Tallyhound did and why, what is coming up, drafts to approve, and the rules it follows (T-20).
-// Ported from the demo's hound(), in the vocabulary of docs/UX.md. "Ask the Hound" is not built yet.
-import { useState, type ReactNode } from "react";
+// Ported from the demo's hound(), in the vocabulary of docs/UX.md. "Ask" is read only: the Hound looks things up and answers, and changes nothing.
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { api } from "../lib/api";
 import { Link, useSearchParams } from "react-router-dom";
 import { useFirm } from "../lib/firm";
 import { Page } from "./Shell";
@@ -12,7 +13,7 @@ import type { Engine } from "virtual:engine";
 
 const KIND: Record<string, [IconName, string]> = { message: ["send", "Message"], read: ["eye", "Read"], decide: ["brain", "Decision"], schedule: ["clock", "Scheduled"], handoff: ["hand", "Passed to a person"], alert: ["bell", "Alert"], guardrail: ["lock", "Blocked message"], memory: ["spark", "Note kept"], escalate: ["fast", "Stepped up"], held: ["pause", "Held"] };
 const FILTERS: [string, string][] = [["all", "All"], ["read", "Read"], ["message", "Messages"], ["schedule", "Scheduled"], ["decide", "Decisions"], ["handoff", "Passed to a person"], ["escalate", "Stepped up"], ["memory", "Notes kept"], ["guardrail", "Blocked messages"], ["alert", "Alerts"]];
-const TABS: [string, string][] = [["did", "What it did"], ["next", "Coming up"], ["drafts", "Drafts to approve"], ["rules", "Rules it follows"]];
+const TABS: [string, string][] = [["did", "What it did"], ["next", "Coming up"], ["drafts", "Drafts to approve"], ["rules", "Rules it follows"], ["ask", "Ask"]];
 // The engine's log uses a few older words. Shown here in the product's vocabulary.
 const words = (t: string) => String(t || "").replace(/\bquiet hours\b/gi, "sending hours").replace(/\bStuck\b/g, "Needs you").replace(/\bstuck\b/g, "waiting on you").replace(/\b[Oo]utreach\b/g, "collecting").replace(/\bhandoffs?\b/gi, "question for you").replace(/\bqueue\b/gi, "Coming up").replace(/\b[Rr]eview\b/g, "a person's check").replace(/\b[Dd]eliver(ed|y)?\b/g, "hand-off").replace(/\bapprovals?\b/gi, "your OK").replace(/\bengagements?\b/gi, "file").replace(/\binbox\b/gi, "messages").replace(/\bplaybook\b/gi, "rules").replace(/\bunmatched\b/gi, "unknown sender");
 
@@ -20,6 +21,23 @@ const words = (t: string) => String(t || "").replace(/\bquiet hours\b/gi, "sendi
 function planned(T: Engine, e: Row): string {
   const c = T.client(e.clientId), it = T.nextItem(e); if (e.status === "awaiting_consent") return "Invitation reminder by email"; if (!it) return "A check that everything is in";
   const code = it.state === "partial" ? "M22R" : it.state === "expected" ? "M4" : e.step >= 4 ? "M6" : "M5"; return T.fill(code, c, e, Object.assign({ item: it }, it.state === "partial" ? T.missText(it.missing || [], c.lang, it.form) : {}));
+}
+
+// Ask: a question about the firm's own collecting. The conversation lives on this page only; leaving the page forgets it.
+const TIPS = ["Who needs me, and why?", "Who is still missing a W-2?", "Who has been quiet for a week?", "What did you do today?"];
+function AskTab() {
+  const [turns, setTurns] = useState<{ role: "user" | "assistant"; text: string; failed?: boolean }[]>([]), [q, setQ] = useState(""), [busy, setBusy] = useState(false), end = useRef<HTMLDivElement>(null);
+  useEffect(() => { end.current?.scrollIntoView({ block: "nearest" }); }, [turns, busy]);
+  const send = async (text: string) => {
+    const ask = text.trim(); if (!ask || busy) return; const sofar = turns.filter((t) => !t.failed).concat({ role: "user", text: ask }); setTurns(sofar); setQ(""); setBusy(true);
+    try { const r = await api.ask(sofar.map((t) => ({ role: t.role, text: t.text }))); setTurns(sofar.concat({ role: "assistant", text: r.text })); }
+    catch (e) { setTurns(sofar.slice(0, -1).concat({ role: "user", text: ask, failed: true }, { role: "assistant", text: (e as Error).message, failed: true })); }
+    finally { setBusy(false); }
+  };
+  return <div className="card"><div className="hd"><Icon name="spark" /><h3>Ask the Hound</h3><span className="sp" /><span className="small faint">It reads your firm's work and answers. It cannot send or change anything.</span>{turns.length ? <button className="btn sm ghost" onClick={() => setTurns([])}>Clear</button> : null}</div>
+    <div className="convo" aria-live="polite">{turns.length ? turns.map((t, i) => <div key={i} className={"bub " + (t.role === "user" ? "man" : "in")}>{t.text}</div>) : <div className="col" style={{ gap: 8, alignItems: "flex-start" }}><span className="small muted">Try one of these, or write your own.</span>{TIPS.map((t) => <button key={t} className="btn sm" onClick={() => void send(t)}>{t}</button>)}</div>}
+      {busy ? <div className="bub in" role="status">Looking…</div> : null}<div ref={end} /></div>
+    <form className="composer" style={{ flexDirection: "row", alignItems: "center" }} onSubmit={(ev) => { ev.preventDefault(); void send(q); }}><input type="text" aria-label="Your question" placeholder="Ask about your clients and their documents" style={{ flex: 1, minWidth: 0 }} value={q} maxLength={2000} onChange={(ev) => setQ(ev.target.value)} /><button className="btn pri" disabled={busy || !q.trim()}>{busy ? "Looking…" : "Ask"}</button></form></div>;
 }
 
 export function Hound() {
@@ -34,7 +52,8 @@ export function Hound() {
   const owner = can("owner"), started = s.engs.some((e: Row) => e.status !== "not_started");
 
   let body: ReactNode;
-  if (tab === "did") { const L: Row[] = s.hlog.filter((h: Row) => filter === "all" || h.kind === filter).slice(0, 80);
+  if (tab === "ask") body = <AskTab />;
+  else if (tab === "did") { const L: Row[] = s.hlog.filter((h: Row) => filter === "all" || h.kind === filter).slice(0, 80);
     body = <><div className="pills">{FILTERS.map((x) => <button key={x[0]} className={filter === x[0] ? "on" : ""} aria-pressed={filter === x[0]} onClick={() => setFilter(x[0])}>{x[1]}</button>)}</div>
       <div className="card">{L.length ? <div className="list">{L.map((h, i) => { const e = h.engId ? T.eng(h.engId) : null, c = e ? T.client(e.clientId) : null, k = KIND[h.kind] || (["spark", h.kind] as [IconName, string]);
         return <div className="li" style={{ alignItems: "flex-start" }} key={i + ":" + +h.at}><span className="ico" style={{ width: 30, height: 30 }}><Icon name={k[0]} small /></span><div className="grow"><div className="row" style={{ gap: 6 }}><span className="small b" style={{ color: "var(--slate)" }}>{k[1]}</span>{c ? <Link className="btn ghost sm" style={{ padding: "0 2px" }} to={"/clients/" + e.id}>{cname(c)}</Link> : null}<span className="sp" /><span className={"chip plain " + (h.model === "Claude" ? "info" : "")}>{h.model === "Claude" ? "Claude" : "Rules"}</span><span className="small faint">{when(T, h.at)}</span></div>

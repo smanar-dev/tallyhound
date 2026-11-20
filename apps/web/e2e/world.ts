@@ -24,7 +24,9 @@ export const PHOTO: Buffer = await sharp({ create: { width: 900, height: 1200, c
 export async function world() {
   const reading: { doc: Record<string, unknown>; text: Record<string, unknown> } = { doc: CLEAN_W2, text: SAYS_NONE };
   const ai = kitMemory.fakeAI((p: string) => (p.startsWith("You read photos") ? reading.doc : p.startsWith("You read text messages") ? reading.text : null));
-  const port = await freePort(), url = "http://127.0.0.1:" + port, H = await build("memory", { ai, appUrl: url });
+  const port = await freePort(), url = "http://127.0.0.1:" + port, H = await build("memory", { ai, appUrl: url,
+    // A stand-in for Ask the Hound's model: it uses the real look-up, then answers from what came back.
+    converse: { async converse(c) { const q = c.messages.at(-1)!.text; if (/advice/i.test(q)) throw Object.assign(new Error("busy"), { code: "busy" }); const L = c.run("find_clients", {}) as { name: string }[]; return L.length + " on your list: " + L.map((x) => x.name).join(", ") + "."; } } });
   await H.server.listen({ port, host: "127.0.0.1" });
   browser = browser || (await chromium.launch());
   const pages: Page[] = [], errors: string[] = [];

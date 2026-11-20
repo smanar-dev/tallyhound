@@ -40,6 +40,8 @@ export const api = {
     if (!res.ok) throw new ApiError(res.status, j.error || "error", j.message || "That file could not be added.");
     return { ok: true, docs: j.docs || [] };
   },
+  /** A question for the Hound, with the conversation so far. It only reads. */
+  ask: (messages: { role: "user" | "assistant"; text: string }[]) => call<{ text: string }>("POST", "/api/hound/ask", { messages }),
   /** An owner takes a copy of the firm's consent records or its audit trail, as a spreadsheet. */
   async exportCsv(what: "consent" | "audit"): Promise<void> {
     let res: Response;

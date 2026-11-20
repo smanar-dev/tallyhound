@@ -23,6 +23,8 @@ export interface ServerDeps {
   appUrl: string; secureCookies: boolean; webDir: string; prepare?: PrepareOpts;
   /** The client's own pages. Present whenever there is a queue to put uploads on. */
   clientPages?: Omit<PublicDeps, "app" | "auth" | "log">;
+  /** Ask the Hound. Absent when no model is connected. */
+  ask?: (firmId: string, who: { name: string; role: string }, turns: { role: "user" | "assistant"; text: string }[]) => Promise<string>;
   health?: () => Record<string, unknown> | Promise<Record<string, unknown>>;
   hooks?: Omit<HookDeps, "app" | "store" | "publicUrl" | "log"> & { store: HookDeps["store"] };
   log?: (event: string, ...ids: unknown[]) => void;
@@ -172,6 +174,18 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
     entries["manifest.csv"] = strToU8(r.manifest + "\n");
     const zip = Buffer.from(zipSync(entries, { level: 0 })), safe = r.folder.split("/").slice(-2).reverse().join(" ").replace(/[^A-Za-z0-9 ,._-]/g, "").trim() || "files";
     return reply.header("content-disposition", 'attachment; filename="' + safe + '.zip"').header("x-tallyhound-files", String(lines.length)).header("x-tallyhound-missing", String(r.missing.length)).type("application/zip").send(zip);
+  });
+
+  // Ask the Hound: a question about the firm's own collecting, answered from a read-only copy of its state. Anyone signed in may ask.
+  const asked = new Map<string, { n: number; until: number }>();
+  f.post("/api/hound/ask", { preHandler: full }, async (req, reply) => {
+    const u = req.who!.user, b = body(req); if (!d.ask) return reply.code(503).send({ error: "not_connected", message: "The Hound can answer questions once Claude is connected for your firm." });
+    const now = Date.now(), h = asked.get(u.id); if (asked.size > 5000) asked.clear();
+    if (!h || h.until < now) asked.set(u.id, { n: 1, until: now + 60000 }); else if (++h.n > 10) return reply.code(429).send({ error: "slow_down", message: "That is a lot of questions. Give it a minute." });
+    const turns = (Array.isArray(b.messages) ? b.messages : []).slice(-40).map((m: unknown) => { const x = (m && typeof m === "object" ? m : {}) as { role?: unknown; text?: unknown }; return { role: x.role === "assistant" ? "assistant" as const : "user" as const, text: str(x.text) }; });
+    if (!turns.length || !turns.at(-1)!.text.trim() || turns.at(-1)!.role !== "user") return reply.code(400).send({ error: "bad_request", message: "Ask a question first." });
+    try { const text = await d.ask(u.firmId, { name: u.name, role: u.role }, turns); await d.auth.audit(u.firmId, u.id, "hound.asked"); return { text }; }
+    catch (err) { const code = (err as { code?: string }).code || "error"; say("ask_failed", u.firmId, code); return reply.code(code === "cap" ? 429 : 502).send({ error: "ask_failed", message: code === "cap" ? "The Hound has answered as much as it can today. It will be back tomorrow." : code === "busy" ? "Claude is busy. Try again in a moment." : "The Hound could not answer that just now. Try again." }); }
   });
 
   // Records an owner can take away (TH-CON-10): proof of consent for every client, with the wording each one saw, and the audit

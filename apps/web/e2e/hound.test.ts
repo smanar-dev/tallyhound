@@ -86,3 +86,14 @@ scene("settings: an owner rewrites a message within the rules, cannot break it, 
   await page.getByRole("tab", { name: "Sending hours" }).click(); await page.getByLabel("Earliest a message goes").selectOption("9"); await page.getByLabel("Latest a message goes").selectOption("18"); await page.getByRole("button", { name: "Save", exact: true }).click(); await page.getByText("Saved.", { exact: true }).waitFor();
   T = await W.state(firmId); assert.equal(T.S.firm.quietStart, 9); assert.equal(T.S.firm.quietEnd, 18); assert.equal(T.allowed(new Date(2027, 0, 26, 8, 30)), false, "the engine now holds a message at 8:30");
 });
+
+scene("Ask: a question gets an answer read from the firm's own work, a failure is said in words, and nothing changes", async (W) => {
+  const { firmId } = await busyFirm(W), page = await W.signIn("pat1@firm1.test"), before = JSON.stringify((await W.state(firmId)).S.clients);
+  await page.goto(W.url + "/hound?tab=ask"); await page.getByRole("heading", { name: "Ask the Hound" }).waitFor(); await page.getByText("It cannot send or change anything.").waitFor();
+  await page.getByRole("button", { name: "Who needs me, and why?" }).click(); await page.locator(".bub.in", { hasText: /on your list: / }).waitFor();
+  const T: Engine = await W.state(firmId); assert.match(text(await page.locator(".bub.in").last().textContent()), new RegExp("^" + T.S.engs.length + " on your list: ")); assert.match(text(await page.locator(".bub.in").last().textContent()), /Jo Day/);
+  await page.getByLabel("Your question").fill("Give me tax advice"); await page.keyboard.press("Enter"); await page.locator(".bub.in", { hasText: "Claude is busy. Try again in a moment." }).waitFor();
+  await page.getByRole("button", { name: "Clear" }).click(); await page.getByText("Try one of these, or write your own.").waitFor();
+  assert.equal(JSON.stringify((await W.state(firmId)).S.clients), before);
+  assert.equal(W.errors.length, 1, "the one failed request, which this test caused on purpose"); assert.match(W.errors[0]!, /502/); W.errors.length = 0;
+});

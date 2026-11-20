@@ -1,4 +1,5 @@
 // Builds the whole service for a test: in memory, or on a real Postgres when DATABASE_URL is set (each in its own schema, dropped at the end).
+import { createAsk, type Converse } from "../src/ask.ts";
 import { checkLines, type Lookup } from "../src/lookup.ts";
 import { createWatch, memoryOpsStore, postgresOpsStore } from "../src/ops.ts";
 import { createNotifier } from "../src/notify.ts";
@@ -23,7 +24,7 @@ export const APP_URL = "https://app.tallyhound.test";
 
 export const TWILIO_TOKEN = "twilio-test-token", PM = { user: "postmark", pass: "hook-pass" };
 
-export async function build(kind: "memory" | "postgres" = "memory", opt: { ai?: unknown; prepare?: PrepareOpts; appUrl?: string; lookup?: Lookup } = {}) {
+export async function build(kind: "memory" | "postgres" = "memory", opt: { ai?: unknown; prepare?: PrepareOpts; appUrl?: string; lookup?: Lookup; converse?: Converse } = {}) {
   let t = new Date("2027-01-25T16:05:00Z"); const clock = () => t;
   const APP = opt.appUrl || APP_URL, keyring = kitCrypto.localKeyring(randomBytes(32)), schema = "th_test_" + randomBytes(6).toString("hex"); let inner: ReturnType<typeof kitMemory.memoryStore>, queue: QueueStore, auth: AuthStore, pool: pg.Pool | null = null, auditRows: () => Promise<{ action: string; actor: string }[]>;
   if (kind === "postgres") {
@@ -47,7 +48,7 @@ export async function build(kind: "memory" | "postgres" = "memory", opt: { ai?: 
   const links: { to: string; url: string }[] = [], lockMails: { to: string; minutes: number }[] = [];
   const signIn = createSignIn({ auth, secrets: firmSecrets(store, keyring, kitCrypto), mailer: { async signInLink(to, url) { links.push({ to, url }); }, async locked(to, minutes) { lockMails.push({ to, minutes }); } }, linkSecret: "test-secret", appUrl: APP, clock });
   const firms = createFirms({ app, auth, linkHost: "go.tallyhound.test" }), staffMails: { to: string; subject: string; body: string }[] = [], devMails: { subject: string; body: string }[] = [], ops = pool ? postgresOpsStore(pool) : memoryOpsStore(), watch = createWatch({ to: "dev@tallyhound.test", send: async (_to, subject, body) => { devMails.push({ subject, body }); }, clock }), worker = createWorker({ app, auth, clock, inbox, ops, watch, lines: opt.lookup ? (id) => checkLines(app, (f) => store.readState(f), createEngine, opt.lookup!, id) : undefined, notify: createNotifier({ appUrl: APP }), mailer: { async staff(to, subject, body) { staffMails.push({ to, subject, body }); } } });
-  const server = await buildServer({ app, auth, signIn, firms, readState: (id) => store.readState(id), getFile: (id, key) => store.getFile(id, key), appUrl: APP, secureCookies: APP.startsWith("https:"), webDir: join(HERE, "../../web/dist"), prepare: opt.prepare, clientPages: { store, inbox, clock, lookup: opt.lookup }, hooks: { store, inbox, twilioAuthToken: TWILIO_TOKEN, postmarkHook: PM } });
+  const server = await buildServer({ ask: opt.converse ? createAsk({ model: opt.converse, readState: (id) => store.readState(id), createEngine, wallNow: () => clock() }) : undefined, app, auth, signIn, firms, readState: (id) => store.readState(id), getFile: (id, key) => store.getFile(id, key), appUrl: APP, secureCookies: APP.startsWith("https:"), webDir: join(HERE, "../../web/dist"), prepare: opt.prepare, clientPages: { store, inbox, clock, lookup: opt.lookup }, hooks: { store, inbox, twilioAuthToken: TWILIO_TOKEN, postmarkHook: PM } });
 
   // A browser: keeps its cookie, sends the header our pages send.
   function browser() {

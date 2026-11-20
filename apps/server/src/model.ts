@@ -42,6 +42,33 @@ export function claude(o: ModelOpts) {
   const book = (firmId: string) => { const day = now().toISOString().slice(0, 10); let b = spent.get(firmId); if (!b || b.day !== day) { b = { day, usd: 0, calls: 0, told: false }; spent.set(firmId, b); } return b; };
 
   return {
+    /** A conversation in which the model may call read-only tools we run for it (Ask the Hound). The firm is named by the caller,
+     *  counted against the same daily cap, and recorded once per round. Returns the model's final words. */
+    async converse(c: { firmId: string; system: string; messages: { role: "user" | "assistant"; text: string }[]; tools: Anthropic.Tool[]; run: (name: string, input: unknown) => unknown; maxRounds?: number }): Promise<string> {
+      const b = book(c.firmId), model = MODELS.default, [pin, pout] = PRICE[model] || FALLBACK_PRICE;
+      const messages: Anthropic.MessageParam[] = c.messages.map((m) => ({ role: m.role, content: m.text }));
+      for (let round = 0; round < (c.maxRounds ?? 6); round++) {
+        if (b.usd >= cap) throw new ModelError("cap", "Daily model limit reached for this firm");
+        const began = Date.now(), note = (outcome: string, inTok = 0, outTok = 0, usd = 0) => { try { if (o.record) o.record({ firmId: c.firmId, at: now(), model, tier: "ask", inputTokens: inTok, outputTokens: outTok, usd, ms: Date.now() - began, outcome }); } catch { /* never breaks an answer */ } };
+        let res: Anthropic.Message;
+        try { res = await client.messages.create({ model, max_tokens: MAX_TOKENS, system: c.system, tools: c.tools, messages, output_config: { effort: "low" } }); }
+        catch (err) {
+          const code = err instanceof Anthropic.RateLimitError ? "busy" : err instanceof Anthropic.APIConnectionError ? "network" : err instanceof Anthropic.APIError ? "api_" + (err.status ?? "error") : "error";
+          note(code); if (code === "error") throw err; throw new ModelError(code, "The model could not answer", { cause: err });
+        }
+        const u = res.usage, inTok = u.input_tokens + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0), usd = (inTok * pin + u.output_tokens * pout) / 1e6; b.calls++; b.usd += usd;
+        if (res.stop_reason === "refusal") { note("refusal", inTok, u.output_tokens, usd); throw new ModelError("refusal", "The model declined to answer"); }
+        if (res.stop_reason === "max_tokens") { note("cut_off", inTok, u.output_tokens, usd); throw new ModelError("cut_off", "The model's answer was cut off"); }
+        note("ok", inTok, u.output_tokens, usd);
+        const calls = res.content.filter((x): x is Anthropic.ToolUseBlock => x.type === "tool_use");
+        if (res.stop_reason !== "tool_use" || !calls.length) return res.content.filter((x): x is Anthropic.TextBlock => x.type === "text").map((x) => x.text).join("").trim();
+        messages.push({ role: "assistant", content: res.content });
+        // Every tool the model asked for is answered in one message, a failure included.
+        const results: Anthropic.ToolResultBlockParam[] = calls.map((t) => { try { return { type: "tool_result", tool_use_id: t.id, content: JSON.stringify(c.run(t.name, t.input)).slice(0, 60000) }; } catch { return { type: "tool_result", tool_use_id: t.id, content: "That look-up failed.", is_error: true }; } });
+        messages.push({ role: "user", content: results });
+      }
+      throw new ModelError("rounds", "The model kept looking things up without answering");
+    },
     /** What this process has spent for a firm today, by its own estimate. With two servers each keeps its own count, so the real ceiling is the cap times the number of servers. */
     spentToday(firmId: string) { const b = book(firmId); return { usd: b.usd, calls: b.calls }; },
     async json(prompt: string, opt: { images?: Buffer[]; tier?: Tier } = {}): Promise<Record<string, unknown>> {
