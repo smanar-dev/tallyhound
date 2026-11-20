@@ -174,6 +174,31 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
     return reply.header("content-disposition", 'attachment; filename="' + safe + '.zip"').header("x-tallyhound-files", String(lines.length)).header("x-tallyhound-missing", String(r.missing.length)).type("application/zip").send(zip);
   });
 
+  // Records an owner can take away (TH-CON-10): proof of consent for every client, with the wording each one saw, and the audit
+  // trail. A spreadsheet opened in Excel must never run a formula from a name or a note, so risky first characters are defused.
+  f.post("/api/export/:what", { preHandler: full }, async (req, reply) => {
+    const u = req.who!.user, what = (req.params as { what: string }).what; if (u.role !== "owner") return reply.code(403).send({ error: "role", message: NO.other });
+    if (what !== "consent" && what !== "audit") return reply.code(404).send({ error: "unknown_export", message: "Tallyhound does not have that export." });
+    const cell = (v: unknown) => { let t = v == null ? "" : v instanceof Date ? v.toISOString() : String(v); if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; return /[",\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+    const rows = await d.app.staff(u.firmId, u.id, (T: Engine) => {
+      const out: unknown[][] = [];
+      if (what === "consent") {
+        out.push(["Client", "Reference", "Email", "Mobile", "Texts now", "Email now", "When", "Channel", "What happened", "Number agreed for", "Wording version", "Wording the client saw", "IP address", "Browser"]);
+        for (const c of T.S.clients) { const L = c.consentLog || [], now = [c.first + " " + c.last, c.ref || "", c.email || "", c.mobile || "", c.textConsent || "none", c.emailOff ? "unsubscribed" : c.emailOk === false ? "not deliverable" : "on"];
+          if (!L.length) out.push([...now, "", "", "No record"]);
+          // The wording is given only where the record itself holds it: what this client was shown on their page, word for word.
+          for (const l of L) out.push([...now, new Date(l.at), l.channel || "", l.what, l.mobile || "", l.wording || "", l.shown || "", l.ip || "", l.agent || ""]); }
+        T.audit("export.consent", T.S.clients.length + " clients");
+      } else {
+        out.push(["When", "Who", "Action", "Detail"]); for (const a of T.S.audit) out.push([new Date(a.at), a.actor, a.action, a.detail || ""]);
+        T.audit("export.audit", (out.length - 1) + " lines");
+      }
+      return out;
+    });
+    await d.auth.audit(u.firmId, u.id, "export." + what);
+    return reply.header("content-disposition", 'attachment; filename="tallyhound-' + what + "-" + new Date().toISOString().slice(0, 10) + '.csv"').header("cache-control", "no-store").type("text/csv; charset=utf-8").send("\ufeff" + rows.map((r) => r.map(cell).join(",")).join("\r\n") + "\r\n");
+  });
+
   // ---- people at the firm (owner only for changes) ----
   f.get("/api/users", { preHandler: full }, async (req, reply) => req.who!.user.role !== "owner" ? reply.code(403).send({ error: "role", message: "Only an owner can see who has access." }) : (await d.auth.usersOfFirm(req.who!.user.firmId)).map((u) => ({ ...me(u), twoStep: !!u.mfaSecret, left: !!u.leftAt })));
   f.post("/api/users", { preHandler: full }, async (req) => { const b = body(req), u = req.who!.user; return { id: await d.firms.addUser(u.firmId, u, { email: str(b.email), name: str(b.name), role: str(b.role) as Role }) }; });

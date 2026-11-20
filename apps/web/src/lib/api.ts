@@ -40,6 +40,15 @@ export const api = {
     if (!res.ok) throw new ApiError(res.status, j.error || "error", j.message || "That file could not be added.");
     return { ok: true, docs: j.docs || [] };
   },
+  /** An owner takes a copy of the firm's consent records or its audit trail, as a spreadsheet. */
+  async exportCsv(what: "consent" | "audit"): Promise<void> {
+    let res: Response;
+    try { res = await fetch("/api/export/" + what, { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-tallyhound": "1" }, body: "{}" }); }
+    catch { throw new ApiError(0, "offline", "Tallyhound could not be reached. Check your connection and try again."); }
+    if (!res.ok) { const j = (await res.json().catch(() => ({}))) as { error?: string; message?: string }; throw new ApiError(res.status, j.error || "error", j.message || "That could not be downloaded."); }
+    const blob = await res.blob(), name = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") || "")?.[1] || what + ".csv", url = URL.createObjectURL(blob), a = document.createElement("a");
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 10000);
+  },
   /** Hands off one client's finished files as a zip and saves it. Resolves with how many files it held and how many documents are still missing. */
   async handOffZip(engId: string): Promise<{ files: number; missing: number }> {
     let res: Response;

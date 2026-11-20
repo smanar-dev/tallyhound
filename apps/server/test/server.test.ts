@@ -244,6 +244,20 @@ for (const kind of KINDS) {
     await H.close();
   });
 
+  test(name("TH-CON-10: an owner downloads consent records with the wording each client saw, and the audit trail; a name cannot become a spreadsheet formula; nobody else can"), async () => {
+    const H = await build(kind), { firmId, ownerId } = await H.newFirm(), owner = await H.signInAs("pat1@firm1.test"); await owner.post("/api/users", { name: "Alex Staff", email: "alex@firm1.test", role: "staff" }); const alex = await H.signInAs("alex@firm1.test");
+    await H.app.staff(firmId, ownerId, (T: Engine) => { T.S.firm.senderStatus = "approved"; T.importRows(T.parseCSV("First,Last,Email,Mobile\nJo,Day,jo@x.example,6155550111\n=cmd|calc,\"Smith, Jr\",al@x.example,")); const jo = T.S.clients[0]; T.consentFromPage(jo.id, { mobile: "6155550111", ip: "203.0.113.9", agent: "Phone browser" });
+      T.S.clients[1].first = "=cmd|calc"; });   // the import already strips this; the export must not rely on that
+    assert.equal((await alex.post("/api/export/consent")).status, 403); assert.equal((await owner.post("/api/export/payroll")).status, 404); assert.equal((await H.browser().post("/api/export/consent")).status, 401);
+    const r = await owner.post("/api/export/consent"); assert.equal(r.status, 200); assert.match(String(r.headers["content-type"]), /text\/csv/); assert.match(String(r.headers["content-disposition"]), /attachment; filename="tallyhound-consent-\d{4}-\d\d-\d\d\.csv"/);
+    const csv = r.raw.body, lines = csv.replace(/^\ufeff/, "").split("\r\n"); assert.match(lines[0]!, /^Client,Reference,Email,Mobile,Texts now/);
+    const jo = lines.find((l) => l.startsWith("Jo Day") && /Given \(page\)/.test(l))!; assert.match(jo, /6155550111/); assert.match(jo, /203\.0\.113\.9/); assert.match(jo, /Phone browser/); assert.match(jo, /Test CPAs 1/, "the wording the client saw, with the firm's name in it");
+    assert.ok(lines.some((l) => l.startsWith("\"'=cmd|calc Smith, Jr\",") && /No record/.test(l)), "a name that starts like a formula is defused and the comma is quoted");
+    const a = await owner.post("/api/export/audit"); assert.equal(a.status, 200); assert.match(a.raw.body, /export\.consent/); assert.match(a.raw.body, /^\ufeffWhen,Who,Action,Detail/);
+    const T = createEngine(); T.load(await H.store.readState(firmId)); assert.ok(T.S.audit.some((x: { action: string }) => x.action === "export.audit"));
+    await H.close();
+  });
+
   test(name("the timer visits every firm, and one firm failing does not stop the rest"), async () => {
     const H = await build(kind); const a = await H.newFirm(1), b = await H.newFirm(2); const seen: string[] = [], real = H.app.withFirm;
     H.app.withFirm = async (id: string, fn: never) => { seen.push(id); if (id === a.firmId) throw new Error("boom"); return real(id, fn); };
