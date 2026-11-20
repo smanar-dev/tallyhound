@@ -6,21 +6,28 @@ Working code and a plan to take Tallyhound from demo to pilot firms by January 1
 
 ## What is here, and what state it is in
 
+Updated November 20, 2026. "Tested" means against stand-ins for the outside service; "run live" means against the real one.
+
 | Part | State |
 |---|---|
-| Rules engine (`packages/engine`) | Working. The same code the demo runs. 138 tests, including the trial, paid plans and off-season pause (round 9), the client check-in, season roll-forward, custom request matching, Spanish wording, checklist templates, adding one client, the three document checks, the pipeline counts and a regression test for every engine bug in `docs/AUDIT.md` (eight rounds). `node tools/fuzz.js 200 600` runs 120,000 random actions against the safety rules and must report 0 findings. |
-| Save, load and blank workspace | Working and tested: a reloaded workspace sends exactly the same messages. |
-| Data layer (`packages/core/crypto.js`, `packages/adapters/postgres.js`, `db/schema.sql`) | Built in round 13. A key per firm, everything sealed before it is stored, scheduled deletion that really removes the bytes. Tested on an emulator; not yet on a real server (T-100, T-102). |
-| Email in, Twilio webhook, Karbon import (`packages/adapters`) | Built in round 13 with tests on sample payloads. None has been run live. |
-| Production pipeline (`packages/core/pipeline.js`) | Working against fakes. 25 tests cover real sending, including send-once after a failed save, multi-form uploads, locked files, staff uploads and held files while paused, model reading, model writing with the safety check, model outage, Copilot approval, failed sends and two events at once. |
-| Prompts (`packages/core/prompts.js`) | Ported from the demo, where they run against Claude. No accuracy numbers yet: that is ticket T-22. |
-| Claude API client | Rebuilt on the official SDK in `apps/server/src/model.ts` (round 16): timeout, retries, daily cap per firm. Never run against the live API. The starter in `packages/adapters/anthropic.js` is no longer used by the server. |
-| Twilio adapter | Starter, extended in round 16 for safe retries. Never run against a live account. |
-| Web service (`apps/server`) | Built in round 16: sign-in by emailed link plus authenticator code, recovery codes, sessions, three roles enforced on every action, firm setup in one command, the firm check gate, the timer. Step 2 added the inbound queue, the text and email webhooks, bounce and delivery receipts, file preparation, staff upload and document viewing. 23 tests, 19 of them run in memory and again on a real Postgres. Driven once in a real browser. See `apps/server/README.md`. |
-| Staff web app (`apps/web`) | Started in round 16, in React: sign-in, the shell and Home, with 8 browser tests that drive the real service, including an injection sweep and the vocabulary check on every screen. The other screens show a holding page. See `apps/web/README.md`. |
-| The rest of the screens, provider accounts, file bucket, hosting | Not built. See the tickets. |
+| Rules engine (`packages/engine`) | Working. The same file the demo runs. Every product rule is here and has a test |
+| Pipeline (`packages/core/pipeline.js`) | Working: claim, send, record; reading documents; filing to a firm's storage; second contacts |
+| Data layer (`packages/core/crypto.js`, `packages/adapters/postgres.js`, `db/`) | Working on Postgres: a key per firm, everything sealed before it is stored, deletion on schedule. Ten migrations |
+| Web service (`apps/server`) | Built: sign-in (emailed link plus authenticator code, lockout), roles, every staff action, webhooks for texts and email, the arriving-message queue, the timer, staff email notes, monitoring and usage, backups and closing a firm, the admin command |
+| Staff web app (`apps/web`, React) | Built: Home, Clients, each client's page, Needs you, The Hound (with Ask), Add clients, All messages, Progress, and Settings (firm, people, checklists, message wording, sending hours, text number, finished files, plan, security and data) |
+| Client pages (`/c/`, `/u/`, `/e/`, `/f/`) | Built: agree to texts, send documents (with or without scripts), the check-in, stop emails, the firm's public page |
+| Claude (document reading, message writing, Ask the Hound) | Built on the official SDK with a daily cap per firm and a record per call. Tested. Never run live |
+| Twilio (texts, pictures, landline lookup) | Built. Tested. Never run live. Text number registration is filed by hand from `npm run admin -- registration` |
+| Postmark (email out and in) | Built. Tested. Never run live |
+| Google Drive (a firm's own storage) | Built. Tested. Never run live. Needs a Google OAuth client, and Google's review before firms outside a test list can connect |
+| Stripe (card billing) | Built. Tested. Never run live |
+| AWS KMS (master key), S3-compatible bucket (files) | Built. Tested. Never run live |
+| Hosting | `Dockerfile` and `docs/DEPLOY.md`. Not deployed anywhere |
+| Accuracy of document reading | Not measured. `tools/eval-docs.js` exists; the test set of about 300 documents does not (T-22, T-130, T-138) |
 
-Run the tests: `npm install` once (one test-only package, an in-process Postgres emulator), then `npm test`. Node 22.18 or later. `npm run check` adds the type check, lint, the web build and 30 browser tests. 276 tests, plus thirty-four that run against a real Postgres when DATABASE_URL is set (the three kit ones passed on PostgreSQL 18 on November 19; all thirty-four passed on PostgreSQL 16 on November 19). `npm run fuzz` runs 200 random seasons; `npm run scale` prints size and timing at 150, 500 and 1,000 clients.
+Not built, on purpose: the tickets marked AFTER LAUNCH (self-serve sign-up, sending from a firm's own domain, voicemail, the price test, the quote form), OneDrive, Dropbox and SharePoint, and reading last year's return (waits for counsel, T-46). Spanish is written but switched off until a native review (T-31).
+
+Run the tests: `npm install`, then `npm test`. Node 22.18 or later. `npm run check` adds the type check, lint, the web build and the browser tests; set `DATABASE_URL` to a throwaway Postgres to include the tests that need a real one. `docs/TICKETS.md` has the state of every ticket, step by step.
 
 ## How it fits together
 
