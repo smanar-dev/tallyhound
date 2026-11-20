@@ -57,3 +57,5 @@ table.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 
 .rhythm{list-style:none;display:flex;gap:6px;justify-content:space-between;padding:0;margin:6px 0;border-top:3px solid var(--line)}
 .rhythm li{display:flex;flex-direction:column;align-items:center;font-size:12px;color:var(--slate);padding-top:8px;position:relative;flex:1}
 .rhythm li:before{content:"";width:14px;height:14px;border-radius:50%;background:var(--ink);position:absolute;top:-9px}
+.pdfpages{display:flex;flex-direction:column;align-items:center;gap:18px;width:100%}
+.pagenote{font-size:13px;opacity:.85;text-align:center}

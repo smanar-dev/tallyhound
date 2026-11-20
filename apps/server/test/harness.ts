@@ -81,3 +81,13 @@ export async function build(kind: "memory" | "postgres" = "memory", opt: { ai?: 
   return { kind, server, app, auth, firms, worker, inbox, queue, inner, media, mediaCalls, mediaDown: (on: boolean) => { mediaDown = on; }, twilioPost, postmarkPost, store, sms, email, links, lockMails, staffMails, browser, signInAs, codeFor, token, unbase32, secrets, advance, clock, newFirm, auditRows, async close() { await inbox.drain(); await server.close(); if (pool) { await pool.query("drop schema " + schema + " cascade"); await pool.end(); } } };
 }
 export type Harness = Awaited<ReturnType<typeof build>>;
+
+// A PDF with real text, written by hand so tests need no PDF writer: one page per list of lines.
+export function pdfPagesWith(pages: string[][]): Buffer {
+  const n = pages.length, objs = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [" + pages.map((_, i) => 4 + i * 2 + " 0 R").join(" ") + "] /Count " + n + " >>", "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"];
+  pages.forEach((lines, i) => { const stream = "BT /F1 28 Tf 50 700 Td " + lines.map((l) => "(" + l.replace(/[()\\]/g, "") + ") Tj 0 -40 Td").join(" ") + " ET"; objs.push("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents " + (5 + i * 2) + " 0 R /Resources << /Font << /F1 3 0 R >> >> >>", "<< /Length " + stream.length + " >>\nstream\n" + stream + "\nendstream"); });
+  let out = "%PDF-1.4\n"; const at: number[] = [];
+  objs.forEach((o, i) => { at.push(out.length); out += i + 1 + " 0 obj\n" + o + "\nendobj\n"; });
+  const xref = out.length; out += "xref\n0 " + (objs.length + 1) + "\n0000000000 65535 f \n" + at.map((x) => String(x).padStart(10, "0") + " 00000 n \n").join("") + "trailer\n<< /Size " + (objs.length + 1) + " /Root 1 0 R >>\nstartxref\n" + xref + "\n%%EOF\n";
+  return Buffer.from(out, "latin1");
+}

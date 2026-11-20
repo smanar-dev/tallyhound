@@ -186,6 +186,8 @@ function createApp({ store, sms, email, ai, clock, log, files }) {
     recipient: c ? nameMatch(c, r.recipient_name) : "self", recipientName: r.recipient_name || "", fileKey: key,
     read: { legible: +r.legibility || 0, conf: +r.confidence || 0, note: r.note || "", missing: Array.isArray(r.missing_parts) ? r.missing_parts : [] }
   });
+  // A document remembers which stored file it is in and, when several forms came as one file, which pages of it are its own.
+  const filed = (d, spec) => { d.fileKey = spec.fileKey; if (spec.pagesOf && spec.pagesOf.length) d.pagesOf = spec.pagesOf; };
   // Reads everything in one message. A file with several pages is read as a bundle and split into documents.
   // Returns { specs, bad } where bad is "locked" or "type" when a file could not be opened at all.
   async function readAll(T, c, firmId, files) {
@@ -223,8 +225,8 @@ function createApp({ store, sms, email, ai, clock, log, files }) {
         // inboundText still handles STOP and HELP, and sends the "contact the firm directly" reply at most once a week.
         if (!T.canRead()) { await hold(T, firmId, c, media, "text"); if (text || !T.access().ok) out.intent = T.inboundText(c ? c.id : null, text || "[photo]", null); out.held = true; return out; }
         const { specs, bad } = await readAll(T, c, firmId, media);
-        if (specs.length > 1 && c && cands.length < 2) { const res = T.inboundBundle(c.id, specs, "text"); res.docs.forEach((d, i) => { d.fileKey = specs[i].fileKey; out.docs.push(d.state); }); }
-        else for (const spec of specs) { const oc = ownerOf(T, cands, spec, c); if (oc && oc !== c) { spec.recipient = "self"; out.routed = (out.routed || []).concat(oc.id); } const d = T.inboundDoc(oc ? oc.id : null, spec, "text"); if (d) { d.fileKey = spec.fileKey; out.docs.push(d.state); } }
+        if (specs.length > 1 && c && cands.length < 2) { const res = T.inboundBundle(c.id, specs, "text"); res.docs.forEach((d, i) => { filed(d, specs[i]); out.docs.push(d.state); }); }
+        else for (const spec of specs) { const oc = ownerOf(T, cands, spec, c); if (oc && oc !== c) { spec.recipient = "self"; out.routed = (out.routed || []).concat(oc.id); } const d = T.inboundDoc(oc ? oc.id : null, spec, "text"); if (d) { filed(d, spec); out.docs.push(d.state); } }
         if (bad && !specs.length && c) { T.inboundUnusable(c.id, bad, "text"); out.unusable = bad; }
         if (text) { const r = e ? await ask(prompts.readText(T, e, text), { tier: "quick" }) : null; out.intent = T.inboundText(c ? c.id : null, text, r); }
         return out;
@@ -249,7 +251,7 @@ function createApp({ store, sms, email, ai, clock, log, files }) {
           const day = new Date(T.S.now).toISOString().slice(0, 10), u = (T.S.firm.unknownReads = T.S.firm.unknownReads && T.S.firm.unknownReads.day === day ? T.S.firm.unknownReads : { day, n: 0 });
           const files = (attachments || []).filter((f) => kindOf(f) === "ok"), room = Math.max(0, UNKNOWN_FILES_PER_DAY - u.n), take = T.canRead() ? files.slice(0, room) : [], why = trusted === false ? (known ? "Says it is from " + known.first + " " + known.last + ", but the sender could not be confirmed" : "The sender could not be confirmed") : null;
           u.n += take.length; const out = { handled: true, client: null, docs: [], unverified: trusted === false || undefined };
-          if (take.length) { const got = await readAll(T, null, firmId, take); for (const sp of got.specs) { sp.from = from; const d = T.inboundDoc(null, sp, "email"); if (d) { d.fileKey = sp.fileKey; out.docs.push(d.state); const y = T.S.tray.find((t) => t.docId === d.id); if (y && why) { y.why = why; y.claims = known ? known.id : null; } } } }
+          if (take.length) { const got = await readAll(T, null, firmId, take); for (const sp of got.specs) { sp.from = from; const d = T.inboundDoc(null, sp, "email"); if (d) { filed(d, sp); out.docs.push(d.state); const y = T.S.tray.find((t) => t.docId === d.id); if (y && why) { y.why = why; y.claims = known ? known.id : null; } } } }
           const text = T.scrub(String(body || "")).text.slice(0, 500).trim(), skipped = files.length - take.length;
           if (text || skipped || why) T.S.tray.push({ id: "y" + Date.now() + Math.random().toString(36).slice(2, 6), text: (text || "") + (skipped ? (text ? " " : "") + "[" + skipped + " attachment" + (skipped === 1 ? " was" : "s were") + " not kept. Ask the sender to send again.]" : ""), from, at: new Date(T.S.now), channel: "email", why: why || undefined, claims: why && known ? known.id : undefined });
           if (why) say("email_unverified", firmId, from);
@@ -258,11 +260,11 @@ function createApp({ store, sms, email, ai, clock, log, files }) {
         const e = T.engOf(c.id), specs = [];
         if (!T.canRead()) { await hold(T, firmId, c, attachments, "email"); if (!T.access().ok) T.inboundEmail(c.id, String(body || ""), [], null); return { handled: true, client: c.id, held: true }; }
         const got = await readAll(T, c, firmId, attachments), others = [];
-        for (const sp of got.specs) { const oc = ownerOf(T, cands, sp, c); if (oc !== c) { sp.recipient = "self"; const d = T.inboundDoc(oc.id, sp, "email"); if (d) { d.fileKey = sp.fileKey; others.push(oc.id); } } else specs.push(sp); }
+        for (const sp of got.specs) { const oc = ownerOf(T, cands, sp, c); if (oc !== c) { sp.recipient = "self"; const d = T.inboundDoc(oc.id, sp, "email"); if (d) { filed(d, sp); others.push(oc.id); } } else specs.push(sp); }
         if (got.bad && !specs.length && !others.length && !String(body || "").trim()) { T.inboundUnusable(c.id, got.bad, "email"); return { handled: true, client: c.id, unusable: got.bad, docs: [] }; }
         const r = await ask(prompts.readEmail(T, e, String(body || "")), { tier: "quick" });
         const res = T.inboundEmail(c.id, String(body || ""), specs, r);
-        res.docs.forEach((d, i) => { d.fileKey = specs[i].fileKey; });
+        res.docs.forEach((d, i) => { filed(d, specs[i]); });
         if (byStaff && e) T.timeline ? T.timeline(e, "Email forwarded in by " + byStaff) : null;
         return { handled: true, client: c.id, understood: res.m.understood, docs: res.docs.map((d) => d.state), forwardedBy: byStaff || undefined, routed: others.length ? others : undefined };
       });
@@ -275,16 +277,16 @@ function createApp({ store, sms, email, ai, clock, log, files }) {
         const c = T.client(clientId); if (!c) return { handled: false };
         if (!T.canRead()) { await hold(T, firmId, c, files, "portal"); return { handled: true, client: c.id, held: true, docs: [] }; }
         const { specs, bad } = await readAll(T, c, firmId, files), out = { handled: true, client: c.id, docs: [] };
-        if (specs.length > 1) { const res = T.inboundBundle(c.id, specs, "portal"); res.docs.forEach((d, i) => { d.fileKey = specs[i].fileKey; out.docs.push(d.state); }); }
-        else for (const spec of specs) { const d = T.inboundDoc(c.id, spec, "portal"); if (d) { d.fileKey = spec.fileKey; out.docs.push(d.state); } }
+        if (specs.length > 1) { const res = T.inboundBundle(c.id, specs, "portal"); res.docs.forEach((d, i) => { filed(d, specs[i]); out.docs.push(d.state); }); }
+        else for (const spec of specs) { const d = T.inboundDoc(c.id, spec, "portal"); if (d) { filed(d, spec); out.docs.push(d.state); } }
         if (bad && !specs.length) { T.inboundUnusable(c.id, bad, "portal"); out.unusable = bad; }
         return out;
       });
     },
     // A staff member adds a document they received some other way. It is checked like any other and the client is not messaged.
-    async staffUpload(firmId, userId, clientId, file) { return withFirm(firmId, async (T) => { if (!T.setUser(userId)) throw new Error("Unknown user"); const c = T.client(clientId); if (!c) throw new Error("Unknown client"); const k = kindOf(file); if (k !== "ok") return { error: k }; const { specs } = await readAll(T, c, firmId, [file]); return { docs: specs.map((sp) => { const d = T.staffDoc(c.id, sp); if (d) d.fileKey = sp.fileKey; return d && d.state; }) }; }); },
+    async staffUpload(firmId, userId, clientId, file) { return withFirm(firmId, async (T) => { if (!T.setUser(userId)) throw new Error("Unknown user"); const c = T.client(clientId); if (!c) throw new Error("Unknown client"); const k = kindOf(file); if (k !== "ok") return { error: k }; const { specs } = await readAll(T, c, firmId, [file]); return { docs: specs.map((sp) => { const d = T.staffDoc(c.id, sp); if (d) filed(d, sp); return d && d.state; }) }; }); },
     // Files that arrived while the firm was paused. Call after a plan is chosen or a pause ends. The reader gets the stored bytes back.
-    async readHeld(firmId, load) { load = load || (async (key) => { const f = await store.getFile(firmId, key); return f ? f.bytes : null; }); return withFirm(firmId, async (T) => { if (!T.canRead()) return 0; const L = T.S.held || []; T.S.held = []; let n = 0; for (const h of L) { const c = h.clientId && T.client(h.clientId); if (!c) { (T.S.purgeFiles = T.S.purgeFiles || []).push(h.fileKey); continue; } const bytes = await load(h.fileKey); if (!bytes) continue; const { specs } = await readAll(T, c, firmId, [{ bytes, contentType: h.contentType }]); for (const sp of specs) { const d = T.inboundDoc(c.id, sp, h.channel); if (d) d.fileKey = sp.fileKey; n++; } (T.S.purgeFiles = T.S.purgeFiles || []).push(h.fileKey); } return n; }); },
+    async readHeld(firmId, load) { load = load || (async (key) => { const f = await store.getFile(firmId, key); return f ? f.bytes : null; }); return withFirm(firmId, async (T) => { if (!T.canRead()) return 0; const L = T.S.held || []; T.S.held = []; let n = 0; for (const h of L) { const c = h.clientId && T.client(h.clientId); if (!c) { (T.S.purgeFiles = T.S.purgeFiles || []).push(h.fileKey); continue; } const bytes = await load(h.fileKey); if (!bytes) continue; const { specs } = await readAll(T, c, firmId, [{ bytes, contentType: h.contentType }]); for (const sp of specs) { const d = T.inboundDoc(c.id, sp, h.channel); if (d) filed(d, sp); n++; } (T.S.purgeFiles = T.S.purgeFiles || []).push(h.fileKey); } return n; }); },
     // Run on a timer, every few minutes, for every firm: sends whatever is due.
     tick(firmId) { return withFirm(firmId, async (T) => { T.tick(); return true; }); },
     // Anything a signed-in staff member does: fn receives the engine, already set to that user.

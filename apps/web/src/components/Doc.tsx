@@ -1,5 +1,6 @@
 // A document: the picture, and everything Tallyhound knows about it. Used by the full-screen viewer and by Needs you.
 // The three checks are T.verdict's answers and nothing here works one out (ticket T-40).
+import { api } from "../lib/api";
 import { useEffect, useState, type ReactNode } from "react";
 import type { Engine } from "virtual:engine";
 import { useFirm } from "../lib/firm";
@@ -10,12 +11,21 @@ import { DocChip, Icon } from "./ui";
 export const docTitle = (T: Engine, d: Row) => (d.form === "OTHER" ? "Other document" : fname(T, d.form));
 const CHANNEL: Record<string, string> = { text: "text", email: "email", portal: "upload page", staff: "added by staff" };
 
-/** The file itself. A photo is shown and can be zoomed and turned. A PDF opens in its own tab until pages are drawn on the server (T-143). */
+/** The file itself. A photo is shown and can be zoomed and turned. A PDF is shown as pictures of its pages, drawn on the server;
+ *  when several forms came as one file, only this document's own pages are shown. */
 export function DocImage({ d, zoom, rot }: { d: Row; zoom: number; rot: number }) {
-  const [kind, setKind] = useState<"image" | "other">("image"), src = "/api/documents/" + d.id + "/file";
-  useEffect(() => { setKind("image"); }, [d.id]);
+  const [kind, setKind] = useState<"image" | "other">("image"), [count, setCount] = useState<number | null>(null), src = "/api/documents/" + d.id + "/file";
+  useEffect(() => { setKind("image"); setCount(null); }, [d.id]);
+  useEffect(() => { if (kind !== "other") return; let on = true; api.get<{ count: number }>("/api/documents/" + d.id + "/pages").then((r) => { if (on) setCount(r.count); }, () => { if (on) setCount(0); }); return () => { on = false; }; }, [kind, d.id]);
   if (!d.fileKey || d.stripped || d.state === "purged") return <div className="nofile"><Icon name="file" /><b>Tallyhound no longer holds a copy.</b><span className="small">{d.deliveredAt ? "The original is in your firm's storage." : "It was deleted on schedule or by an owner."}</span></div>;
-  if (kind === "other") return <div className="nofile"><Icon name="file" /><b>This one opens in its own tab.</b><span className="small">PDFs and a few photo types cannot be shown inside this page yet.</span><a className="btn" href={src} target="_blank" rel="noreferrer"><Icon name="eye" small />Open the file</a></div>;
+  if (kind === "other" && count === null) return <div className="nofile" role="status">Opening…</div>;
+  if (kind === "other" && count) {
+    const own: number[] = Array.isArray(d.pagesOf) && d.pagesOf.length ? d.pagesOf.filter((n: number) => n >= 1 && n <= count) : Array.from({ length: count }, (_, i) => i + 1), shown = own.slice(0, 20);
+    return <div className="pdfpages">{own.length < count ? <div className="pagenote">{own.length === 1 ? "Page " + own[0] : "Pages " + own.join(", ")} of a {count}-page file. The other pages are other documents.</div> : null}
+      {shown.map((n) => <img key={n} className="docimg" loading="lazy" src={"/api/documents/" + d.id + "/page/" + n} alt={"Page " + n + " as it arrived"} style={{ transform: "scale(" + zoom + ") rotate(" + rot + "deg)" }} />)}
+      {own.length > shown.length ? <a className="btn" href={src} target="_blank" rel="noreferrer"><Icon name="eye" small />Open the whole file ({own.length} pages)</a> : null}</div>;
+  }
+  if (kind === "other") return <div className="nofile"><Icon name="file" /><b>This one opens in its own tab.</b><span className="small">This kind of file cannot be shown inside this page.</span><a className="btn" href={src} target="_blank" rel="noreferrer"><Icon name="eye" small />Open the file</a></div>;
   return <img className="docimg" src={src} alt={"The document as it arrived"} style={{ transform: "scale(" + zoom + ") rotate(" + rot + "deg)" }} onError={() => setKind("other")} />;
 }
 

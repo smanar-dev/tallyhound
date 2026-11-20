@@ -1,7 +1,8 @@
 // Texts and email arriving from the providers: who is allowed to call, store-then-answer, retries, and the hand-off to a person.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { build, KINDS, type Harness } from "./harness.ts";
+import { build, KINDS, pdfPagesWith, type Harness } from "./harness.ts";
+import { prepareOpts } from "../src/files.ts";
 import { createEngine, kitMemory, type Engine, type PrepareOpts } from "../src/kit.ts";
 import { RETRY_AFTER_S } from "../src/queue.ts";
 import { strFromU8, unzipSync } from "fflate";
@@ -25,6 +26,27 @@ const docs = (T: Engine) => T.S.docs.filter((d: { engId?: string }) => d.engId);
 
 for (const kind of KINDS) {
   const name = (s: string) => "hooks (" + kind + "): " + s;
+
+  test(name("T-143: several forms emailed as one PDF are read page by page and become separate documents, all kept in the one stored file"), async () => {
+    const one = { is_tax_document: true, tax_year: 2026, recipient_name: "JO DAY", legibility: 0.95, confidence: 0.97, missing_parts: [], note: "" };
+    const ai = kitMemory.fakeAI((p: string) => p.startsWith("The images are the pages") ? { documents: [{ ...one, pages: [1], form: "W2", payer: "Acme Logistics" }, { ...one, pages: [2, 3], form: "1099INT", payer: "First Bank" }] }
+      : p.startsWith("You read emails") ? { intent: "sending", item_id: null, summary: "Sending documents", scope: "documents", sentiment: "calm" } : null);
+    const H = await build(kind, { ai, prepare: prepareOpts() }), { firmId, ownerId } = await H.newFirm();
+    await H.app.staff(firmId, ownerId, (T: Engine) => { T.S.firm.hound.mode = "autopilot"; T.importRows(T.parseCSV("First,Last,Email\nJo,Day,jo@x.example")); const e = T.S.engs[0]; T.itemsOf(e.id).find((i: { form: string }) => i.form === "W2").payer = "Acme Logistics"; e.confirmed = true; T.start(e.id); });
+    const pdf = pdfPagesWith([["Form W-2 Wage and Tax Statement 2026"], ["Form 1099-INT Interest Income 2026"], ["Instructions for Recipient"]]);
+    await H.postmarkPost("/hooks/postmark/inbound", { MessageID: "pmb", OriginalRecipient: INBOX, From: "Jo Day <jo@x.example>", Subject: "Everything in one scan", TextBody: "All in one file.", Headers: [{ Name: "Authentication-Results", Value: "mx; dmarc=pass" }], Attachments: [{ Name: "scan.pdf", ContentType: "application/pdf", Content: pdf.toString("base64") }] });
+    await H.inbox.drain(); const T = createEngine(); T.load(await H.store.readState(firmId)); const got = docs(T);
+    assert.deepEqual(got.map((d: { form: string }) => d.form).sort(), ["1099INT", "W2"]); assert.equal(new Set(got.map((d: { fileKey: string }) => d.fileKey)).size, 1, "one stored file");
+    assert.deepEqual(got.find((d: { form: string }) => d.form === "1099INT").pagesOf, [2, 3]);
+    const call = ai.calls.find((c: { prompt: string }) => c.prompt.startsWith("The images are the pages")); assert.equal(call.opts.images.length, 3); for (const img of call.opts.images) assert.equal(img.subarray(0, 2).toString("hex"), "ffd8", "each page went to the model as a JPEG");
+    // Staff see the pages as pictures drawn on the server; another firm's staff see nothing.
+    const me = await H.signInAs("pat1@firm1.test"), int = got.find((d: { form: string }) => d.form === "1099INT");
+    assert.deepEqual((await me.get("/api/documents/" + int.id + "/pages")).json, { count: 3 });
+    const pg = await H.server.inject({ method: "GET", url: "/api/documents/" + int.id + "/page/2", headers: { cookie: me.cookie() } }); assert.equal(pg.statusCode, 200); assert.equal(pg.headers["content-type"], "image/jpeg"); assert.equal(pg.rawPayload.subarray(0, 2).toString("hex"), "ffd8"); assert.match(String(pg.headers["content-security-policy"]), /sandbox/);
+    for (const n of ["0", "4", "x", "1.5"]) assert.equal((await me.get("/api/documents/" + int.id + "/page/" + n)).status, 404);
+    await H.newFirm(2); const other = await H.signInAs("pat2@firm2.test"); assert.equal((await other.get("/api/documents/" + int.id + "/pages")).status, 404); assert.equal((await other.get("/api/documents/" + int.id + "/page/1")).status, 404); assert.equal((await H.browser().get("/api/documents/" + int.id + "/page/1")).status, 401);
+    await H.close();
+  });
 
   test(name("T-07: a texted photo is stored and answered at once, read by the worker, and the same webhook twice makes one document"), async () => {
     const H = await firmWithJo(kind), p = mms(H, "MM1"), before = (await H.state()).S.msgs.length;

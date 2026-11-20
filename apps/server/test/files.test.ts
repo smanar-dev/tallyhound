@@ -2,7 +2,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import sharp from "sharp";
-import { pdfText, prepareOpts, ready, LONG_SIDE } from "../src/files.ts";
+import { pdfText, pdfPages, prepareOpts, ready, LONG_SIDE } from "../src/files.ts";
+import { pdfPagesWith } from "./harness.ts";
 import { createEngine } from "../src/kit.ts";
 import { createRequire } from "node:module";
 const precheck = createRequire(import.meta.url)("../../../packages/core/precheck.js") as { fromText(t: string, forms?: unknown): { form: string | null; year: number | null }; photoOk(m: unknown): { ok: boolean; why?: string } };
@@ -17,6 +18,17 @@ function pdfWith(lines: string[]): Buffer {
   return Buffer.from(out, "latin1");
 }
 const opt = prepareOpts();
+
+test("files: a PDF with several pages comes with one picture per page; a one-page PDF and a broken one do not", async () => {
+  const three = await ready({ bytes: pdfPagesWith([["Form W-2 Wage and Tax Statement 2026"], ["Form 1099-INT Interest Income 2026"], ["Form 1098 Mortgage Interest 2026"]]), contentType: "application/pdf" }, opt);
+  assert.equal(three.pages!.length, 3); assert.match(three.text!, /W-2/);
+  for (const pg of three.pages!) { const m = await sharp(pg).metadata(); assert.equal(m.format, "jpeg"); assert.equal(m.width, 1500); assert.ok(m.height! > 1800 && m.height! < 2100); }
+  // The pages are really drawn: each has dark ink on a white page, and they are not the same picture.
+  const ink = async (b: Buffer) => { const st = await sharp(b).greyscale().stats(); return [st.channels[0]!.min, Math.round(st.channels[0]!.mean)]; };
+  const a = await ink(three.pages![0]!); assert.ok(a[0]! < 80, "there is ink"); assert.ok(a[1]! > 235, "on a white page"); assert.notDeepEqual(three.pages![0], three.pages![1]);
+  assert.equal((await ready({ bytes: pdfWith(["Form W-2 2026"]), contentType: "application/pdf" }, opt)).pages, undefined, "one page goes to the model whole");
+  assert.equal(await pdfPages(Buffer.from("%PDF-1.4 not really a pdf")), null);
+});
 
 test("files: a phone photo is turned upright, shrunk to the model's useful size and comes out as a JPEG", async () => {
   // 4000 x 3000 from the sensor, tagged "rotate 90 degrees" the way a phone held upright tags it.

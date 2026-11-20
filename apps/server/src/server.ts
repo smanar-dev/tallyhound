@@ -12,7 +12,7 @@ import { SignInError, type SignIn } from "./signin.ts";
 import { FirmError, type Firms } from "./firms.ts";
 import { ACTIONS, allowed, run } from "./actions.ts";
 import { registerHooks, type HookDeps } from "./hooks.ts";
-import { ready } from "./files.ts";
+import { pdfCount, pdfPage, ready } from "./files.ts";
 import { registerPublic, type PublicDeps } from "./public.ts";
 import type { PrepareOpts } from "./kit.ts";
 
@@ -140,6 +140,19 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
     if (!file) return reply.code(404).send({ error: "no_file", message: "Tallyhound no longer holds a copy of that document." });
     const shown = SHOWN.includes(file.contentType);
     return reply.header("content-security-policy", "default-src 'none'; sandbox").header("content-disposition", shown ? "inline" : "attachment").type(shown ? file.contentType : "application/octet-stream").send(file.bytes);
+  });
+
+  // A PDF is shown to staff as pictures of its pages, drawn here, so nothing in the file itself ever runs in their browser.
+  f.get("/api/documents/:id/pages", { preHandler: full }, async (req, reply) => {
+    const u = req.who!.user, file = await d.app.openFile(u.firmId, u.id, (req.params as { id: string }).id);
+    if (!file) return reply.code(404).send({ error: "no_file", message: "Tallyhound no longer holds a copy of that document." });
+    return { count: file.contentType === "application/pdf" ? await pdfCount(file.bytes) : 0 };
+  });
+  f.get("/api/documents/:id/page/:n", { preHandler: full }, async (req, reply) => {
+    const u = req.who!.user, p = req.params as { id: string; n: string }, file = await d.app.openFile(u.firmId, u.id, p.id);
+    const img = file && file.contentType === "application/pdf" ? await pdfPage(file.bytes, +p.n) : null;
+    if (!img) return reply.code(404).send({ error: "no_page", message: "That page cannot be shown." });
+    return reply.header("content-security-policy", "default-src 'none'; sandbox").header("cache-control", "private, no-store").type("image/jpeg").send(img);
   });
 
   // Hand off one client's finished files as a zip, for a firm with no storage connected. Building the zip IS the hand-off: the
