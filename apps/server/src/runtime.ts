@@ -15,6 +15,8 @@ import { createInbox, postgresQueue } from "./queue.ts";
 import { handlers } from "./hooks.ts";
 import { prepareOpts } from "./files.ts";
 import { s3Bucket } from "./bucket.ts";
+import { kmsKeyring } from "./keys.ts";
+import { createClosure } from "./closure.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const env = (k: string) => (process.env[k] || "").trim();
@@ -31,7 +33,12 @@ const notConnected = (what: string): Sender => ({ async send() { throw new Error
 export function runtime() {
   const production = env("NODE_ENV") === "production", appUrl = env("APP_URL") || "http://localhost:" + (env("PORT") || "3000");
   const pool = new pg.Pool({ connectionString: need("DATABASE_URL"), max: 10 });
-  const keyring = kitCrypto.localKeyring(need("TH_MASTER_KEY"));   // T-102 replaces this with the cloud key service
+  // The master key (T-102). With TH_KMS_KEY_ID it lives in AWS KMS and this service can use it but never read it; TH_MASTER_KEY,
+  // if still set, only opens firms made before the move. Without TH_KMS_KEY_ID the key is TH_MASTER_KEY itself: fine for
+  // development, and said out loud at every start in production.
+  const local = env("TH_MASTER_KEY") ? kitCrypto.localKeyring(env("TH_MASTER_KEY")) : undefined;
+  const keyring = env("TH_KMS_KEY_ID") ? kmsKeyring({ keyId: env("TH_KMS_KEY_ID")!, region: env("TH_KMS_REGION") || env("AWS_REGION") || undefined, before: local }) : local || kitCrypto.localKeyring(need("TH_MASTER_KEY"));
+  if (production && !env("TH_KMS_KEY_ID")) console.log(JSON.stringify({ at: new Date().toISOString(), event: "master_key_in_environment", note: "Set TH_KMS_KEY_ID to keep the master key in the key service" }));
   // Files: a private S3-compatible bucket when S3_BUCKET is set. Local disk otherwise, which production refuses.
   if (production && !env("S3_BUCKET")) throw new Error("Set S3_BUCKET: production keeps files in a private bucket, not on the server's disk");
   const bucket = env("S3_BUCKET") ? s3Bucket({ bucket: env("S3_BUCKET"), region: env("S3_REGION") || undefined, endpoint: env("S3_ENDPOINT") || undefined }) : diskBucket(env("TH_FILES_DIR") || join(ROOT, ".data/files"));
@@ -57,7 +64,7 @@ export function runtime() {
   if (production && !env("CLAMAV_HOST")) log("warning_no_virus_scanner");
   const inbox = createInbox({ queue: postgresQueue(pool), store, app, handlers: handlers({ app, twilio, prepare }), clock, log });
   const hooks = { store, inbox, twilioAuthToken: env("TWILIO_AUTH_TOKEN") || undefined, postmarkHook: env("POSTMARK_HOOK_PASSWORD") ? { user: env("POSTMARK_HOOK_USER") || "postmark", pass: env("POSTMARK_HOOK_PASSWORD") } : undefined };
-  return { production, appUrl, pool, store, auth, app, signIn, firms, inbox, hooks, prepare, clock, log, root: ROOT, mailer, notify: createNotifier({ appUrl }), ops,
+  return { production, appUrl, pool, store, auth, app, signIn, firms, inbox, hooks, prepare, clock, log, root: ROOT, mailer, notify: createNotifier({ appUrl }), ops, closure: createClosure({ store, auth, markers: bucket, clock, log }),
     // TH_ALERT_EMAIL: where the developer is told that sends are failing, a firm's turn failed, or an arriving message was lost.
     watch: env("TH_ALERT_EMAIL") ? createWatch({ to: env("TH_ALERT_EMAIL")!, send: (to, subject, body) => mailer.staff(to, subject, body), clock, log }) : undefined };
 }

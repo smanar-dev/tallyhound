@@ -2,6 +2,8 @@
 //   npm run admin -- migrate
 //   npm run admin -- create-firm --name "Larkin & Poe CPAs" --inbox larkinpoe@docs.tallyhound.com --zone America/Chicago --owner-name "Pat Larkin" --owner-email pat@larkinpoe.com [--sms 6155550100] [--phone "(615) 555-0100"] [--plan Practice] [--checked]
 //   npm run admin -- firm-check --firm f_... --by "Jordan" [--suspend]
+//   npm run admin -- close-firm --firm f_... --by "Jordan" --yes   destroys the firm's key and everything it holds
+//   npm run admin -- after-restore --by "Jordan"   run after every restore: closes again any firm closed since the backup
 //   npm run admin -- status                    one line per firm: last tick, sent and failed today, model calls and errors today
 //   npm run admin -- usage [--month 2027-02]   what each firm used that month and what it cost us
 //   npm run admin -- firms
@@ -22,6 +24,8 @@ try {
     console.log("Firm created: " + r.firmId + "\nOwner: " + need("owner-email") + " (" + r.ownerId + ")\n" + (o.checked === "true" ? "Checked: it can send." : "Not checked yet: nothing sends until you run firm-check.") + "\nThe owner signs in at " + R.appUrl + "/signin");
   }
   else if (cmd === "firm-check") { await R.firms.setVerified(need("firm"), o.suspend !== "true", need("by")); console.log(o.suspend === "true" ? "Suspended." : "Checked: the firm can send."); }
+  else if (cmd === "close-firm") { if (o.yes !== "true") throw new Error("This destroys the firm's key and everything it holds, for good. Add --yes to go ahead."); await R.closure.close(need("firm"), need("by")); console.log("Closed. Nothing of this firm's can be read again."); }
+  else if (cmd === "after-restore") { const L = await R.closure.afterRestore(need("by")); console.log(L.length ? "Closed again: " + L.join(", ") : "No firm in this database was closed after the backup was taken."); }
   else if (cmd === "status") {
     // One line per firm: when the timer last visited, how today's sending went, and what the model did today.
     const L = await R.ops.status(new Date()); if (!L.length) console.log("No firm has been visited by the timer yet.");

@@ -1,4 +1,5 @@
 // The web service end to end: sign-in, roles, firm separation, the timer. Runs in memory, and again on a real Postgres when DATABASE_URL is set.
+import { createClosure } from "../src/closure.ts";
 import { costOf } from "../src/ops.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -226,6 +227,20 @@ for (const kind of KINDS) {
     const real = H.app.withFirm; H.app.withFirm = async () => { throw new Error("boom"); }; await H.worker.pass(); H.app.withFirm = real;
     line = (await H.ops.status(H.clock())).find((l) => l.firmId === firmId)!; assert.equal(line.lastError, "boom"); assert.ok(line.lastTick); assert.ok(H.devMails.some((m) => /could not finish a firm's turn/.test(m.subject)));
     await H.worker.pass(); assert.equal((await H.ops.status(H.clock())).find((l) => l.firmId === firmId)!.lastError, null, "cleared by the next good pass");
+    await H.close();
+  });
+
+  test(name("T-28: closing a firm destroys its key and signs everyone out, and a firm with a closure marker is closed again after a restore"), async () => {
+    const H = await build(kind), a = await H.newFirm(1), b = await H.newFirm(2), ownerA = await H.signInAs("pat1@firm1.test"); await ownerA.post("/api/act", { fn: "addClient", args: [{ first: "Jo", last: "Day", email: "jo@x.example" }] });
+    const kept = new Map<string, Buffer>(), closure = createClosure({ store: H.store, auth: H.auth, clock: H.clock, markers: { async put(k, v) { kept.set(k, v); }, async get(k) { return kept.get(k) || null; } } });
+    await assert.rejects(closure.close("f_nobody", "Jordan"), /No open firm/);
+    await closure.close(a.firmId, "Jordan"); assert.deepEqual([...kept.keys()], ["closed/" + a.firmId]); assert.doesNotMatch(kept.get("closed/" + a.firmId)!.toString(), /Test CPAs|pat1/);
+    assert.equal((await ownerA.get("/api/me")).status, 401); const n = H.links.length; await H.browser().post("/auth/link", { email: "pat1@firm1.test" }); assert.equal(H.links.length, n, "nobody signs in to a closed firm");
+    await assert.rejects(H.store.readState(a.firmId)); assert.deepEqual(await H.auth.activeFirmIds(), [b.firmId]); assert.ok((await H.auditRows()).some((r) => r.action === "firm.closed"));
+    // The other firm is untouched, and with no marker a restore check changes nothing.
+    assert.deepEqual(await closure.afterRestore("Jordan"), []); assert.ok(await H.store.readState(b.firmId));
+    // A backup from before a closure comes back with the firm open. Its marker is still in the bucket, so it is closed again.
+    kept.set("closed/" + b.firmId, Buffer.from("{}")); assert.deepEqual(await closure.afterRestore("Jordan"), [b.firmId]); await assert.rejects(H.store.readState(b.firmId)); assert.deepEqual(await H.auth.activeFirmIds(), []);
     await H.close();
   });
 

@@ -28,6 +28,7 @@ Put every one of these in the host's secret store, never in the repo.
 | `TH_LINK_SECRET` | yes | A long random string. Signs staff sign-in links |
 | `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT` | yes | The private bucket. `S3_ENDPOINT` only for a store that is not Amazon's. Credentials come from `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` |
 | `POSTMARK_TOKEN`, `TH_SIGNIN_FROM` | yes | Sends client email and staff sign-in links. Production will not start without the token |
+| `TH_KMS_KEY_ID`, `TH_KMS_REGION` | recommended | The master key in AWS KMS (a key id, ARN or alias). The service's role needs `kms:GenerateDataKey` and `kms:Decrypt` on that one key and nothing else, so it can use the key and never read it. Turn on automatic rotation on the key. Works from any host given AWS credentials in the usual variables. When this is set, `TH_MASTER_KEY` is only needed to open firms made before the move |
 | `TH_ALERT_EMAIL` | recommended | Where the developer is emailed when sends fail for a firm, a firm's turn on the timer fails, or an arriving message is lost after every retry. At most once an hour for the same trouble. Point an uptime check at `/healthz` as well: it answers 503 when the timer has not run for 10 minutes |
 | `POSTMARK_HOOK_USER`, `POSTMARK_HOOK_PASSWORD` | for email in | The name and password inside the webhook address given to Postmark |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_MESSAGING_SERVICE_SID` | for texts | Without them texting is "not connected" and Tallyhound collects by email |
@@ -55,7 +56,7 @@ Generate the two secrets:
 
 ## Not done
 
-Backups and a timed restore (T-28), alerting on the events above (T-29), the cloud key service (T-102), a second region, and a staging environment separate from production.
+Scheduling `tools/backup.sh` nightly and repeating the restore drill on this host (`docs/BACKUP.md`), an uptime check on `/healthz`, a second region, and a staging environment separate from production.
 
 ## Looking at how it is running
 
