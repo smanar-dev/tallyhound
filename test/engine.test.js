@@ -291,3 +291,20 @@ test("T-118: a client's second contact is remembered for matching and is never s
   // A text from nobody we know is kept with the number it really came from.
   T.inboundText(null, "who is this", null, "(615) 555-0142"); assert.equal(T.S.tray.at(-1).from, "(615) 555-0142");
 });
+test("T-120: with the closing question on, a finished client is asked once whether anything else changed; NO or silence ends with that's everything, YES goes to a person", () => {
+  const finish = (T, e) => T.itemsOf(e.id).forEach((i) => { if (i.state !== "received") T.setItem(i.id, "waived", "x"); });
+  const said = (T, e, code) => T.S.msgs.filter((m) => m.engId === e.id && m.dir === "out" && m.tpl === code).length;
+  // Off, which is how every firm starts: exactly as before.
+  const A = started(); A.T.setUser("u1"); finish(A.T, A.e); A.T.tick(); assert.equal(A.e.status, "complete"); assert.equal(said(A.T, A.e, "M32"), 0);
+  // On, the client says no.
+  const B = started(); B.T.setUser("u1"); B.T.S.firm.hound.closingQ = true; finish(B.T, B.e); B.T.tick(); assert.equal(B.e.status, "complete"); assert.equal(said(B.T, B.e, "M32"), 1); assert.equal(said(B.T, B.e, "M13"), 0);
+  B.T.inboundText(B.c.id, "No", null); assert.equal(said(B.T, B.e, "M13"), 1); assert.equal(B.e.closing.answer, "no"); B.T.inboundText(B.c.id, "no", null); assert.equal(said(B.T, B.e, "M13"), 1, "asked once, answered once");
+  // On, the client says yes: a person hears about it, and "that's everything" is not said.
+  const C = started(); C.T.setUser("u1"); C.T.S.firm.hound.closingQ = true; finish(C.T, C.e); C.T.tick(); const tasks = C.T.S.tasks.length; C.T.inboundText(C.c.id, "Yes", null);
+  assert.equal(C.T.S.tasks.length, tasks + 1); assert.match(C.T.S.tasks.at(-1).text, /something changed this year/); assert.equal(said(C.T, C.e, "M13"), 0); assert.equal(said(C.T, C.e, "M12"), 1);
+  // On, no answer: three days later the client hears "that's everything" anyway.
+  const D = started(); D.T.setUser("u1"); D.T.S.firm.hound.closingQ = true; finish(D.T, D.e); D.T.tick(); D.T.setNow(new Date(D.T.S.now.getTime() + 2 * D.T.DAY)); D.T.tick(); assert.equal(said(D.T, D.e, "M13"), 0);
+  D.T.setNow(new Date(D.T.S.now.getTime() + 2 * D.T.DAY)); D.T.tick(); assert.equal(said(D.T, D.e, "M13"), 1); D.T.setNow(new Date(D.T.S.now.getTime() + 5 * D.T.DAY)); D.T.tick(); assert.equal(said(D.T, D.e, "M13"), 1);
+  // The wording passes the engine's own message check.
+  assert.deepEqual(B.T.outputCheck(B.T.fill("M32", B.c, B.e, {}), "text", { year: B.e.year }).filter((x) => !x.startsWith("digit run")), []);
+});

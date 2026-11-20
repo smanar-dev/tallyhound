@@ -48,7 +48,7 @@ export const ACTIONS: Record<string, Rule> = {
   // How much the Hound does on its own. Owner only; every change is in the audit trail.
   setHound: { role: "owner", n: 1, run: (T, [v]) => {
     const H = T.S.firm.hound, x = (v && typeof v === "object" ? v : {}) as Record<string, unknown>, pick = <V,>(k: string, allowed: V[]) => { if (allowed.includes(x[k] as V) && H[k] !== x[k]) { H[k] = x[k]; changed.push(k); } }, changed: string[] = [];
-    pick("mode", ["copilot", "autopilot"]); pick("tone", ["warm", "brief", "formal"]); pick("emailAfter", [1, 2, 3, 99]); pick("slaHours", [2, 4, 8, 24]); pick("pauseDays", [1, 2, 3, 5, 7]); pick("callTask", [true, false]); pick("aiWrite", [true, false]);
+    pick("mode", ["copilot", "autopilot"]); pick("tone", ["warm", "brief", "formal"]); pick("emailAfter", [1, 2, 3, 99]); pick("slaHours", [2, 4, 8, 24]); pick("pauseDays", [1, 2, 3, 5, 7]); pick("callTask", [true, false]); pick("aiWrite", [true, false]); pick("closingQ", [true, false]);
     if (changed.length) T.audit("settings.hound", "Changed: " + changed.join(", ") + (changed.includes("mode") ? ". Now on " + H.mode : "")); return changed; } },
   // check
   // Correcting what was read on a document that is already accepted, as the demo's viewer does: the old reading is kept as a version.

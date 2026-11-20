@@ -101,6 +101,7 @@
       M11: "Thanks, we already have that one. Nothing more needed for it.",
       M12: "Thanks. I've passed that to {preparer} at {firm}, who will take a look.",
       M13: "That's everything. {firm} has all {n} documents for your {year} return. Thank you.",
+      M32: "{firm} has every document on your list. One last thing: did anything change this year that we have not asked about, such as a new job, a move or a sale? Reply YES or NO.",
       M14: "Good question. I've passed it to {preparer}, who will get back to you.",
       M15: "Your {plain_name} comes from {issuer}. {where_hint} If you have an online account with them, look under tax documents.",
       M16: "{firm}: You're unsubscribed and will get no more texts. Reply START to resubscribe.",
@@ -140,6 +141,7 @@
       M11: "Gracias, ya tenemos ese documento. No necesitamos nada más de ese.",
       M12: "Gracias. Se lo pasé a {preparer} de {firm}, quien lo revisará.",
       M13: "Eso es todo. {firm} tiene los {n} documentos para su declaración de {year}. Gracias.",
+      M32: "{firm} ya tiene todos los documentos de su lista. Una última cosa: ¿cambió algo este año que no le hayamos preguntado, como un trabajo nuevo, una mudanza o una venta? Responda SÍ o NO.",
       M14: "Buena pregunta. Se la pasé a {preparer}, quien le responderá.",
       M15: "Su {plain_name} lo envía {issuer}. {where_hint} Si tiene una cuenta en línea con ellos, busque en documentos de impuestos.",
       M16: "{firm}: Canceló su suscripción y no recibirá más mensajes. Responda START para volver a suscribirse.",
@@ -159,7 +161,7 @@
       M31: "{firm} no está recibiendo documentos aquí por ahora. Comuníquese con {firm} directamente: llame al {firm_phone} o escriba a {firm_email}."
     }
   };
-  const TPL_USE = { M31: "Auto-reply while the firm is paused", M30L: "Locked PDF", M30T: "A file we cannot open", M30K: "A link instead of a file", M1: "Invitation to text (email)", M1R: "Invitation reminder (email)", M2: "Texting turned on", M3: "First request", M4: "Next request", M5: "Reminder", M6: "Final reminder", M7: "Wrong year", M8: "Photo too hard to read", M8L: "Photo too hard to read, second time", M9: "Missing page", M10: "Did anything change this year?", M11: "Duplicate", M12: "Passed to your team", M13: "Everything is in", M14: "Question passed to a person", M15: "Where to find a form", M16: "Texting turned off (STOP)", M16H: "Reply to HELP", M19: "Client has none, next request", M19X: "Client has none", M20: "Will send later", M21: "Unknown sender", M26: "What is still needed", M27: "Document arrived before we asked", M28: "Check-in invitation", M28R: "Check-in reminder", M29: "Check-in thanks", M22: "Part of a document is missing", M22R: "Reminder for the missing part", M23: "One reply for several documents", M24: "Passed to a person", M25: "Pause when a client is upset" };
+  const TPL_USE = { M32: "The closing question", M31: "Auto-reply while the firm is paused", M30L: "Locked PDF", M30T: "A file we cannot open", M30K: "A link instead of a file", M1: "Invitation to text (email)", M1R: "Invitation reminder (email)", M2: "Texting turned on", M3: "First request", M4: "Next request", M5: "Reminder", M6: "Final reminder", M7: "Wrong year", M8: "Photo too hard to read", M8L: "Photo too hard to read, second time", M9: "Missing page", M10: "Did anything change this year?", M11: "Duplicate", M12: "Passed to your team", M13: "Everything is in", M14: "Question passed to a person", M15: "Where to find a form", M16: "Texting turned off (STOP)", M16H: "Reply to HELP", M19: "Client has none, next request", M19X: "Client has none", M20: "Will send later", M21: "Unknown sender", M26: "What is still needed", M27: "Document arrived before we asked", M28: "Check-in invitation", M28R: "Check-in reminder", M29: "Check-in thanks", M22: "Part of a document is missing", M22R: "Reminder for the missing part", M23: "One reply for several documents", M24: "Passed to a person", M25: "Pause when a client is upset" };
   const COMPLIANCE = ["M1", "M1R", "M2", "M16", "M16H", "M21"];
   const SCOPE = { documents: "Documents", tax_question: "Tax question", billing: "Billing", scheduling: "Scheduling", personal: "Personal", complaint: "Complaint", other: "Other" };
 
@@ -396,6 +398,20 @@
   /* ---------- status ---------- */
   function setStuck(e, reason) { if (["complete", "closed", "paused"].includes(e.status)) return; e.status = "stuck"; e.stuck = reason; e.next = null; timeline(e, "Stuck: " + STUCK[reason][0]); }
   function unstick(e) { if (e.status === "stuck") { e.status = "in_progress"; e.stuck = null; e.step = 0; } }
+  /* T-120: the closing question. When a checklist is finished and the firm has switched this on, the client is asked once whether
+     anything changed this year that nobody asked about. NO, or three days of silence, gets "that's everything". YES goes to a
+     person. A client who already answered the check-in has been asked, so is not asked again. */
+  const CLOSING_WAIT_DAYS = 3;
+  function finished(e) {
+    if (S.firm.hound.closingQ !== true || e.closing || (e.checkin && e.checkin.doneAt)) { send(e, "M13", {}); return; }
+    e.closing = { askedAt: new Date(S.now) }; send(e, "M32", {}); timeline(e, "Asked whether anything else changed this year");
+  }
+  function closingReply(e, c, yes) {
+    e.closing.answeredAt = new Date(S.now); e.closing.answer = yes ? "yes" : "no";
+    if (!yes) { timeline(e, "Nothing else changed this year", c.first); send(e, "M13", {}); return; }
+    addTask({ kind: "question", category: "other", reason: "Question", engId: e.id, text: "Says something changed this year that was not asked about" }); timeline(e, "Says something else changed this year: passed to a person", c.first); send(e, "M12", {});
+  }
+  function closingSweep() { S.engs.forEach((e) => { if (e.closing && !e.closing.answeredAt && e.status === "complete" && S.now - new Date(e.closing.askedAt) > CLOSING_WAIT_DAYS * DAY) { e.closing.answeredAt = new Date(S.now); e.closing.answer = "none"; send(e, "M13", {}); } }); }
   function checkComplete(e) {
     if (openItems(e.id).length === 0 && itemsOf(e.id).length && !["complete", "closed"].includes(e.status)) {
       e.status = "complete"; e.stuck = null; e.next = null; e.completedAt = new Date(S.now); timeline(e, "Complete: every document received or waived"); return true;
@@ -467,6 +483,7 @@
   function tick() {
     // Deleting on schedule is a promise to the firm's clients. It runs whether or not the firm is paying, paused or stopped.
     if (!access().ok && !S.firm.stopped) { S.engs.forEach((e) => { if (e.status === "closed" && e.purgeAfter && e.purgeAfter <= S.now && !e.purged) purge(e.id, "Tallyhound"); }); retentionSweep(); return; }
+    closingSweep();
     S.engs.forEach((e) => { if (e.next && e.next <= S.now) step(e); });
     S.msgs.forEach((m) => { if (m.status === "approved" && m.sendAt && m.sendAt <= S.now) { const e = eng(m.engId), c = e && client(e.clientId); if (!e || e.takeover || ["closed", "opted_out", "paused"].includes(e.status) || (m.channel === "text" && c.textConsent !== "given")) { m.status = "discarded"; m.note = "No longer needed when sending hours began"; } else if (!allowedC(S.now, c)) m.sendAt = nextAllowedC(S.now, c); else { m.status = "delivered"; m.at = new Date(S.now); e.lastOut = new Date(S.now); } }
       if (m.status === "approval" && S.now - m.at > S.firm.hound.slaHours * HOUR) { const e = eng(m.engId); if (e) alertx(e, "medium", "approval_wait", "A message to " + client(e.clientId).first + " " + client(e.clientId).last + " has waited over " + S.firm.hound.slaHours + " hours for approval. Nothing is sent until someone approves it.", "apw" + m.id); } });
@@ -498,7 +515,7 @@
   function addTask(t) { const x = Object.assign({ id: id("t"), at: new Date(S.now), status: "open" }, t); S.tasks.push(x); return x; }
   function afterAccept(e, c) {
     e.step = 0; e.illeg = 0;
-    if (checkComplete(e)) { send(e, "M13", {}); return; }
+    if (checkComplete(e)) { finished(e); return; }
     if (e.status === "not_started") { send(e, "M27", {}); return; }
     const it = nextItem(e);
     if (it) { if (it.state === "partial") send(e, "M22R", Object.assign({ item: it }, missText(it.missing || [], c.lang, it.form))); else { it.state = "requested"; send(e, "M4", { item: it }); } e.step = 1; e.next = nextAllowed(new Date(S.now.getTime() + GAPS[0] * DAY)); }
@@ -722,6 +739,7 @@
     if (k === "start") { giveConsent(c.id, "keyword"); return k; }
     if (k === "help") { send(e, "M16H", {}, "text"); return k; }
     unstickOnInbound(e);
+    if ((k === "yes" || k === "no") && e.closing && !e.closing.answeredAt) { closingReply(e, c, k === "yes"); return k; }
     if ((k === "yes" || k === "no") && e.qAsked && e.qIdx < QUESTIONS.length) {
       const q = QUESTIONS[e.qIdx];
       if (k === "yes") { q.add.forEach((a) => S.items.push({ id: id("i"), engId: e.id, form: a[0], payer: a[1], state: "expected", source: "question", isNew: true })); timeline(e, "Answered YES: " + q.en.replace("{year}", e.year) + " Items added."); }
@@ -934,7 +952,7 @@
       } else if (decision === "discard") { d.state = "discarded"; d.reasons.push("Discarded by " + S.user.name + ": " + ((p && p.reason) || "not needed")); timeline(e, "Document discarded", S.user.name); }
     }
     if (t.kind === "says_none" && it) {
-      if (decision === "waive") { it.state = "waived"; it.note = "Client does not have it"; timeline(e, "Waived " + FORMS[it.form].plain, S.user.name); if (e.stuck === "client_says_none") unstick(e); if (checkComplete(e)) send(e, "M13", {}); else if (!e.next) e.next = nextAllowed(S.now); }
+      if (decision === "waive") { it.state = "waived"; it.note = "Client does not have it"; timeline(e, "Waived " + FORMS[it.form].plain, S.user.name); if (e.stuck === "client_says_none") unstick(e); if (checkComplete(e)) finished(e); else if (!e.next) e.next = nextAllowed(S.now); }
       else { it.state = "requested"; if (e.stuck === "client_says_none") unstick(e); sendSoon(e, "M5", { item: it }); if (!(e.queue && e.queue.length)) e.next = nextAllowed(new Date(S.now.getTime() + 2 * DAY)); }
     }
     if (t.kind === "call") { timeline(e, "Called by " + S.user.name + (p && p.note ? ": " + p.note : ""), S.user.name); if (p && p.note) remember(e, p.note, S.user.name); if (e.stuck === "no_reply") { unstick(e); e.step = 0; e.next = nextAllowed(new Date(S.now.getTime() + DAY)); } hlog(e, "decide", "Call logged; the Hound resumes tomorrow", p && p.note ? p.note : "", "Rules"); }
@@ -1414,7 +1432,7 @@
     if (!e || ["closed", "opted_out", "not_started", "awaiting_consent", "paused"].includes(e.status)) return;
     const open = openItems(e.id).length, any = itemsOf(e.id).some((i) => i.state !== "removed");
     if (e.status === "complete" && open) { e.status = "in_progress"; e.completedAt = null; e.step = 0; if (!e.next) e.next = nextAllowed(S.now); timeline(e, "Reopened: a document is outstanding again"); }
-    else if (["in_progress", "stuck"].includes(e.status) && !open && any) { if (checkComplete(e)) send(e, "M13", {}); }
+    else if (["in_progress", "stuck"].includes(e.status) && !open && any) { if (checkComplete(e)) finished(e); }
   }
   window.TH = { addContact, removeContact, planEnded, setLine, isLandline, RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
     dump, load, blank, setNow, setUser, linkFor, linkLive, LINK_DAYS, consentFromPage, declineTexts, stopEmail, unsubscribeLink, CONSENT_WORDING,
