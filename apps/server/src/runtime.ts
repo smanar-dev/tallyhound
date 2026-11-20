@@ -8,6 +8,7 @@ import { claude, trackFirm } from "./model.ts";
 import { createApp, kitCrypto, kitEmailOut, kitPostgres, kitTwilio, type Sender, type TwilioAdapter } from "./kit.ts";
 import { postgresAuthStore } from "./authstore.ts";
 import { createSignIn, firmSecrets, type Mailer } from "./signin.ts";
+import { createNotifier, type StaffMailer } from "./notify.ts";
 import { createFirms } from "./firms.ts";
 import { createInbox, postgresQueue } from "./queue.ts";
 import { handlers } from "./hooks.ts";
@@ -43,17 +44,18 @@ export function runtime() {
   const ai = env("ANTHROPIC_API_KEY") ? claude({ apiKey: env("ANTHROPIC_API_KEY"), dailyCapUsd: +(env("TH_MODEL_DAILY_CAP_USD") || 10), log }) : null;   // no key: rules and standard wording
   const app = createApp({ store, sms, email, ai, clock, log });
   if (production && !env("POSTMARK_TOKEN")) throw new Error("Set POSTMARK_TOKEN: without it nobody can be sent a sign-in link");
-  const mailer: Mailer = env("POSTMARK_TOKEN")
+  const mailer: Mailer & StaffMailer = env("POSTMARK_TOKEN")
     ? { async signInLink(to, url) { await email.send({ from: need("TH_SIGNIN_FROM"), fromName: "Tallyhound", to, subject: "Your Tallyhound sign-in link", body: "Open this link to sign in to Tallyhound. It works once and expires in 15 minutes.\n\n" + url + "\n\nIf you did not ask for this, ignore this email." }); },
+        async staff(to, subject, body) { await email.send({ from: need("TH_SIGNIN_FROM"), fromName: "Tallyhound", to, subject, body }); },
         async locked(to, minutes) { await email.send({ from: need("TH_SIGNIN_FROM"), fromName: "Tallyhound", to, subject: "Tallyhound sign-in is locked for " + minutes + " minutes", body: "Someone entered the wrong sign-in code for your Tallyhound account several times, so sign-in is locked for " + minutes + " minutes. Nothing else has changed.\n\nIf that was you, wait and then ask for a new sign-in link. If it was not you, tell your firm's owner: someone may have reached your email." }); } }
-    : { async signInLink(to, url) { console.log("\n  Sign-in link for " + to + " (development only, no email service connected):\n  " + url + "\n"); }, async locked(to, minutes) { console.log("  Sign-in locked for " + to + " for " + minutes + " minutes"); } };
+    : { async signInLink(to, url) { console.log("\n  Sign-in link for " + to + " (development only, no email service connected):\n  " + url + "\n"); }, async locked(to, minutes) { console.log("  Sign-in locked for " + to + " for " + minutes + " minutes"); }, async staff(to, subject) { console.log("  Staff email not sent (no email service connected): " + subject.replace(/^\S+ \S+ /, "")); } };
   const signIn = createSignIn({ auth, secrets: firmSecrets(store, keyring, kitCrypto), mailer, linkSecret: need("TH_LINK_SECRET"), appUrl, clock });
   const firms = createFirms({ app, auth, linkHost: env("LINK_HOST") || new URL(appUrl).host });
   const prepare = prepareOpts({ clamav: env("CLAMAV_HOST") ? { host: env("CLAMAV_HOST"), port: +(env("CLAMAV_PORT") || 3310) } : undefined });
   if (production && !env("CLAMAV_HOST")) log("warning_no_virus_scanner");
   const inbox = createInbox({ queue: postgresQueue(pool), store, app, handlers: handlers({ app, twilio, prepare }), clock, log });
   const hooks = { store, inbox, twilioAuthToken: env("TWILIO_AUTH_TOKEN") || undefined, postmarkHook: env("POSTMARK_HOOK_PASSWORD") ? { user: env("POSTMARK_HOOK_USER") || "postmark", pass: env("POSTMARK_HOOK_PASSWORD") } : undefined };
-  return { production, appUrl, pool, store, auth, app, signIn, firms, inbox, hooks, prepare, clock, log, root: ROOT };
+  return { production, appUrl, pool, store, auth, app, signIn, firms, inbox, hooks, prepare, clock, log, root: ROOT, mailer, notify: createNotifier({ appUrl }) };
 }
 
 // Brings an empty or older database up to date. Safe to run on every deploy.

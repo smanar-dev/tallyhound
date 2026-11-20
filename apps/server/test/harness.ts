@@ -1,4 +1,5 @@
 // Builds the whole service for a test: in memory, or on a real Postgres when DATABASE_URL is set (each in its own schema, dropped at the end).
+import { createNotifier } from "../src/notify.ts";
 import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -43,7 +44,7 @@ export async function build(kind: "memory" | "postgres" = "memory", opt: { ai?: 
   const inbox = createInbox({ queue, store, app, handlers: handlers({ app, twilio, prepare: opt.prepare }), clock });
   const links: { to: string; url: string }[] = [], lockMails: { to: string; minutes: number }[] = [];
   const signIn = createSignIn({ auth, secrets: firmSecrets(store, keyring, kitCrypto), mailer: { async signInLink(to, url) { links.push({ to, url }); }, async locked(to, minutes) { lockMails.push({ to, minutes }); } }, linkSecret: "test-secret", appUrl: APP, clock });
-  const firms = createFirms({ app, auth, linkHost: "go.tallyhound.test" }), worker = createWorker({ app, auth, clock, inbox });
+  const firms = createFirms({ app, auth, linkHost: "go.tallyhound.test" }), staffMails: { to: string; subject: string; body: string }[] = [], worker = createWorker({ app, auth, clock, inbox, notify: createNotifier({ appUrl: APP }), mailer: { async staff(to, subject, body) { staffMails.push({ to, subject, body }); } } });
   const server = await buildServer({ app, auth, signIn, firms, readState: (id) => store.readState(id), getFile: (id, key) => store.getFile(id, key), appUrl: APP, secureCookies: APP.startsWith("https:"), webDir: join(HERE, "../../web/dist"), prepare: opt.prepare, clientPages: { store, inbox, clock }, hooks: { store, inbox, twilioAuthToken: TWILIO_TOKEN, postmarkHook: PM } });
 
   // A browser: keeps its cookie, sends the header our pages send.
@@ -77,6 +78,6 @@ export async function build(kind: "memory" | "postgres" = "memory", opt: { ai?: 
   }
   const advance = (seconds: number) => { t = new Date(t.getTime() + seconds * 1000); };
   const newFirm = (n = 1, verified = true) => firms.create({ name: "Test CPAs " + n, inbox: "test" + n + "@docs.tallyhound.test", smsNumber: "615555010" + n, iana: "America/Chicago", ownerName: "Pat Owner", ownerEmail: "pat" + n + "@firm" + n + ".test", plan: "Practice", verified });
-  return { kind, server, app, auth, firms, worker, inbox, queue, inner, media, mediaCalls, mediaDown: (on: boolean) => { mediaDown = on; }, twilioPost, postmarkPost, store, sms, email, links, lockMails, browser, signInAs, codeFor, token, unbase32, secrets, advance, clock, newFirm, auditRows, async close() { await inbox.drain(); await server.close(); if (pool) { await pool.query("drop schema " + schema + " cascade"); await pool.end(); } } };
+  return { kind, server, app, auth, firms, worker, inbox, queue, inner, media, mediaCalls, mediaDown: (on: boolean) => { mediaDown = on; }, twilioPost, postmarkPost, store, sms, email, links, lockMails, staffMails, browser, signInAs, codeFor, token, unbase32, secrets, advance, clock, newFirm, auditRows, async close() { await inbox.drain(); await server.close(); if (pool) { await pool.query("drop schema " + schema + " cascade"); await pool.end(); } } };
 }
 export type Harness = Awaited<ReturnType<typeof build>>;

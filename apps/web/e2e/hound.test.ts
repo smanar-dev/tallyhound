@@ -20,7 +20,8 @@ scene("the Hound shows what it did and why, what is coming up, and lets an owner
   // Rules it follows: switch to Copilot. It is saved, audited, and the next message is a draft.
   await page.getByRole("tab", { name: "Rules it follows" }).click(); await page.getByLabel(/^Copilot/).click(); await page.getByText("Saved.", { exact: true }).waitFor();
   T = await W.state(firmId); assert.equal(T.S.firm.hound.mode, "copilot"); assert.ok(T.S.audit.some((a: { action: string; detail: string }) => a.action === "settings.hound" && /Now on copilot/.test(a.detail)));
-  await page.getByLabel("Tone").selectOption("brief"); await page.getByText("Saved.", { exact: true }).waitFor(); assert.equal((await W.state(firmId)).S.firm.hound.tone, "brief");
+  // The "Saved." from the change before may still be on screen, so wait for the saved state itself, not for the words.
+  await page.getByLabel("Tone").selectOption("brief"); for (let i = 0; i < 100 && (await W.state(firmId)).S.firm.hound.tone !== "brief"; i++) await new Promise((r) => setTimeout(r, 50)); assert.equal((await W.state(firmId)).S.firm.hound.tone, "brief");
   await page.getByRole("tab", { name: "Drafts to approve" }).click(); await page.getByText("No drafts waiting.").waitFor();
 });
 

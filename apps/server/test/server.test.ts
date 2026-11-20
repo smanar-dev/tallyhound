@@ -177,9 +177,31 @@ for (const kind of KINDS) {
     await H.close();
   });
 
+  test(name("staff get one morning note on working days and a note at once for anything urgent; the emails name nobody in full and carry no details"), async () => {
+    const H = await build(kind), { firmId } = await H.newFirm(), owner = await H.signInAs("pat1@firm1.test");   // the test clock starts on a Monday, 10:05 in the firm's time zone
+    const alex = (await owner.post("/api/users", { name: "Alex Staff", email: "alex@firm1.test", role: "staff" })).json.id; await owner.post("/api/users", { name: "Rae Reader", email: "rae@firm1.test", role: "read_only" });
+    await owner.post("/api/act", { calls: [{ fn: "addClient", args: [{ first: "Jo", last: "Daybreak", email: "jo@x.example" }] }, { fn: "addClient", args: [{ first: "Al", last: "Bosworth", email: "al@x.example" }] }] });
+    let alId = "";
+    await H.app.withFirm(firmId, (T: any) => {   // eslint-disable-line @typescript-eslint/no-explicit-any
+      const al = T.S.clients.find((c: { first: string }) => c.first === "Al"), e = T.S.engs.find((x: { clientId: string }) => x.clientId === al.id); al.preparer = alex; alId = al.id;
+      T.S.tasks.push({ id: "t_x", at: new Date(T.S.now), status: "open", kind: "question", engId: e.id, reason: "Question" });
+      T.S.alerts.unshift({ id: "a_x", at: new Date(T.S.now), engId: e.id, level: "high", kind: "frustrated", text: "Al Bosworth sounds upset about the W-2", key: null, read: false });
+    });
+    await H.worker.pass(); const to = (addr: string) => H.staffMails.filter((m) => m.to === addr);
+    assert.deepEqual(to("alex@firm1.test").map((m) => m.subject), ["Al B. needs you in Tallyhound", "1 client is waiting for you"]); assert.match(to("alex@firm1.test")[0]!.body, new RegExp("/clients/" + alId));
+    assert.deepEqual(to("pat1@firm1.test").map((m) => m.subject), ["1 client is waiting for you"], "the owner sees every client in the morning note; the urgent note went to the preparer");
+    assert.equal(to("rae@firm1.test").length, 0); for (const m of H.staffMails) { assert.doesNotMatch(m.subject + m.body, /Bosworth|Daybreak|W-2|upset|x\.example/); assert.match(m.body, /Al B\./); }
+    const n = H.staffMails.length; await H.worker.pass(); assert.equal(H.staffMails.length, n, "nothing is sent twice");
+    H.advance(86400); await H.worker.pass(); const day2 = H.staffMails.slice(n); assert.equal(day2.filter((m) => /waiting for you/.test(m.subject)).length, 2, "Tuesday: one note each");
+    H.advance(4 * 86400); const m = H.staffMails.length; await H.worker.pass(); assert.equal(H.staffMails.slice(m).filter((x) => /waiting for you/.test(x.subject)).length, 0, "Saturday: no morning note");
+    H.advance(2 * 86400 - 4 * 3600); const k = H.staffMails.length; await H.worker.pass(); assert.equal(H.staffMails.slice(k).filter((x) => /waiting for you/.test(x.subject)).length, 0, "Monday at 6: not yet");
+    H.advance(3600); await H.worker.pass(); assert.equal(H.staffMails.slice(k).filter((x) => /waiting for you/.test(x.subject)).length, 2, "Monday at 7");
+    await H.close();
+  });
+
   test(name("the timer visits every firm, and one firm failing does not stop the rest"), async () => {
-    const H = await build(kind); const a = await H.newFirm(1), b = await H.newFirm(2); const seen: string[] = [], real = H.app.tick;
-    H.app.tick = async (id: string) => { seen.push(id); if (id === a.firmId) throw new Error("boom"); return real(id); };
+    const H = await build(kind); const a = await H.newFirm(1), b = await H.newFirm(2); const seen: string[] = [], real = H.app.withFirm;
+    H.app.withFirm = async (id: string, fn: never) => { seen.push(id); if (id === a.firmId) throw new Error("boom"); return real(id, fn); };
     const s = await H.worker.pass(); assert.deepEqual(seen.sort(), [a.firmId, b.firmId].sort()); assert.equal(s.firms, 2); assert.equal(s.failed, 1); assert.ok(s.lastPass);
     assert.equal((await H.browser().get("/healthz")).json.ok, true);
     await H.close();
