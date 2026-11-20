@@ -5,9 +5,9 @@ import { createElement as h, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 export interface FirmView { name: string; phone: string; page: string }
-const frame = (title: string, firm: FirmView, body: ReactNode): string => "<!doctype html>" + renderToStaticMarkup(
+const frame = (title: string, firm: FirmView, body: ReactNode, script = false): string => "<!doctype html>" + renderToStaticMarkup(
   h("html", { lang: "en" },
-    h("head", null, h("meta", { charSet: "utf-8" }), h("meta", { name: "viewport", content: "width=device-width, initial-scale=1" }), h("meta", { name: "robots", content: "noindex, nofollow" }), h("title", null, title + " · " + firm.name), h("link", { rel: "stylesheet", href: "/client.css" })),
+    h("head", null, h("meta", { charSet: "utf-8" }), h("meta", { name: "viewport", content: "width=device-width, initial-scale=1" }), h("meta", { name: "robots", content: "noindex, nofollow" }), h("title", null, title + " · " + firm.name), h("link", { rel: "stylesheet", href: "/client.css" }), script ? h("script", { src: "/client.js", defer: true }) : null),
     h("body", null, h("main", null, h("p", { className: "firm" }, firm.name), body,
       h("footer", null, h("a", { href: firm.page + "#privacy" }, "Privacy"), " · ", h("a", { href: firm.page + "#terms" }, "Terms"), " · ", h("a", { href: firm.page + "#check" }, "Is this really from " + firm.name + "?"))))));
 const call = (firm: FirmView) => (firm.phone ? ", or call " + firm.phone : "");
@@ -40,12 +40,14 @@ export function uploadPage(firm: FirmView, o: { action: string; ask: string | nu
     : [o.sent ? h("p", { key: 0, className: "ok", role: "status" }, "Thanks. We'll check " + (o.sent === 1 ? "it" : "them") + " and get back to you if anything is missing.") : null,
       o.error ? h("p", { key: 1, className: "err", role: "alert" }, o.error) : null,
       h("div", { key: 2, className: "card" }, h("p", { className: "muted small" }, "We're waiting for"), h("p", { className: "ask" }, o.ask || "your documents"), o.others > 0 ? h("p", { className: "muted" }, "and " + o.others + " other document" + (o.others === 1 ? "" : "s") + ".") : null),
-      // capture asks a phone for its rear camera; a computer ignores it and shows the file picker.
-      h("form", { key: 3, method: "post", action: o.action, encType: "multipart/form-data" },
-        h("label", { htmlFor: "photo" }, o.sent ? "Send another" : "Take a photo or choose files"), h("input", { id: "photo", name: "file", type: "file", accept: "image/*,application/pdf", multiple: true, required: true }),
-        h("p", { className: "muted small" }, UPLOAD_TYPES), h("button", { className: "btn pri" }, "Send")),
+      // Two ways in. capture asks a phone for its rear camera; on a computer that one is hidden. With scripts each file goes as soon
+      // as it is chosen and gets its own line below; without them the form posts in the ordinary way.
+      h("form", { key: 3, id: "send", method: "post", action: o.action, encType: "multipart/form-data" },
+        h("div", { className: "pick cam" }, h("label", { htmlFor: "cam" }, "Take a photo"), h("input", { id: "cam", name: "file", type: "file", accept: "image/*", capture: "environment" })),
+        h("div", { className: "pick" }, h("label", { htmlFor: "photo" }, o.sent ? "Send another" : "Choose files"), h("input", { id: "photo", name: "file", type: "file", accept: "image/*,application/pdf", multiple: true })),
+        h("p", { className: "muted small" }, UPLOAD_TYPES), h("ul", { id: "rows", "aria-live": "polite" }), h("button", { className: "btn pri nojs" }, "Send")),
       h("p", { key: 4, className: "muted small" }, "We never show documents here. If one is missing or hard to read, " + firm.name + " will tell you.")];
-  return frame("Send your documents", firm, waiting);
+  return frame("Send your documents", firm, waiting, !o.done);
 }
 
 export function unsubscribePage(firm: FirmView, o: { action: string; keep: string; done?: boolean }) {

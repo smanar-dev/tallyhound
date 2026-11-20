@@ -13,8 +13,8 @@ import type { AuthStore } from "./authstore.ts";
 import type { Inbox } from "./queue.ts";
 import * as pages from "./clientpages.ts";
 
-const CSS = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../assets/client.css"));
-export const MAX_FILE = 25 * 1024 * 1024, MAX_FILES = 10, PER_LINK_A_MINUTE = 10, PER_ADDRESS_A_MINUTE = 60;
+const CSS = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../assets/client.css")), JS = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../assets/client.js"));
+export const MAX_FILE = 25 * 1024 * 1024, MAX_FILES = 10, PER_LINK_A_MINUTE = 30, PER_ADDRESS_A_MINUTE = 60;
 export interface PublicDeps { app: App; store: KitStore; auth: AuthStore; inbox: Inbox; clock: () => Date; log?: (event: string, ...ids: unknown[]) => void }
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Found = { firmId: string; firm: pages.FirmView; T: Engine; c: any | null; e: any | null };
@@ -46,6 +46,7 @@ export async function registerPublic(f: FastifyInstance, d: PublicDeps): Promise
   const params = (req: FastifyRequest) => req.params as { t: string };
   const fields = (req: FastifyRequest) => (req.body && typeof req.body === "object" ? req.body : {}) as Record<string, string>;
 
+  f.get("/client.js", async (_req, reply) => reply.header("cache-control", "public, max-age=3600").type("text/javascript; charset=utf-8").send(JS));
   f.get("/client.css", async (_req, reply) => reply.header("cache-control", "public, max-age=3600").type("text/css; charset=utf-8").send(CSS));
 
   // ---- /c: agree to texts ----
@@ -79,7 +80,9 @@ export async function registerPublic(f: FastifyInstance, d: PublicDeps): Promise
     const sent = Math.min(MAX_FILES, Math.max(0, +(req.query as { sent?: string }).sent! || 0)); return html(reply, uploadView(x, params(req).t, { sent: sent || undefined }));
   });
   f.post("/u/:t", { preHandler: brake }, async (req, reply) => {
-    const t = params(req).t, x = await find(t, "u"); if (!x || !x.c) return gone(reply, x);
+    // The page's own script sends one file at a time and wants a short answer, not a page.
+    const t = params(req).t, x = await find(t, "u"), script = req.headers["x-tallyhound-client"] === "1", no = (status: number, error: string) => reply.code(status).header("cache-control", "no-store").send({ error });
+    if (!x || !x.c) return script ? no(404, "This link has expired. Ask " + (x ? x.firm.name : "your accounting firm") + " for a new one.") : gone(reply, x);
     if (!req.isMultipart() && fields(req).form === "checkin") {
       if (!checkinOpen(x)) return reply.redirect("/u/" + t, 303);   // answered already, or never sent: nothing to take
       const b = fields(req), facts: Record<string, boolean> = {}; for (const q of x.T.CHECKQ as string[][]) facts[q[0]!] = b["f_" + q[0]] === "1";
@@ -87,16 +90,16 @@ export async function registerPublic(f: FastifyInstance, d: PublicDeps): Promise
       await d.app.checkinAnswers(x.firmId, x.c.id, b.same === "1" ? { same: true, facts: {}, counts: {} } : { facts, counts: { w2: Math.min(9, Math.max(1, Math.round(+b.w2!) || 1)) }, note: String(b.note || "").slice(0, 300) });
       return html(reply, pages.checkinDone(x.firm));
     }
-    if (!req.isMultipart()) return html(reply, uploadView(x, t, { error: "Choose a photo or a PDF first." }), 400);
+    if (!req.isMultipart()) return script ? no(400, "Choose a photo or a PDF first.") : html(reply, uploadView(x, t, { error: "Choose a photo or a PDF first." }), 400);
     const files: { name: string; type: string; b64: string }[] = []; let tooBig = false;
     try { for await (const part of req.files()) { const buf = await part.toBuffer(); if (buf.length) files.push({ name: String(part.filename || "").slice(0, 120), type: part.mimetype, b64: buf.toString("base64") }); } }
     catch (err) { if ((err as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE" || (err as { code?: string }).code === "FST_FILES_LIMIT") tooBig = true; else throw err; }
-    if (tooBig) return html(reply, uploadView(x, t, { error: "Too large. The limit is 25 MB a file, and " + MAX_FILES + " files at a time." }), 413);
-    if (!files.length) return html(reply, uploadView(x, t, { error: "Choose a photo or a PDF first." }), 400);
+    if (tooBig) return script ? no(413, "Too large. The limit is 25 MB.") : html(reply, uploadView(x, t, { error: "Too large. The limit is 25 MB a file, and " + MAX_FILES + " files at a time." }), 413);
+    if (!files.length) return script ? no(400, "Choose a photo or a PDF first.") : html(reply, uploadView(x, t, { error: "Choose a photo or a PDF first." }), 400);
     // Stored sealed and answered at once; the worker reads it. A failure here tells the client to try again, and nothing is half kept.
     const id = randomBytes(12).toString("hex");
     await d.inbox.accept("upload", id, x.firmId, "upload", Buffer.from(JSON.stringify({ id, clientId: x.c.id, files }))); void d.inbox.drain(); say("upload_received", x.firmId, files.length);
-    return reply.redirect("/u/" + t + "?sent=" + files.length, 303);
+    return script ? reply.header("cache-control", "no-store").send({ ok: true, sent: files.length }) : reply.redirect("/u/" + t + "?sent=" + files.length, 303);
   });
 
   // ---- /e: stop emails. A POST with no page is the one-click request mail programs send. ----
