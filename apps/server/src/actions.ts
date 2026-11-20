@@ -99,7 +99,9 @@ export const ACTIONS: Record<string, Rule> = {
     const y = +(x.taxYear as number); if ([2025, 2026, 2027].includes(y)) f.taxYear = y;
     T.audit("settings.firm", "Firm details changed"); return null; } },
   // owner only: how long data is kept, deleting copies, ending a pause
-  setRetain: owner(2), deleteDocsNow: owner(1), purge: owner(1), resumeNow: owner(0)
+  setRetain: owner(2), deleteDocsNow: owner(1), purge: owner(1), resumeNow: owner(0),
+  // A pause is the firm's own choice: data is kept, nothing runs, nothing is billed. The engine holds the 90-days-a-year limit.
+  pauseSeason: { role: "owner", n: 1, run: (T, [until]) => { const d = new Date(String(until || "") + (/^\d{4}-\d{2}-\d{2}$/.test(String(until)) ? "T09:00:00" : "")); return isNaN(+d) ? "Pick a date" : T.pauseSeason(d); } }
 };
 
 export function allowed(role: Role, name: string): "ok" | "unknown" | "forbidden" {

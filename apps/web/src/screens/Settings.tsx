@@ -108,6 +108,30 @@ function HoursTab() {
     <p className="small muted">Never on Sundays or federal holidays. At most one automated message a day, unless the client replied in the last {f.liveMin} minutes. After the final note Tallyhound asks you to call, if that is switched on under The Hound, Rules it follows.</p></div>;
 }
 
+// The firm's plan: what it is on, how much of it is used, and a pause for the quiet months. Card billing is not built, so a plan
+// is started or changed by Tallyhound and invoiced; nothing on this page takes money.
+function PlanTab() {
+  const { T, act, toast } = useFirm(), s = T.S, b = T.billing(), a = T.access(), u = T.usage(), plans: [string, number, number, number][] = T.PLANS, mine = plans.find((p) => p[0] === b.plan), n = s.clients.length, left = T.pauseLeft();
+  const [until, setUntil] = useState(""), [why, setWhy] = useState("");
+  const day = (d: Date) => new Date(d).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }), pct = (x: number) => Math.min(100, Math.round(x * 100));
+  const pause = async () => { setWhy(""); try { const r = await act("pauseSeason", until); if (r) return setWhy(String(r) + "."); toast("Paused. Your data is kept and nothing runs."); } catch { /* said */ } };
+  const meter = (label: string, used: number, allow: number, p: number) => <div className="col" style={{ gap: 4 }}><div className="row"><b className="grow">{label}</b><span className="small muted">{used.toLocaleString()} of {allow.toLocaleString()}</span></div><div className="bar"><i style={{ width: pct(p) + "%" }} className={p >= 1 ? "bad" : p >= 0.8 ? "warn" : ""} /></div></div>;
+  return <div className="col" style={{ gap: 16 }}>
+    <div className="card pad col"><h2>Your plan</h2>
+      {b.state === "trial" ? <p>You are on the free trial: <b>{a.daysLeft} {a.daysLeft === 1 ? "day" : "days"} left</b>, and room to start collecting from {a.clientsLeft} more {a.clientsLeft === 1 ? "client" : "clients"}.</p>
+        : b.state === "expired" ? <div className="note bad" role="alert">The free trial has ended. Nothing is sent or read until a plan starts. Your data is kept.</div>
+        : b.state === "paused" ? <div className="note"><Icon name="pause" small /><span>Paused{b.pausedUntil ? " until " + day(b.pausedUntil) : ""}. Your data is kept, nothing runs and nothing is billed. Documents are still deleted on schedule.</span></div>
+        : <p><b>{b.plan}</b>{mine ? <>: ${mine[1]} a month, for up to {mine[2].toLocaleString()} clients. You have {n.toLocaleString()}.</> : null}</p>}
+      {b.state === "paused" ? <div><button className="btn pri" onClick={() => void act("resumeNow").then(() => toast("Resumed. Collecting carries on."), () => {})}>Resume now</button></div> : null}
+      <p className="small muted">One flat price by number of clients. No charge per return, per document or per message. To start a plan or move to another, write to Tallyhound and it is changed the same day; you are invoiced monthly.</p></div>
+    <div className="card"><div className="hd"><h3>Plans</h3></div><div className="tbl"><table><thead><tr><th>Plan</th><th>A month</th><th>Clients</th><th>People who can sign in</th></tr></thead><tbody>{plans.map((p) => <tr key={p[0]} className={b.state === "active" && p[0] === b.plan ? "sel" : ""}><td><b>{p[0]}</b>{b.state === "active" && p[0] === b.plan ? <span className="chip plain info" style={{ marginLeft: 8 }}>Yours</span> : null}</td><td>${p[1]}</td><td>Up to {p[2].toLocaleString()}</td><td>{p[3] >= 99 ? "No limit" : "Up to " + p[3]}</td></tr>)}</tbody></table></div></div>
+    {b.state === "active" || b.state === "paused" ? <div className="card pad col"><h3>Included in your plan, over the last 12 months</h3>{meter("Text messages", u.used.segs, u.allow.segs, u.pct.segs)}{meter("Documents checked", u.used.docs, u.allow.docs, u.pct.docs)}<p className="small muted">Going over costs nothing extra. Past the text allowance, reminders go by email where a client has one; replies and required messages still go by text.</p></div> : null}
+    {b.state === "active" ? <div className="card pad col"><h3>Pause for the quiet months</h3><p className="small muted">Nothing is sent, read or billed while paused, and everything is here when you come back. Up to 3 months in any 12; you have {left} {left === 1 ? "day" : "days"} left.</p>
+      {why ? <div className="note bad" role="alert">{why}</div> : null}
+      <div className="row"><label className="f" style={{ margin: 0 }}>Pause until<input type="date" value={until} onChange={(ev) => setUntil(ev.target.value)} /></label><button className="btn" disabled={!until || left <= 0} onClick={pause}><Icon name="pause" small />Pause</button></div></div> : null}
+  </div>;
+}
+
 // What Tallyhound holds, for how long, and what it never keeps (docs/SECURITY.md). The numbers are the engine's.
 function SecurityTab() {
   const { T, act, toast, reload } = useFirm(), s = T.S, f = s.firm, M = T.dataMap(), L = T.RETAIN_LIMIT, [v, setV] = useState<Record<string, string>>({ afterDelivery: String(M.retain.afterDelivery), rejected: String(M.retain.rejected), unmatched: String(M.retain.unmatched), max: String(M.retain.max), close: String(f.retention) }), [stop, setStop] = useState(false), [copied, setCopied] = useState(false);
@@ -132,13 +156,13 @@ function SecurityTab() {
   </div>;
 }
 
-const TABS: [string, string][] = [["firm", "Your firm"], ["people", "People"], ["checklists", "Checklists"], ["wording", "Message wording"], ["hours", "Sending hours"], ["security", "Security and data"]];
+const TABS: [string, string][] = [["firm", "Your firm"], ["people", "People"], ["checklists", "Checklists"], ["wording", "Message wording"], ["hours", "Sending hours"], ["plan", "Your plan"], ["security", "Security and data"]];
 export function Settings() {
   const { can } = useFirm(), [params, setParams] = useSearchParams(), tab = TABS.some((t) => t[0] === params.get("tab")) ? params.get("tab")! : "firm";
   if (!can("owner")) return <Page title="Settings"><div className="card pad"><p>Settings are for owners. Ask an owner at your firm if something here needs changing.</p></div></Page>;
   return <Page title="Settings">
     <div className="tabs" role="tablist">{TABS.map((t) => <button key={t[0]} role="tab" aria-selected={tab === t[0]} className={tab === t[0] ? "on" : ""} onClick={() => setParams(t[0] === "firm" ? {} : { tab: t[0] })}>{t[1]}</button>)}</div>
-    {tab === "firm" ? <FirmTab /> : tab === "people" ? <PeopleTab /> : tab === "checklists" ? <ChecklistsTab /> : tab === "wording" ? <WordingTab /> : tab === "hours" ? <HoursTab /> : <SecurityTab />}
-    <p className="small muted">Still to come here: connecting your firm's storage, and your plan.</p>
+    {tab === "firm" ? <FirmTab /> : tab === "people" ? <PeopleTab /> : tab === "checklists" ? <ChecklistsTab /> : tab === "wording" ? <WordingTab /> : tab === "hours" ? <HoursTab /> : tab === "plan" ? <PlanTab /> : <SecurityTab />}
+    <p className="small muted">Still to come here: connecting your firm's own storage. Until then, hand off finished files from each client's page.</p>
   </Page>;
 }
