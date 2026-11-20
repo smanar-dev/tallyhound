@@ -94,7 +94,9 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
 
   // ---- the web app ----
   const me = (u: User) => ({ id: u.id, name: u.name, email: u.email, role: u.role, firmId: u.firmId });
-  f.get("/api/me", { preHandler: full }, async (req) => me(req.who!.user));
+  f.get("/api/me", { preHandler: full }, async (req) => { const u = req.who!.user; return { ...me(u), notes: { morning: !u.morningOff, urgent: !u.urgentOff } }; });
+  // Which emails Tallyhound sends this person. Their own choice, for themselves only.
+  f.post("/api/me/notes", { preHandler: full }, async (req) => { const u = req.who!.user, b = body(req), next = { morningOff: typeof b.morning === "boolean" ? !b.morning : u.morningOff, urgentOff: typeof b.urgent === "boolean" ? !b.urgent : u.urgentOff }; await d.auth.setNotes(u.id, next); await d.auth.audit(u.firmId, u.id, "me.notes", (next.morningOff ? "no" : "") + "morning " + (next.urgentOff ? "no" : "") + "urgent"); return { notes: { morning: !next.morningOff, urgent: !next.urgentOff } }; });
   // The firm's whole workspace, as the engine saves it. File bytes are never in it, only their keys.
   f.get("/api/state", { preHandler: full }, async (req, reply) => {
     const u = req.who!.user, json = await d.readState(u.firmId); if (!json) return reply.code(404).send({ error: "no_firm", message: "This firm's workspace could not be found." });

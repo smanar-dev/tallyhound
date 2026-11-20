@@ -65,3 +65,4 @@ table.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 
 .bar{height:8px;border-radius:99px;background:var(--line2);overflow:hidden}.bar i{display:block;height:100%;background:var(--ink)}.bar i.warn{background:#C98A00}.bar i.bad{background:#B3361B}
 tr.sel td{background:var(--tint)}
 .note.good{background:#E2F3EA;color:#0C5A39}
+.notesbtn{margin:0 14px 12px;align-self:flex-start;color:inherit;opacity:.8}

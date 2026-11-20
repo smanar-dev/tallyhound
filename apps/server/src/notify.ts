@@ -29,7 +29,7 @@ export function createNotifier({ appUrl }: { appUrl: string }) {
         const per = new Map<string, { u: User; names: string[]; cid: string | null }>();
         for (const a of fresh) {
           a.mailed = true; const e = a.engId ? T.eng(a.engId) : null, c = e ? T.client(e.clientId) : null;
-          const to = c && staff.some((u) => u.id === c.preparer) ? staff.filter((u) => u.id === c.preparer) : staff.filter((u) => u.role === "owner");
+          const to = (c && staff.some((u) => u.id === c.preparer) ? staff.filter((u) => u.id === c.preparer) : staff.filter((u) => u.role === "owner")).filter((u) => !u.urgentOff);   // each person's own choice (TH-NOT-4)
           for (const u of to) { const p = per.get(u.id) || { u, names: [], cid: null }; p.names.push(c ? short(c) : "Your firm's account"); p.cid = c ? c.id : p.cid; per.set(u.id, p); }
         }
         for (const p of per.values()) {
@@ -43,6 +43,7 @@ export function createNotifier({ appUrl }: { appUrl: string }) {
         const since = S.firm.digestAt ? +new Date(S.firm.digestAt) : +now - 86400000; S.firm.digestDay = today; S.firm.digestAt = new Date(now);
         const needs = needsYou(T), done = S.engs.filter((e: any) => e.status === "complete" && e.completedAt && +new Date(e.completedAt) > since).map((e: any) => T.client(e.clientId)).filter(Boolean);
         for (const u of staff) {
+          if (u.morningOff) continue;
           const wait = needs.filter((n) => mine(u, n.c)), quiet = wait.filter((n) => n.stuck && n.stuck !== "opted_out"), rest = wait.filter((n) => !quiet.includes(n)), fin = done.filter((c: any) => mine(u, c)); if (!wait.length && !fin.length) continue;
           const parts = ["Good morning, " + firstName(u) + "."];
           if (rest.length) parts.push("Waiting for you (" + new Set(rest.map((n) => n.c.id)).size + ")\n" + list(rest.map((n) => short(n.c))));

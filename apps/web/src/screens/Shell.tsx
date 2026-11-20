@@ -6,9 +6,21 @@ import { api } from "../lib/api";
 import { draftsToApprove, needsYou, type Row } from "../lib/select";
 import { cname, STAT, when } from "../lib/fmt";
 import { Avatar, Chip, Icon, UserAvatar } from "../components/ui";
+import { Modal } from "../components/Modal";
 import type { IconName } from "../lib/icons";
 
 const ROLE = { owner: "Owner", staff: "Staff", read_only: "Read-only" } as const;
+
+// Which emails Tallyhound sends you. Each person chooses for themselves.
+function EmailNotes() {
+  const { me, toast } = useFirm(), [open, setOpen] = useState(false), [n, setN] = useState(me.notes || { morning: true, urgent: true });
+  const set = async (k: "morning" | "urgent", on: boolean) => { const was = n; setN({ ...n, [k]: on }); try { const r = await api.post<{ notes: { morning: boolean; urgent: boolean } }>("/api/me/notes", { [k]: on }); setN(r.notes); me.notes = r.notes; toast("Saved."); } catch (e) { setN(was); toast((e as Error).message); } };
+  return <><button className="btn sm ghost notesbtn" onClick={() => setOpen(true)}>Emails to you</button>
+    {open ? <Modal title="Emails to you" onClose={() => setOpen(false)} footer={<button className="btn pri" onClick={() => setOpen(false)}>Done</button>}><div className="col" style={{ gap: 12 }}>
+      <label className="row"><span className="toggle"><input type="checkbox" checked={n.morning} onChange={(ev) => void set("morning", ev.target.checked)} /><span /></span>A note at 7 am on working days when something is waiting for you</label>
+      <label className="row"><span className="toggle"><input type="checkbox" checked={n.urgent} onChange={(ev) => void set("urgent", ev.target.checked)} /><span /></span>A note at once when something urgent comes up</label>
+      <p className="small muted">These go to {me.email}. They name clients by first name and last initial and never carry a document or its details.</p></div></Modal> : null}</>;
+}
 
 export function Side({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { T, me, can } = useFirm(), s = T.S, loc = useLocation();
@@ -28,6 +40,7 @@ export function Side({ open, onClose }: { open: boolean; onClose: () => void }) 
       </nav>
       <div className="grow" />
       <div className="who"><UserAvatar user={s.user} small /><span className="me trunc">{me.name}<small>{ROLE[me.role]}</small></span><button className="btn sm ghost" onClick={signOut}>Sign out</button></div>
+      {me.role !== "read_only" ? <EmailNotes /> : null}
     </aside>
     <div className={"scrim" + (open ? " on" : "")} onClick={onClose} />
   </>;

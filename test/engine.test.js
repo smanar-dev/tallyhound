@@ -308,3 +308,12 @@ test("T-120: with the closing question on, a finished client is asked once wheth
   // The wording passes the engine's own message check.
   assert.deepEqual(B.T.outputCheck(B.T.fill("M32", B.c, B.e, {}), "text", { year: B.e.year }).filter((x) => !x.startsWith("digit run")), []);
 });
+test("T-47: with no state or zone on file, the area code is the guess; a zone staff enter always wins; an unlisted code means the firm's time", () => {
+  const { T, c } = firm(); T.S.firm.tz = "CT"; const at = (h, mi) => new Date(2027, 0, 26, h, mi || 0);
+  assert.equal(T.areaZone("(415) 555-0100"), "PT"); assert.equal(T.areaZone("+1 212 555 0100"), "ET"); assert.equal(T.areaZone("6025550100"), "AZ"); assert.equal(T.areaZone("8085550100"), "HT"); assert.equal(T.areaZone("8005550100"), null, "toll free is nowhere"); assert.equal(T.areaZone("555"), null);
+  // Every code is listed once.
+  const seen = new Set(); for (const z of ["ET", "CT", "MT", "AZ", "PT", "AKT", "HT"]) for (let a = 200; a < 1000; a++) if (T.areaZone(a + "5550100") === z) { assert.ok(!seen.has(a)); seen.add(a); } assert.ok(seen.size > 300);
+  c.tz = null; c.mobile = "4155550100"; assert.equal(T.zoneFor(c), "PT"); assert.equal(T.allowedC(at(9, 30), c), false, "7:30 in San Francisco"); assert.equal(T.allowedC(at(10), c), true);
+  T.setZone(c.id, "ET"); assert.equal(T.zoneFor(c), "ET"); assert.equal(T.allowedC(at(7), c), true, "staff said Eastern, whatever the number says");
+  T.setZone(c.id, ""); c.mobile = "8005550100"; assert.equal(T.zoneFor(c), null); assert.equal(T.allowedC(at(8), c), true); assert.equal(T.allowedC(at(7, 30), c), false);
+});

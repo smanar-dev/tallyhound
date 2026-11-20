@@ -207,7 +207,9 @@ for (const kind of KINDS) {
     assert.deepEqual(to("pat1@firm1.test").map((m) => m.subject), ["1 client is waiting for you"], "the owner sees every client in the morning note; the urgent note went to the preparer");
     assert.equal(to("rae@firm1.test").length, 0); for (const m of H.staffMails) { assert.doesNotMatch(m.subject + m.body, /Bosworth|Daybreak|W-2|upset|x\.example/); assert.match(m.body, /Al B\./); }
     const n = H.staffMails.length; await H.worker.pass(); assert.equal(H.staffMails.length, n, "nothing is sent twice");
-    H.advance(86400); await H.worker.pass(); const day2 = H.staffMails.slice(n); assert.equal(day2.filter((m) => /waiting for you/.test(m.subject)).length, 2, "Tuesday: one note each");
+    // Each person chooses their own emails. Alex turns the morning note off; Pat's keeps coming.
+    const alexB = await H.signInAs("alex@firm1.test"); assert.deepEqual((await alexB.get("/api/me")).json.notes, { morning: true, urgent: true }); assert.deepEqual((await alexB.post("/api/me/notes", { morning: false })).json.notes, { morning: false, urgent: true });
+    H.advance(86400); await H.worker.pass(); const day2 = H.staffMails.slice(n); assert.deepEqual(day2.filter((m) => /waiting for you/.test(m.subject)).map((m) => m.to), ["pat1@firm1.test"], "Tuesday: the owner's note only, since Alex switched theirs off"); await H.auth.setNotes(alex, { morningOff: false, urgentOff: false });
     H.advance(4 * 86400); const m = H.staffMails.length; await H.worker.pass(); assert.equal(H.staffMails.slice(m).filter((x) => /waiting for you/.test(x.subject)).length, 0, "Saturday: no morning note");
     H.advance(2 * 86400 - 4 * 3600); const k = H.staffMails.length; await H.worker.pass(); assert.equal(H.staffMails.slice(k).filter((x) => /waiting for you/.test(x.subject)).length, 0, "Monday at 6: not yet");
     H.advance(3600); await H.worker.pass(); assert.equal(H.staffMails.slice(k).filter((x) => /waiting for you/.test(x.subject)).length, 2, "Monday at 7");

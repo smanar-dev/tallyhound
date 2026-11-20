@@ -1,6 +1,7 @@
 // One client's page: checklist, suggested, documents, conversation, details (T-16, T-18, T-90, docs/UX.md rule 9).
 import { after } from "node:test";
 import assert from "node:assert/strict";
+import { pdfPagesWith } from "../../server/test/harness.ts";
 import { busyFirm, closeBrowser, JPEG, scene } from "./world.ts";
 import type { Engine } from "../../server/src/kit.ts";
 
@@ -79,4 +80,14 @@ scene("See it as the client: the last message and the client's page as it reads 
   const last = T.S.msgs.filter((m: { engId: string; dir: string }) => m.engId === e.id && m.dir === "out").at(-1); assert.ok(text(await box.textContent()).includes(text(last.body).slice(0, 40)));
   const open = T.openItems(e.id); if (open.length) { assert.match(text(await box.locator(".phone").textContent()), /We're waiting for ?your /); assert.match(text(await box.locator(".phone").textContent()), /We never show documents here\./); }
   assert.ok(!(await box.innerHTML()).includes(c.key), "the private link is not on the page"); await box.getByRole("button", { name: "Done" }).click(); assert.equal(await page.getByRole("dialog").count(), 0);
+});
+
+scene("a PDF opens inside the app as pictures of its pages, drawn by the server", async (W) => {
+  const { firmId } = await busyFirm(W), pdf = pdfPagesWith([["Form 1098 Mortgage Interest Statement 2026"], ["Instructions for Payer"]]);
+  W.reading.doc = { ...W.CLEAN_W2, form: "1098", payer: "First Farmers Bank" }; await W.app.inboundEmail({ to: "test1@docs.tallyhound.test", from: "jo@x.example", body: "My mortgage statement.", attachments: [{ bytes: pdf, contentType: "application/pdf" }], providerId: "pdf1" }); W.reading.doc = W.CLEAN_W2;
+  const T: Engine = await W.state(firmId), jo = T.S.engs.find((e: { clientId: string }) => T.client(e.clientId).first === "Jo"), d = T.S.docs.find((x: { engId: string; form: string }) => x.engId === jo.id && x.form === "1098"); assert.ok(d, "the PDF became a document in Jo's file");
+  const page = await W.signIn("pat1@firm1.test"); await page.goto(W.url + "/clients/" + jo.id + "?tab=documents"); await page.locator(".dcard", { hasText: "First Farmers Bank" }).click();
+  const pages = page.locator(".pdfpages img.docimg"); await pages.nth(1).waitFor(); assert.equal(await pages.count(), 2);
+  for (let i = 0; i < 2; i++) { await pages.nth(i).scrollIntoViewIfNeeded(); await page.waitForFunction((n) => { const im = document.querySelectorAll(".pdfpages img.docimg")[n] as HTMLImageElement; return im && im.complete && im.naturalWidth === 1500; }, i); }
+  assert.equal(await pages.first().getAttribute("alt"), "Page 1 as it arrived"); assert.equal(await page.locator("iframe, embed, object").count(), 0, "the file itself is never put in the page");
 });
