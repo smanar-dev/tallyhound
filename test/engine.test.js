@@ -270,3 +270,12 @@ test("T-119: a number known to be a landline can never be given consent for text
   T.setLine(c.id, "landline"); assert.equal(c.textConsent, "none"); assert.match(c.consentLog.at(-1).what, /this number is a landline/); assert.notEqual(T.channelFor(c, e), "text");
   T.setLine(c.id, "mobile"); assert.equal(T.isLandline(c), false);
 });
+test("T-81: a plan that ends locks the firm like an ended trial, says why, and choosing a plan again lifts it", () => {
+  const { T, e } = firm(); T.choosePlan("Practice"); e.confirmed = true; T.start(e.id); assert.equal(T.access().ok, true);
+  assert.equal(T.planEnded("The card was declined for 7 days"), true); const a = T.access(); assert.equal(a.ok, false); assert.equal(a.state, "expired"); assert.match(a.reason, /Your plan has ended/);
+  assert.ok(T.S.audit.some((x) => x.action === "billing.plan_ended" && /declined/.test(x.detail))); assert.equal(T.planEnded("again"), false, "already ended");
+  const n = T.S.msgs.length; T.setNow(new Date(T.S.now.getTime() + 5 * T.DAY)); T.tick(); assert.equal(T.S.msgs.length, n, "nothing is sent while the plan is ended");
+  assert.equal(T.choosePlan("Practice"), null); assert.equal(T.access().ok, true); assert.equal(T.billing().lapsed, false);
+  // A trial that simply runs out still says so in its own words.
+  const B = firm(); B.T.S.firm.billing = { state: "trial", plan: null, trialEnds: new Date(B.T.S.now.getTime() - 1000) }; assert.match(B.T.access().reason, /free trial has ended/);
+});

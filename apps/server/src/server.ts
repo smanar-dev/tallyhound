@@ -1,5 +1,6 @@
 // The web service. Sign-in, the firm's state for the web app, and one endpoint per kind of staff action.
 // It holds no product rules: every action runs the engine through the pipeline (app.staff), which loads, decides, saves and sends.
+import { BillingError, type Billing } from "./billing.ts";
 import { GOOGLE, StorageError, type Storage } from "./storage.ts";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import cookie from "@fastify/cookie";
@@ -24,6 +25,8 @@ export interface ServerDeps {
   appUrl: string; secureCookies: boolean; webDir: string; prepare?: PrepareOpts;
   /** The client's own pages. Present whenever there is a queue to put uploads on. */
   clientPages?: Omit<PublicDeps, "app" | "auth" | "log">;
+  /** Card billing. Absent until Stripe is set up: plans are then started with the admin command and invoiced by hand. */
+  billing?: Billing;
   /** A firm's own storage. Absent when no Google sign-in has been set up for this service. */
   storage?: Storage;
   /** Ask the Hound. Absent when no model is connected. */
@@ -178,6 +181,14 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
     const zip = Buffer.from(zipSync(entries, { level: 0 })), safe = r.folder.split("/").slice(-2).reverse().join(" ").replace(/[^A-Za-z0-9 ,._-]/g, "").trim() || "files";
     return reply.header("content-disposition", 'attachment; filename="' + safe + '.zip"').header("x-tallyhound-files", String(lines.length)).header("x-tallyhound-missing", String(r.missing.length)).type("application/zip").send(zip);
   });
+
+  // ---- card billing (owner only). Paying and managing cards happen on Stripe's own pages; these hand the browser their address. ----
+  f.get("/api/billing", { preHandler: full }, async (req) => (d.billing ? d.billing.status(req.who!.user.firmId) : { available: false, plans: [], paying: false, pastDue: false, graceEnds: null }));
+  const billed = async (reply: FastifyReply, firmId: string, go: () => Promise<string>) => { try { return { url: await go() }; } catch (err) { if (err instanceof BillingError) return reply.code(err.status).send({ error: "billing", message: err.message }); say("billing_failed", firmId, (err as Error).message); return reply.code(502).send({ error: "billing", message: "The payment service could not be reached. Try again in a moment." }); } };
+  f.post("/api/billing/checkout", { preHandler: full }, async (req, reply) => { const u = req.who!.user; if (u.role !== "owner") return reply.code(403).send({ error: "role", message: NO.other }); if (!d.billing) return reply.code(503).send({ error: "not_connected", message: "Paying by card is not switched on yet. Write to Tallyhound to start a plan." }); return billed(reply, u.firmId, () => d.billing!.checkout(u.firmId, { id: u.id, email: u.email }, str(body(req).plan))); });
+  f.post("/api/billing/portal", { preHandler: full }, async (req, reply) => { const u = req.who!.user; if (u.role !== "owner") return reply.code(403).send({ error: "role", message: NO.other }); if (!d.billing) return reply.code(503).send({ error: "not_connected", message: "Paying by card is not switched on yet." }); return billed(reply, u.firmId, () => d.billing!.portal(u.firmId)); });
+  // Stripe's webhook. Its own small scope, because the signature is over the exact bytes sent and so the body must not be parsed first.
+  if (d.billing) void f.register(async (s) => { s.addContentTypeParser("application/json", { parseAs: "buffer", bodyLimit: 1024 * 1024 }, (_req, b, done) => done(null, b)); s.post("/hooks/stripe", async (req, reply) => { const r = await d.billing!.webhook(Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0), String(req.headers["stripe-signature"] || "")); return reply.code(r.status).send({ received: r.ok }); }); });
 
   // ---- the firm's own storage (owner only). Connecting is a visit to Google and back; nothing else can mark a drive as connected. ----
   const ownerOnly = (req: FastifyRequest, reply: FastifyReply) => (req.who!.user.role === "owner" ? null : reply.code(403).send({ error: "role", message: NO.other }));

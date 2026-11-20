@@ -19,6 +19,7 @@ import { kmsKeyring } from "./keys.ts";
 import { createClosure } from "./closure.ts";
 import { twilioLookup } from "./lookup.ts";
 import { createAsk } from "./ask.ts";
+import { createBilling, postgresBillingStore } from "./billing.ts";
 import { createStorage, postgresStorageStore } from "./storage.ts";
 import { createEngine, wallTime } from "./kit.ts";
 
@@ -69,9 +70,13 @@ export function runtime() {
   const firms = createFirms({ app, auth, linkHost: env("LINK_HOST") || new URL(appUrl).host });
   const prepare = prepareOpts({ clamav: env("CLAMAV_HOST") ? { host: env("CLAMAV_HOST"), port: +(env("CLAMAV_PORT") || 3310) } : undefined });
   if (production && !env("CLAMAV_HOST")) log("warning_no_virus_scanner");
+  // Card billing (T-81). On once STRIPE_SECRET_KEY is set, with the webhook secret and one price id per plan on offer.
+  const prices: Record<string, string> = {}; for (const p of ["Solo", "Practice", "Firm", "Large"]) { const id = env("STRIPE_PRICE_" + p.toUpperCase()); if (id) prices[p] = id; }
+  const billing = env("STRIPE_SECRET_KEY") ? createBilling({ store: postgresBillingStore(pool), app, secretKey: env("STRIPE_SECRET_KEY")!, webhookSecret: need("STRIPE_WEBHOOK_SECRET"), prices, appUrl, clock, log }) : undefined;
+  if (billing && !Object.keys(prices).length) throw new Error("Set STRIPE_PRICE_SOLO, STRIPE_PRICE_PRACTICE, STRIPE_PRICE_FIRM or STRIPE_PRICE_LARGE: card billing has no plan to sell");
   const inbox = createInbox({ queue: postgresQueue(pool), store, app, handlers: handlers({ app, twilio, prepare }), clock, log });
   const hooks = { store, inbox, twilioAuthToken: env("TWILIO_AUTH_TOKEN") || undefined, postmarkHook: env("POSTMARK_HOOK_PASSWORD") ? { user: env("POSTMARK_HOOK_USER") || "postmark", pass: env("POSTMARK_HOOK_PASSWORD") } : undefined };
-  return { production, appUrl, pool, store, auth, app, signIn, firms, inbox, hooks, prepare, clock, log, root: ROOT, mailer, notify: createNotifier({ appUrl }), ops, lookup, storage,
+  return { production, appUrl, pool, store, auth, app, signIn, firms, inbox, hooks, prepare, clock, log, root: ROOT, mailer, notify: createNotifier({ appUrl }), ops, lookup, storage, billing,
     ask: ai ? createAsk({ model: ai, readState: (id) => store.readState(id), createEngine, wallNow: (T) => (T.S.firm.iana ? wallTime(clock(), T.S.firm.iana) : clock()) }) : undefined, closure: createClosure({ store, auth, markers: bucket, clock, log }),
     // TH_ALERT_EMAIL: where the developer is told that sends are failing, a firm's turn failed, or an arriving message was lost.
     watch: env("TH_ALERT_EMAIL") ? createWatch({ to: env("TH_ALERT_EMAIL")!, send: (to, subject, body) => mailer.staff(to, subject, body), clock, log }) : undefined };

@@ -7,7 +7,7 @@ import type { Notifier, StaffMail, StaffMailer } from "./notify.ts";
 import { snapshot, type FirmSnapshot, type OpsStore, type Watch } from "./ops.ts";
 
 export interface WorkerStatus { lastPass: Date | null; firms: number; failed: number; lastError: string | null }
-export function createWorker({ app, auth, clock, log, inbox, notify, mailer, ops, watch, lines }: { notify?: Notifier; mailer?: StaffMailer; ops?: OpsStore; watch?: Watch; lines?: (firmId: string) => Promise<number>; app: App; auth: AuthStore; clock: () => Date; log?: (event: string, ...ids: unknown[]) => void; inbox?: { drain(): Promise<number>; sweep(): Promise<number>; counts(): Promise<{ waiting: number; dead: number }> } }) {
+export function createWorker({ app, auth, clock, log, inbox, notify, mailer, ops, watch, lines, billing }: { notify?: Notifier; mailer?: StaffMailer; ops?: OpsStore; watch?: Watch; lines?: (firmId: string) => Promise<number>; billing?: { check(firmId: string, b: { state: string; pausedUntil: Date | null }): Promise<void> }; app: App; auth: AuthStore; clock: () => Date; log?: (event: string, ...ids: unknown[]) => void; inbox?: { drain(): Promise<number>; sweep(): Promise<number>; counts(): Promise<{ waiting: number; dead: number }> } }) {
   const status: WorkerStatus = { lastPass: null, firms: 0, failed: 0, lastError: null }; const failedBefore = new Map<string, number>(); let deadBefore = 0, running = false, timer: NodeJS.Timeout | null = null, quick: NodeJS.Timeout | null = null;
   async function pass(): Promise<WorkerStatus> {
     if (running) return status; running = true;
@@ -17,8 +17,9 @@ export function createWorker({ app, auth, clock, log, inbox, notify, mailer, ops
       for (const id of ids) { try {
         // The same load and save as the tick: what to email staff is decided and marked with the firm locked, and sent after the save.
         if (lines) { try { await lines(id); } catch (err) { if (log) log("lookup_failed", id, (err as Error).message); } }   // before the tick, so a landline is known before the first send
-        const people = notify && mailer ? await auth.usersOfFirm(id) : []; let mails: StaffMail[] = [], snap: FirmSnapshot | null = null;
-        await app.withFirm(id, (T: Engine) => { T.tick(); mails = notify && mailer ? notify.collect(T, people) : []; snap = ops ? snapshot(T) : null; return true; });
+        const people = notify && mailer ? await auth.usersOfFirm(id) : []; let mails: StaffMail[] = [], snap: FirmSnapshot | null = null, bill: { state: string; pausedUntil: Date | null } | null = null;
+        await app.withFirm(id, (T: Engine) => { T.tick(); mails = notify && mailer ? notify.collect(T, people) : []; snap = ops ? snapshot(T) : null; const b = T.billing(); bill = { state: b.state, pausedUntil: b.pausedUntil ? new Date(b.pausedUntil) : null }; return true; });
+        if (billing && bill) { try { await billing.check(id, bill); } catch (err) { if (log) log("billing_check_failed", id, (err as Error).message); } }
         for (const m of mails) { try { await mailer!.staff(m.to, m.subject, m.body); if (log) log("staff_mail", id, m.kind); } catch (err) { if (log) log("staff_mail_failed", id, m.kind, (err as Error).message); } }
         if (ops) { await ops.noteTick(id, clock(), null, snap); const f = (snap as FirmSnapshot | null)?.failed || 0; if (watch && f > (failedBefore.get(id) || 0)) await watch.tell("sends", id, f + (f === 1 ? " message" : " messages") + " failed to send for a firm today"); failedBefore.set(id, f); }
       } catch (err) {

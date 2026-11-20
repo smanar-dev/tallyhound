@@ -126,3 +126,13 @@ scene("Finished files: an owner connects Google Drive by a visit to Google and b
   await page.getByRole("button", { name: "Disconnect" }).click(); await page.getByRole("dialog").getByRole("button", { name: "Disconnect" }).click(); await page.getByText("Disconnected. Finished files are handed off as a zip.").waitFor();
   assert.equal((await W.state(firmId)).S.firm.delivery.provider, "Download"); await page.getByRole("link", { name: "Connect Google Drive" }).waitFor();
 });
+
+scene("Your plan with card billing: a trial firm chooses a plan and is sent to the payment page; nothing starts until the payment is confirmed", async (W) => {
+  const { firmId } = await W.firms.create({ name: "Trial CPAs", inbox: "trial@docs.tallyhound.test", iana: "America/Chicago", ownerName: "Pat Owner", ownerEmail: "pat@trial.test", verified: true }), page = await W.signIn("pat@trial.test"), left: string[] = [];
+  // The payment page belongs to the payment service and is never visited here: the address the browser is sent to is noted, and the visit is cut short.
+  await page.route(/https:\/\/(checkout|billing)\.stripe\.com\//, (route) => { left.push(route.request().url()); return route.fulfill({ status: 200, contentType: "text/html", body: "<title>payment page</title>" }); });
+  await page.goto(W.url + "/settings?tab=plan"); await page.getByText(/You are on the free trial/).waitFor(); await page.getByText(/Tallyhound never sees or stores your card/).waitFor();
+  assert.equal(await page.getByRole("button", { name: /^Choose / }).count(), 2, "the two plans on sale"); await page.getByRole("button", { name: "Choose Practice" }).click(); await page.waitForURL(/checkout\.stripe\.com/);
+  assert.deepEqual(left, ["https://checkout.stripe.com/c/pay/x_1"]); assert.equal((await W.state(firmId)).billing().state, "trial", "nothing started yet");
+  await page.goto(W.url + "/settings?tab=plan&paid=1"); await page.getByRole("status").getByText(/starts as soon as the payment is confirmed/).waitFor();
+});
