@@ -17,6 +17,7 @@ async function once<T>(body: unknown): Promise<T> {
   try { return await call<T>("POST", "/api/act", body, key); }
   catch (err) { if (!(err instanceof ApiError) || err.status !== 0) throw err; await new Promise((r) => setTimeout(r, 1200)); return call<T>("POST", "/api/act", body, key); }
 }
+export interface Features { ask: boolean; billing: boolean; domain: boolean; voice: boolean; storage: string[] }
 export interface Me { id: string; name: string; email: string; role: "owner" | "staff" | "read_only"; firmId: string; notes?: { morning: boolean; urgent: boolean } }
 export const api = {
   me: () => call<Me>("GET", "/api/me"),
@@ -40,6 +41,8 @@ export const api = {
     if (!res.ok) throw new ApiError(res.status, j.error || "error", j.message || "That file could not be added.");
     return { ok: true, docs: j.docs || [] };
   },
+  /** What this installation has connected. Asked once and remembered for the visit. */
+  features: (() => { let p: Promise<Features> | null = null; return () => (p ||= call<Features>("GET", "/api/features").catch((e) => { p = null; throw e; })); })(),
   /** A question for the Hound, with the conversation so far. It only reads. */
   ask: (messages: { role: "user" | "assistant"; text: string }[]) => call<{ text: string }>("POST", "/api/hound/ask", { messages }),
   /** An owner takes a copy of the firm's consent records or its audit trail, as a spreadsheet. */

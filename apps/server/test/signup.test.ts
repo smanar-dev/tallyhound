@@ -46,3 +46,9 @@ test("signup: the price page answers for any size of firm by the engine's rule a
   const asked = await post("/quote", { clients: "6200", ask: "1", firm: "Big <b>LLP</b>", name: "Dana Okafor", email: "dana@big.example" }); assert.match(words(asked.body), /Someone from Tallyhound will write to you/); assert.equal(H.told.length, 1); assert.match(H.told[0]!.body, /Big bLLP\/b\nDana Okafor, dana@big\.example\n6200 clients: \$2,399 a month/);
   await H.close();
 });
+
+test("features: the screens are told what this installation has connected, and nothing more", async () => {
+  const bare = await build("memory"); await bare.newFirm(); const a = await bare.signInAs("pat1@firm1.test"); assert.deepEqual((await a.get("/api/features")).json, { ask: false, billing: false, domain: false, voice: false, storage: [] }); assert.equal((await bare.browser().get("/api/features")).status, 401); await bare.close();
+  const noop = (async () => new Response("{}", { status: 200, headers: { "content-type": "application/json" } })) as unknown as typeof fetch, full = await build("memory", { stripe: noop, google: noop, postmarkAccount: noop, voice: true, converse: { async converse() { return "ok"; } } }); await full.newFirm(); const b = await full.signInAs("pat1@firm1.test");
+  assert.deepEqual((await b.get("/api/features")).json, { ask: true, billing: true, domain: true, voice: true, storage: ["Google Drive", "Microsoft OneDrive", "SharePoint", "Dropbox"] }); await full.close();
+});

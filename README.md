@@ -19,13 +19,16 @@ Updated November 20, 2026. "Tested" means against stand-ins for the outside serv
 | Claude (document reading, message writing, Ask the Hound) | Built on the official SDK with a daily cap per firm and a record per call. Tested. Never run live |
 | Twilio (texts, pictures, landline lookup) | Built. Tested. Never run live. Text number registration is filed by hand from `npm run admin -- registration` |
 | Postmark (email out and in) | Built. Tested. Never run live |
-| Google Drive (a firm's own storage) | Built. Tested. Never run live. Needs a Google OAuth client, and Google's review before firms outside a test list can connect |
-| Stripe (card billing) | Built. Tested. Never run live |
+| A firm's own storage: Google Drive, OneDrive, SharePoint, Dropbox | Built. Tested. Never run live. Each needs its own app registration, and Google and Microsoft review an app before firms outside a test list can connect |
+| Stripe (card billing, two price lists) | Built. Tested. Never run live |
+| Self-serve sign-up and the price page (`/signup`, `/quote`) | Built. Tested. Sign-up is closed until `TH_SIGNUP=on` |
+| Email from a firm's own domain | Built. Tested. Never run live |
+| Recorded reminder calls | Built. Tested. Never run live. Off until `TH_VOICE=on`, and waits for counsel |
 | AWS KMS (master key), S3-compatible bucket (files) | Built. Tested. Never run live |
 | Hosting | `Dockerfile` and `docs/DEPLOY.md`. Not deployed anywhere |
 | Accuracy of document reading | Not measured. `tools/eval-docs.js` exists; the test set of about 300 documents does not (T-22, T-130, T-138) |
 
-Not built, on purpose: the tickets marked AFTER LAUNCH (self-serve sign-up, sending from a firm's own domain, voicemail, the price test, the quote form), OneDrive, Dropbox and SharePoint, and reading last year's return (waits for counsel, T-46). Spanish is written but switched off until a native review (T-31).
+Not built, on purpose: reading last year's return (waits for counsel, T-46). Spanish is written but switched off until a native review (T-31). Staff-recorded consent to texts has its gate built and no screen, until counsel approves it (T-145).
 
 Run the tests: `npm install`, then `npm test`. Node 22.18 or later. `npm run check` adds the type check, lint, the web build and the browser tests; set `DATABASE_URL` to a throwaway Postgres to include the tests that need a real one. `docs/TICKETS.md` has the state of every ticket, step by step.
 

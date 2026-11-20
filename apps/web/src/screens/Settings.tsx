@@ -2,7 +2,7 @@
 // steps in docs/SCOPE.md (ticket T-45); the others are added as they are built and are not shown before then.
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useFirm } from "../lib/firm";
+import { useFeatures, useFirm } from "../lib/firm";
 import { api } from "../lib/api";
 import { Page } from "./Shell";
 import { Modal } from "../components/Modal";
@@ -190,7 +190,7 @@ function FilesTab() {
     <div className="card pad col"><h2>Where finished files go</h2><p className="small muted">Accepted documents are filed into your own storage with consistent names. Your storage holds the permanent copy. Tallyhound deletes its own copy {keep ? keep + " days after that" : "right after that"} (change this under Security and data). One storage at a time: connecting another replaces the one before.</p>
       {problem ? <div className="note bad" role="alert">{PROBLEM[problem] || PROBLEM.error}</div> : null}
       {justNow && connected ? <div className="note good" role="status"><Icon name="check" small /><span>{st!.provider} is connected. New documents are filed there from now on.</span></div> : null}
-      {st === null ? <p className="small muted" role="status">Checking…</p> : SERVICES.map(([name, slug, what]) => { const mine = connected && st.provider === name, can = st.offered.includes(name);
+      {st === null ? <p className="small muted" role="status">Checking…</p> : SERVICES.filter(([name]) => st.offered.includes(name) || (connected && st.provider === name)).map(([name, slug, what]) => { const mine = connected && st.provider === name, can = st.offered.includes(name);
         return <div className="card pad row" style={{ boxShadow: "none", alignItems: "flex-start" }} key={name}><div className="grow"><b>{name}</b><div className="small muted">{mine ? "Connected" + since + (st.site ? ", " + st.site : "") + ". " : ""}{what}</div>
           {name === "SharePoint" && !mine && can ? <label className="f" style={{ marginTop: 8 }}>Your SharePoint site's address<input type="url" placeholder="https://yourfirm.sharepoint.com/sites/Tax" value={site} maxLength={300} onChange={(ev) => setSite(ev.target.value)} /></label> : null}</div>
           {mine ? <><Chip tone="good">Connected</Chip><button className="btn sm" onClick={() => setOff(true)}>Disconnect</button></> : !can ? <Chip>Not available yet</Chip>
@@ -230,7 +230,7 @@ function PlanTab() {
       {bill?.pastDue ? <div className="note bad" role="alert">The last payment did not go through. Collecting carries on{bill.graceEnds ? " until " + day(new Date(bill.graceEnds)) : " for a few days"}. Update the card under Manage billing and nothing stops.</div> : null}
       {bill?.paying ? <div><button className="btn" disabled={going} onClick={() => void leave("/api/billing/portal", {})}>Manage billing, cards and invoices</button></div> : null}
       <p className="small muted">One flat price by number of clients. No charge per return, per document or per message. {bill?.available ? "You pay by card, monthly, on our payment provider's page. Tallyhound never sees or stores your card." : "To start a plan or move to another, write to Tallyhound and it is changed the same day; you are invoiced monthly."}</p></div>
-    <div className="card"><div className="hd"><h3>Plans</h3></div><div className="tbl"><table><thead><tr><th>Plan</th><th>A month</th><th>Clients</th><th>People who can sign in</th><th></th></tr></thead><tbody>{plans.map((p) => <tr key={p[0]} className={b.state === "active" && p[0] === b.plan ? "sel" : ""}><td><b>{p[0]}</b>{b.state === "active" && p[0] === b.plan ? <span className="chip plain info" style={{ marginLeft: 8 }}>Yours</span> : null}</td><td>${p[1]}</td><td>Up to {p[2].toLocaleString()}</td><td>{p[3] >= 99 ? "No limit" : "Up to " + p[3]}</td><td>{canPay && bill!.plans.includes(p[0]) ? (n > p[2] ? <span className="small muted">Too small for {n} clients</span> : <button className="btn sm pri" disabled={going} aria-label={"Choose " + p[0]} onClick={() => void leave("/api/billing/checkout", { plan: p[0] })}>Choose</button>) : null}</td></tr>)}</tbody></table></div></div>
+    <div className="card"><div className="hd"><h3>Plans</h3></div><div className="tbl"><table><thead><tr><th>Plan</th><th>A month</th><th>Clients</th><th>People who can sign in</th><th></th></tr></thead><tbody>{plans.filter((p) => !bill?.available || bill.plans.includes(p[0]) || p[0] === b.plan).map((p) => <tr key={p[0]} className={b.state === "active" && p[0] === b.plan ? "sel" : ""}><td><b>{p[0]}</b>{b.state === "active" && p[0] === b.plan ? <span className="chip plain info" style={{ marginLeft: 8 }}>Yours</span> : null}</td><td>${p[1]}</td><td>Up to {p[2].toLocaleString()}</td><td>{p[3] >= 99 ? "No limit" : "Up to " + p[3]}</td><td>{canPay && bill!.plans.includes(p[0]) ? (n > p[2] ? <span className="small muted">Too small for {n} clients</span> : <button className="btn sm pri" disabled={going} aria-label={"Choose " + p[0]} onClick={() => void leave("/api/billing/checkout", { plan: p[0] })}>Choose</button>) : null}</td></tr>)}</tbody></table></div></div>
     {b.state === "active" || b.state === "paused" ? <div className="card pad col"><h3>Included in your plan, over the last 12 months</h3>{meter("Text messages", u.used.segs, u.allow.segs, u.pct.segs)}{meter("Documents checked", u.used.docs, u.allow.docs, u.pct.docs)}<p className="small muted">Going over costs nothing extra. Past the text allowance, reminders go by email where a client has one; replies and required messages still go by text.</p></div> : null}
     {b.state === "active" ? <div className="card pad col"><h3>Pause for the quiet months</h3><p className="small muted">Nothing is sent, read or billed while paused, and everything is here when you come back. Up to 3 months in any 12; you have {left} {left === 1 ? "day" : "days"} left.</p>
       {why ? <div className="note bad" role="alert">{why}</div> : null}
@@ -262,9 +262,9 @@ function SecurityTab() {
   </div>;
 }
 
-const TABS: [string, string][] = [["firm", "Your firm"], ["people", "People"], ["checklists", "Checklists"], ["wording", "Message wording"], ["hours", "Sending hours"], ["texting", "Text number"], ["domain", "Email address"], ["files", "Finished files"], ["plan", "Your plan"], ["security", "Security and data"]];
+const ALL_TABS: [string, string][] = [["firm", "Your firm"], ["people", "People"], ["checklists", "Checklists"], ["wording", "Message wording"], ["hours", "Sending hours"], ["texting", "Text number"], ["domain", "Email address"], ["files", "Finished files"], ["plan", "Your plan"], ["security", "Security and data"]];
 export function Settings() {
-  const { can } = useFirm(), [params, setParams] = useSearchParams(), tab = TABS.some((t) => t[0] === params.get("tab")) ? params.get("tab")! : "firm";
+  const { can } = useFirm(), feat = useFeatures(), [params, setParams] = useSearchParams(), TABS = ALL_TABS.filter((t) => t[0] !== "domain" || feat.domain || params.get("tab") === "domain"), tab = TABS.some((t) => t[0] === params.get("tab")) ? params.get("tab")! : "firm";
   if (!can("owner")) return <Page title="Settings"><div className="card pad"><p>Settings are for owners. Ask an owner at your firm if something here needs changing.</p></div></Page>;
   return <Page title="Settings">
     <div className="tabs" role="tablist">{TABS.map((t) => <button key={t[0]} role="tab" aria-selected={tab === t[0]} className={tab === t[0] ? "on" : ""} onClick={() => setParams(t[0] === "firm" ? {} : { tab: t[0] })}>{t[1]}</button>)}</div>

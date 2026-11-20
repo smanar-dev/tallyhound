@@ -28,6 +28,8 @@ export interface ServerDeps {
   appUrl: string; secureCookies: boolean; webDir: string; prepare?: PrepareOpts;
   /** The client's own pages. Present whenever there is a queue to put uploads on. */
   clientPages?: Omit<PublicDeps, "app" | "auth" | "log">;
+  /** Whether recorded reminder calls can be placed at all (T-50). */
+  voice?: boolean;
   /** Sending from a firm's own domain. Absent until the mail service's account token is set. */
   domains?: Domains;
   /** The public sign-up and price pages. */
@@ -192,6 +194,8 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
     return reply.header("content-disposition", 'attachment; filename="' + safe + '.zip"').header("x-tallyhound-files", String(lines.length)).header("x-tallyhound-missing", String(r.missing.length)).type("application/zip").send(zip);
   });
 
+  // What this installation has connected, so the screens show only what works (T-45): no tab, switch or button for a service that is not set up.
+  f.get("/api/features", { preHandler: full }, async () => ({ ask: !!d.ask, billing: !!d.billing, domain: !!d.domains, voice: !!d.voice, storage: d.storage ? d.storage.offered() : [] }));
   // The note a firm sends its own clients before Tallyhound's first message, worded for this firm. Read only.
   f.get("/api/headsup", { preHandler: full }, async (req, reply) => {
     const json = await d.readState(req.who!.user.firmId); if (!json) return reply.code(404).send({ error: "no_firm", message: "This firm's workspace could not be found." });

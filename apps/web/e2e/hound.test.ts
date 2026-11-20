@@ -103,7 +103,7 @@ scene("Ask: a question gets an answer read from the firm's own work, a failure i
 scene("Your plan: an owner sees the plan and what is used, pauses for the quiet months within the yearly limit, and resumes", async (W) => {
   const { firmId } = await busyFirm(W), page = await W.signIn("pat1@firm1.test"); await page.goto(W.url + "/settings?tab=plan"); await page.getByRole("heading", { name: "Your plan", exact: true }).waitFor();
   let T: Engine = await W.state(firmId); const b = T.billing(); assert.equal(b.state, "active"); assert.match(text(await page.locator(".card").first().textContent()), new RegExp(b.plan + ": \\$" + T.PLANS.find((p: [string]) => p[0] === b.plan)[1] + " a month"));
-  assert.equal(await page.locator("tbody tr").count(), T.PLANS.length); assert.match(text(await page.locator("tr.sel").textContent()), /Yours/); await page.getByText("Documents checked").waitFor();
+  assert.equal(await page.locator("tbody tr").count(), 2, "the two plans on sale by card here, not all four"); assert.match(text(await page.locator("tr.sel").textContent()), /Yours/); await page.getByText("Documents checked").waitFor();
   const far = new Date(T.S.now.getTime() + 200 * T.DAY).toISOString().slice(0, 10), near = new Date(T.S.now.getTime() + 30 * T.DAY).toISOString().slice(0, 10);
   await page.getByLabel("Pause until").fill(far); await page.getByRole("button", { name: "Pause", exact: true }).click(); await page.getByRole("alert").getByText(/A pause can last up to 3 months in any 12 months/).waitFor(); assert.equal((await W.state(firmId)).billing().state, "active");
   await page.getByLabel("Pause until").fill(near); await page.getByRole("button", { name: "Pause", exact: true }).click();

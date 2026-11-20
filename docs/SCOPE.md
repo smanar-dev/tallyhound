@@ -59,3 +59,23 @@ These are targets, not measurements. Measure them with the pilot firms (ticket T
 Sources: soraban.com/tax-organizer-software, stanfordtax.com/faq, taxdome.com/pricing, getcanopy.com/pricing, smartvault.com/srai. Prices change; check before quoting them to a firm.
 
 What none of them publish: a reply-to-the-text flow with no link, an agent that acts on free-form replies without staff, and a check that names the exact missing part. Those three, plus price and same-day setup, are the whole pitch. Verify each on a demo call before saying it to a customer.
+
+## Every Settings page, and the step it serves (T-45)
+
+A page is in Settings only if it changes one of the four steps, or is something a firm must do before it may run them. A page
+for a service this installation has not connected is not shown at all.
+
+| Page | Step | Why it is there |
+|---|---|---|
+| Your firm (name, sender name, phone, tax year, next season) | Chase | Every message is sent in these words and for this year |
+| People | All four | Who may do them. The preparer on each client is who questions go to |
+| Checklists | Checklist | Ready-made lists to give clients |
+| Message wording | Chase | The words of each request and reminder |
+| Sending hours | Chase | When a message may go |
+| Text number | Chase | Carriers must approve a firm before it may text; the note that makes the first message expected |
+| Email address | Chase | The address requests come from. Shown only when own-domain sending is connected |
+| Finished files | Hand-off after Check | Where a checked document is filed. Only connected storage services are listed |
+| Your plan | Before any step | What the firm may use, and the pause. Only plans on sale are listed when paying by card |
+| Security and data | Check | How long a checked document is kept, the emergency stop, and the firm's records |
+
+On The Hound: Ask is shown only when the model is connected, and the reminder call switch only when calls are.

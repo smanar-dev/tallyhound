@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api } from "../lib/api";
 import { Link, useSearchParams } from "react-router-dom";
-import { useFirm } from "../lib/firm";
+import { useFeatures, useFirm } from "../lib/firm";
 import { Page } from "./Shell";
 import { Avatar, Chip, Empty, Icon } from "../components/ui";
 import { draftsToApprove, openTasks, type Row } from "../lib/select";
@@ -13,7 +13,7 @@ import type { Engine } from "virtual:engine";
 
 const KIND: Record<string, [IconName, string]> = { message: ["send", "Message"], read: ["eye", "Read"], decide: ["brain", "Decision"], schedule: ["clock", "Scheduled"], handoff: ["hand", "Passed to a person"], alert: ["bell", "Alert"], guardrail: ["lock", "Blocked message"], memory: ["spark", "Note kept"], escalate: ["fast", "Stepped up"], held: ["pause", "Held"] };
 const FILTERS: [string, string][] = [["all", "All"], ["read", "Read"], ["message", "Messages"], ["schedule", "Scheduled"], ["decide", "Decisions"], ["handoff", "Passed to a person"], ["escalate", "Stepped up"], ["memory", "Notes kept"], ["guardrail", "Blocked messages"], ["alert", "Alerts"]];
-const TABS: [string, string][] = [["did", "What it did"], ["next", "Coming up"], ["drafts", "Drafts to approve"], ["rules", "Rules it follows"], ["ask", "Ask"]];
+const ALL_TABS: [string, string][] = [["did", "What it did"], ["next", "Coming up"], ["drafts", "Drafts to approve"], ["rules", "Rules it follows"], ["ask", "Ask"]];
 // The engine's log uses a few older words. Shown here in the product's vocabulary.
 const words = (t: string) => String(t || "").replace(/\bquiet hours\b/gi, "sending hours").replace(/\bStuck\b/g, "Needs you").replace(/\bstuck\b/g, "waiting on you").replace(/\b[Oo]utreach\b/g, "collecting").replace(/\bhandoffs?\b/gi, "question for you").replace(/\bqueue\b/gi, "Coming up").replace(/\b[Rr]eview\b/g, "a person's check").replace(/\b[Dd]eliver(ed|y)?\b/g, "hand-off").replace(/\bapprovals?\b/gi, "your OK").replace(/\bengagements?\b/gi, "file").replace(/\binbox\b/gi, "messages").replace(/\bplaybook\b/gi, "rules").replace(/\bunmatched\b/gi, "unknown sender");
 
@@ -41,7 +41,7 @@ function AskTab() {
 }
 
 export function Hound() {
-  const { T, can, act, actMany, toast } = useFirm(), s = T.S, H = s.firm.hound, [params, setParams] = useSearchParams(), tab = TABS.some((t) => t[0] === params.get("tab")) ? params.get("tab")! : "did";
+  const { T, can, act, actMany, toast } = useFirm(), feat = useFeatures(), s = T.S, H = s.firm.hound, [params, setParams] = useSearchParams(), TABS = ALL_TABS.filter((t) => t[0] !== "ask" || feat.ask || params.get("tab") === "ask"), tab = TABS.some((t) => t[0] === params.get("tab")) ? params.get("tab")! : "did";
   const [filter, setFilter] = useState("all"), [edits, setEdits] = useState<Record<string, string>>({});
   const drafts = draftsToApprove(T), waiting = openTasks(T).filter((t) => ["question", "call"].includes(t.kind)), alerts: Row[] = s.alerts || [], today = (d: Date) => d.toDateString() === s.now.toDateString();
   const wk: Row[] = s.msgs.filter((m: Row) => s.now - m.at < 7 * T.DAY), out = wk.filter((m) => m.dir === "out" && m.status === "delivered").length, auto = wk.filter((m) => m.dir === "out" && m.kind === "auto" && m.status === "delivered" && !m.approvedBy).length;
@@ -80,7 +80,7 @@ export function Hound() {
       <div className="grid g3">{sel("tone", "Tone", [["warm", "Warm and friendly"], ["brief", "Brief"], ["formal", "Formal"]])}{sel("emailAfter", "Add email after this many unanswered texts", [[1, "1"], [2, "2"], [3, "3"], [99, "Never"]])}{sel("slaHours", "Tell me when a client's question has waited", [[2, "2 hours"], [4, "4 hours"], [8, "8 hours"], [24, "24 hours"]])}{sel("pauseDays", "Pause after an upset reply", [[1, "1 day"], [2, "2 days"], [3, "3 days"], [5, "5 days"], [7, "7 days"]])}</div>
       <label className="row"><span className="toggle"><input type="checkbox" checked={!!H.callTask} disabled={!owner} onChange={(ev) => setRule("callTask", ev.target.checked)} /><span /></span>After the final reminder, ask me to call the client, with a script</label>
       <label className="row"><span className="toggle"><input type="checkbox" checked={H.closingQ === true} disabled={!owner} onChange={(ev) => setRule("closingQ", ev.target.checked)} /><span /></span>When a client has sent everything, ask once whether anything else changed this year. A yes comes to you</label>
-      <label className="row"><span className="toggle"><input type="checkbox" checked={H.voicemail === true} disabled={!owner} onChange={(ev) => setRule("voicemail", ev.target.checked)} /><span /></span>After the final reminder, place one recorded reminder call, on Autopilot, to clients who have said calls are fine</label>
+      {feat.voice || H.voicemail === true ? <label className="row"><span className="toggle"><input type="checkbox" checked={H.voicemail === true} disabled={!owner} onChange={(ev) => setRule("voicemail", ev.target.checked)} /><span /></span>After the final reminder, place one recorded reminder call, on Autopilot, to clients who have said calls are fine</label> : null}
       {H.voicemail === true ? <div className="note"><Icon name="alert" small /><span>A recorded call to a mobile needs the client's agreement. Tallyhound calls only a client you have marked on their page as having agreed, once, and never after they say stop. Check with your own counsel how your firm records that agreement.</span></div> : null}</div>
       <div className="grid g2">{list("The Hound handles", "check", ["Requests, reminders and thank-yous", "Reading photos, PDFs and attachments", "Chasing missing pages and parts", "Where to find a form", "Coming later, and I don't have it", "STOP, START and HELP", "Timing each client's messages", "Remembering useful facts"])}{list("Always passed to a person", "hand", ["Tax questions and advice", "Billing and fees", "Appointments and scheduling", "Complaints and upset clients", "Anything it is unsure about", "Documents that fail its checks"])}</div>
       <div className="card pad"><h3>Safety rules on every message</h3><p className="small muted" style={{ marginTop: 6 }}>Checked by code after Claude writes, before anything is sent. A draft that fails falls back to the standard wording and is logged.</p><div className="small" style={{ marginTop: 8, lineHeight: 1.9 }}>{["No advice words: refund, deduct, owe, audit, penalty, write off", "No numbers, amounts or links that were not in the standard wording", "Texts under 320 characters", "Opt-out words always win, whatever the model reads", "Sending hours only, never Sundays or holidays, at most one message a day", "Nothing is sent while a person has taken over"].map((x) => <div key={x} className="row" style={{ gap: 6, flexWrap: "nowrap" }}><Icon name="lock" small />{x}</div>)}</div></div></>; }

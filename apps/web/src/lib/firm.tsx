@@ -3,7 +3,7 @@
 // The engine here is for reading. Anything that changes something goes to the server as one action and the state is fetched again.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createEngine, type Engine } from "virtual:engine";
-import { api, ApiError, type Me } from "./api";
+import { api, type Features, ApiError, type Me } from "./api";
 
 // The engine reads hours off its clock, which must show the firm's own wall time (packages/core/pipeline.js wallTime).
 export function wallTime(date: Date, iana?: string | null): Date {
@@ -15,6 +15,9 @@ export function wallTime(date: Date, iana?: string | null): Date {
 export function loadEngine(stateText: string, now = new Date()): Engine {
   const T = createEngine(); T.load(stateText); T.setNow(wallTime(now, T.S.firm.iana)); return T;
 }
+
+/** What this installation has connected. Until the answer is in, nothing optional is shown. */
+export function useFeatures(): Features { const [f, setF] = useState<Features>({ ask: false, billing: false, domain: false, voice: false, storage: [] }); useEffect(() => { let on = true; api.features().then((x) => { if (on) setF(x); }, () => undefined); return () => { on = false; }; }, []); return f; }
 
 export interface Firm {
   T: Engine; me: Me;
