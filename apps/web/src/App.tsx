@@ -11,6 +11,7 @@ import { Messages } from "./screens/Messages";
 import { Settings } from "./screens/Settings";
 import { Hound } from "./screens/Hound";
 import { Progress } from "./screens/Progress";
+import { Help } from "./screens/Help";
 import { Lock, locked } from "./screens/Lock";
 import { useFirm } from "./lib/firm";
 
@@ -30,6 +31,7 @@ function Gate() {
     <Route path="/add-clients" element={<AddClients />} />
     <Route path="/messages" element={<Messages />} />
     <Route path="/progress" element={<Progress />} />
+    <Route path="/help" element={<Help />} />
     <Route path="/settings" element={<Settings />} />
     <Route path="*" element={<Navigate to="/" replace />} />
   </Routes>;

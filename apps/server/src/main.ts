@@ -11,7 +11,7 @@ import { migrate, runtime } from "./runtime.ts";
 const STALE_MS = 10 * 60000;   // the timer runs every five minutes: ten without a pass means it has stopped, and /healthz says so
 const R = runtime(), role = process.env.TH_ROLE || "both";
 const applied = await migrate(R.pool); if (applied.length) R.log("migrated", ...applied);
-const worker = createWorker({ app: R.app, auth: R.auth, clock: R.clock, log: R.log, inbox: R.inbox, notify: R.notify, mailer: R.mailer, ops: R.ops, watch: R.watch, billing: R.billing, lines: R.lookup ? (id) => checkLines(R.app, (f) => R.store.readState(f), createEngine, R.lookup!, id) : undefined });
+const worker = createWorker({ app: R.app, auth: R.auth, clock: R.clock, log: R.log, inbox: R.inbox, notify: R.notify, mailer: R.mailer, ops: R.ops, watch: R.watch, billing: R.billing, cleanup: R.cleanup, expireSupport: () => R.firms.expireSupport(), lines: R.lookup ? (id) => checkLines(R.app, (f) => R.store.readState(f), createEngine, R.lookup!, id) : undefined });
 if (role !== "web") { worker.start(); worker.watchQueue(); }
 if (role !== "worker") {
   const server = await buildServer({ app: R.app, auth: R.auth, signIn: R.signIn, firms: R.firms, readState: (id) => R.store.readState(id), getFile: (id, key) => R.store.getFile(id, key), appUrl: R.appUrl, secureCookies: R.appUrl.startsWith("https:"),

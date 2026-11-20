@@ -120,7 +120,8 @@ function PriorReturn({ T, e, c }: Ctx) {
 function Checklist({ T, e, c, openDoc }: Ctx & { openDoc: (id: string) => void }) {
   const feat = useFeatures(), { can, act, toast } = useFirm(), s = T.S, items: Row[] = T.itemsOf(e.id), [form, setForm] = useState(Object.keys(T.FORMS).filter((k) => k !== "OTHER")[0]!), [payer, setPayer] = useState(""), [waive, setWaive] = useState<Row | null>(null), [note, setNote] = useState("");
   const editable = can() && !["closed", "opted_out"].includes(e.status), docOf = (id: string) => s.docs.find((d: Row) => d.id === id);
-  const set = (i: Row, state: string, why?: string, said?: string) => act("setItem", i.id, state, why).then(() => { if (said) toast(said); }, () => {});
+  // T-66: removing a line or marking it not needed can be undone for ten seconds, which puts it back exactly as it was.
+  const set = (i: Row, state: string, why?: string, said?: string) => { const was: string = i.state; return act("setItem", i.id, state, why).then(() => { if (said) toast(said, ["removed", "waived"].includes(state) ? { label: "Undo", run: () => void act("setItem", i.id, was, "").then(() => toast("Put back."), () => {}) } : undefined); }, () => {}); };
   const checkin = async () => { try { const r = await act("sendCheckin", e.id); toast(r ? "Not sent: " + r + "." : "Check-in sent. The answers come back here as a proposed checklist."); } catch { /* said */ } };
   const icon = (st: string): IconName | null => st === "received" ? "check" : st === "requested" ? "send" : ["in_review", "says_none", "partial"].includes(st) ? "alert" : st === "waived" ? "minus" : null;
   const proposal = !!(e.checkin && e.checkin.doneAt && !e.checkin.reviewedAt);

@@ -1,6 +1,7 @@
 // Where the outside world calls in: Twilio (texts, delivery receipts, voice) and Postmark (email in, bounces).
 // Every route checks who is calling before it reads a field. Message webhooks only store the event and answer;
 // the queue does the work (queue.ts). Nothing here logs a body, a number or an address.
+import type { Cleanup } from "./twiliocleanup.ts";
 import { timingSafeEqual } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { ready } from "./files.ts";
@@ -10,7 +11,7 @@ import type { Handler, Inbox, Kind } from "./queue.ts";
 const last10 = (v: unknown) => String(v || "").replace(/\D/g, "").slice(-10);
 const addr = (v: unknown) => { const s = String(v || ""), m = /<([^>]+)>/.exec(s); return (m ? m[1]! : s).trim().toLowerCase(); };
 
-export function handlers({ app, twilio, prepare }: { app: App; twilio: TwilioAdapter | null; prepare?: PrepareOpts }): Record<Kind, Handler | null> {
+export function handlers({ app, twilio, prepare, cleanup }: { app: App; twilio: TwilioAdapter | null; prepare?: PrepareOpts; cleanup?: Cleanup }): Record<Kind, Handler | null> {
   const opt = prepare || {};
   // A file the scanner refused is never kept. The firm is told that it happened (spec TH-CAP-14); the client is asked for a photo or PDF as for any unreadable file.
   const infected = async (firmId: string, files: { refused?: string }[], channel: "text" | "email" | "portal") => {
@@ -22,7 +23,9 @@ export function handlers({ app, twilio, prepare }: { app: App; twilio: TwilioAda
     sms: twilio && (async (payload, firmId) => {
       const params = JSON.parse(payload.toString("utf8")) as Record<string, string>, m = await twilio.inbound(params, { keep: true }), media = await Promise.all(m.media.map((f) => ready(f, opt)));
       await app.inboundSms({ ...m, media }); await infected(firmId, media, "text");
-      return { from: m.from, after: async () => { await twilio.forget(params); } };
+      // T-108: once ours is saved, Twilio's pictures are deleted and the words of the text are blanked there. What fails is retried by the timer.
+      const urls: string[] = []; for (let i = 0; i < Math.min(10, +params.NumMedia! || 0); i++) if (params["MediaUrl" + i]) urls.push(params["MediaUrl" + i]!);
+      return { from: m.from, after: async () => { if (cleanup) await cleanup.now({ media: urls, body: params.MessageSid }); else await twilio.forget(params); } };
     }),
     // Files from a client's upload page. The page stored them and answered; here they are prepared and checked.
     upload: async (payload, firmId) => {
@@ -39,6 +42,7 @@ export function handlers({ app, twilio, prepare }: { app: App; twilio: TwilioAda
 }
 
 export interface HookDeps {
+  cleanup?: Cleanup;
   app: App; store: KitStore; inbox: Inbox; publicUrl: string;
   twilioAuthToken?: string;                          // without it the Twilio routes do not exist
   postmarkHook?: { user: string; pass: string };     // the name and password in the webhook address given to Postmark
@@ -71,6 +75,7 @@ export function registerHooks(f: FastifyInstance, d: HookDeps): void {
     f.post("/hooks/twilio/status", { preHandler: signed }, async (req, reply) => {
       const p = params(req), st = String(p.MessageStatus || p.SmsStatus || "").toLowerCase();
       if ((st === "undelivered" || st === "failed") && p.MessageSid) { const firmId = await d.store.firmIdByNumber(last10(p.From)); if (firmId) await d.app.withFirm(firmId, (T: Engine) => notDelivered(T, p.MessageSid!, p.ErrorCode || "")); }
+      if (d.cleanup && p.MessageSid && ["delivered", "undelivered", "failed"].includes(st)) await d.cleanup.later(p.MessageSid);   // T-108: the words of a text we sent are blanked at Twilio once it has arrived or never will
       return reply.code(204).send();
     });
     // Clients call the number that texts them. Ring the firm's office (T-122).

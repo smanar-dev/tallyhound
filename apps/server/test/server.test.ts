@@ -274,11 +274,51 @@ for (const kind of KINDS) {
     await H.close();
   });
 
+  test(name("T-95, T-63, T-123: owners are emailed when the plan's allowance is reached and Tallyhound is told; an owner sets closed days; a large start is paced"), async () => {
+    const H = await build(kind), { firmId, ownerId } = await H.newFirm(), owner = await H.signInAs("pat1@firm1.test"); await owner.post("/api/users", { name: "Alex Staff", email: "alex@firm1.test", role: "staff" }); const alex = await H.signInAs("alex@firm1.test");
+    await H.app.withFirm(firmId, (T: Engine) => { T.S.alerts.unshift({ id: "a_fair", at: new Date(T.S.now), engId: null, level: "low", kind: "fair_use", text: "You have used 80% of this year's text messages on your plan.", key: "fair80", read: false }); });
+    await H.worker.pass(); const mine = H.staffMails.filter((m) => /allowance/.test(m.subject)); assert.deepEqual(mine.map((m) => m.to), ["pat1@firm1.test"], "owners only"); assert.match(mine[0]!.body, /80% of this year's text messages/); assert.match(mine[0]!.body, /Nothing is switched off/);
+    assert.ok(H.devMails.some((m) => /reached its plan's allowance/.test(m.subject))); const n = H.staffMails.length; await H.worker.pass(); assert.equal(H.staffMails.filter((m) => /allowance/.test(m.subject)).length, 1, "once"); void n;
+    // Closed days: owner only, and the engine holds them.
+    assert.equal((await alex.post("/api/act", { fn: "setClosedDays", args: [["2027-02-15"]] })).status, 403); assert.equal((await owner.post("/api/act", { fn: "setClosedDays", args: [["2027-02-15", "nonsense"]] })).json.result, "Not a date: nonsense");
+    assert.equal((await owner.post("/api/act", { fn: "setClosedDays", args: [["2027-02-15"]] })).json.result, null); const T = createEngine(); T.load(await H.store.readState(firmId)); assert.deepEqual(T.S.firm.closedDays, ["2027-02-15"]); assert.equal(T.allowed(new Date(2027, 1, 15, 11)), false);
+    // A start of 120 clients: the answer says 70 were held back.
+    await H.app.staff(firmId, ownerId, (E: Engine) => { E.S.firm.hound.mode = "autopilot"; for (let i = 0; i < 120; i++) E.addClient({ first: "C" + i, last: "L" + i, email: "c" + i + "@x.example" }); E.S.engs.forEach((e: { confirmed: boolean }) => { e.confirmed = true; }); });
+    const U = createEngine(); U.load(await H.store.readState(firmId)); const r = (await owner.post("/api/act", { fn: "startMany", args: [U.S.engs.map((e: { id: string }) => e.id)] })).json.result; assert.equal(r.started, 120); assert.equal(r.paced, 70);
+    await H.close();
+  });
+
   test(name("the timer visits every firm, and one firm failing does not stop the rest"), async () => {
     const H = await build(kind); const a = await H.newFirm(1), b = await H.newFirm(2); const seen: string[] = [], real = H.app.withFirm;
     H.app.withFirm = async (id: string, fn: never) => { seen.push(id); if (id === a.firmId) throw new Error("boom"); return real(id, fn); };
     const s = await H.worker.pass(); assert.deepEqual(seen.sort(), [a.firmId, b.firmId].sort()); assert.equal(s.firms, 2); assert.equal(s.failed, 1); assert.ok(s.lastPass);
     assert.equal((await H.browser().get("/healthz")).json.ok, true);
+    await H.close();
+  });
+
+  test(name("T-107: an owner lets one named support person look for a set time; they cannot change anything; the firm's history shows it; it ends on time"), async () => {
+    const H = await build(kind), { firmId } = await H.newFirm(), owner = await H.signInAs("pat1@firm1.test"); await owner.post("/api/users", { name: "Alex Staff", email: "alex@firm1.test", role: "staff" }); const alex = await H.signInAs("alex@firm1.test");
+    assert.equal((await alex.post("/api/support", { name: "Sam Help", email: "sam@tallyhound.test", hours: 4 })).status, 403, "owners only");
+    assert.equal((await owner.post("/api/support", { name: "Sam Help", email: "sam@tallyhound.test", hours: 5 })).status, 400, "set lengths only");
+    const g = await owner.post("/api/support", { name: "Sam Help", email: "sam@tallyhound.test", hours: 4 }); assert.equal(g.status, 200);
+    const row = (await owner.get("/api/users")).json.find((u: { email: string }) => u.email === "sam@tallyhound.test"); assert.equal(row.role, "read_only"); assert.equal(row.name, "Sam Help (Tallyhound support)"); assert.ok(row.supportUntil);
+    assert.equal((await owner.post("/api/users/" + row.id + "/role", { role: "owner" })).status, 400, "support can never be made more than a looker");
+    const sam = await H.signInAs("sam@tallyhound.test"); assert.equal((await sam.get("/api/state")).status, 200); await sam.get("/api/state");
+    assert.equal((await sam.post("/api/act", { fn: "setClosedDays", args: [[]] })).status, 403); assert.equal((await sam.get("/api/users")).status, 403);
+    const hist = () => H.store.readState(firmId).then((j) => JSON.parse(j!).state.audit.map((a: { action: string }) => a.action));
+    let h = await hist(); assert.equal(h.filter((k: string) => k === "support.granted").length, 1); assert.equal(h.filter((k: string) => k === "support.view").length, 1, "one line, not one per page");
+    // No morning note goes to support.
+    const u = await H.auth.userByEmail("sam@tallyhound.test"); assert.ok(u!.morningOff && u!.urgentOff);
+    // Still in after 3 hours of use; out on the minute at 4, with the tab open.
+    H.advance(100 * 60); assert.equal((await sam.get("/api/me")).status, 200); H.advance(100 * 60); assert.equal((await sam.get("/api/me")).status, 200);
+    H.advance(41 * 60); assert.equal((await sam.get("/api/me")).status, 401);
+    const before = H.links.length; await H.browser().post("/auth/link", { email: "sam@tallyhound.test" }); assert.equal(H.links.length, before, "no new link after the time is up");
+    assert.equal(await H.firms.expireSupport(), 1); assert.equal(await H.firms.expireSupport(), 0); h = await hist(); assert.ok(h.includes("support.ended"));
+    const T = createEngine(); T.load(await H.store.readState(firmId)); assert.ok(!T.S.users.some((x: { email: string }) => x.email === "sam@tallyhound.test"));
+    // The owner can let the same person in again, and end it early.
+    const o2 = await H.signInAs("pat1@firm1.test"); const again = await o2.post("/api/support", { name: "Sam Help", email: "sam@tallyhound.test", hours: 24 }); assert.equal(again.status, 200); assert.equal(again.json.id, row.id);
+    const sam2 = await H.signInAs("sam@tallyhound.test"); assert.equal((await sam2.get("/api/me")).status, 200);
+    assert.equal((await o2.del("/api/users/" + row.id)).status, 200); assert.equal((await sam2.get("/api/me")).status, 401);
     await H.close();
   });
 }

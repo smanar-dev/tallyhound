@@ -68,8 +68,9 @@ Messages are over half the size and the audit trail about 15%. Add roughly 10 to
 What this means:
 
 * **Solo, Practice, Firm plans (up to 1,000 clients):** fine. A text is answered in well under a second of our own time. The model call dominates.
-* **Large plan (up to 2,500):** not as built. About 30 MB per event and a lock held for most of a second. Before the first Large customer, messages and the audit trail move to their own rows (T-101). The tables are sketched at the bottom of `db/schema.sql`. The engine's interface does not change; the pipeline loads recent messages for one client instead of all messages for the firm.
-* **The lock is held while the model is called.** A slow model call (several seconds) blocks other events for the same firm. At pilot size this is invisible. T-106 moves the model call outside the lock: read the file first, then take the lock and apply the answer.
+* **Large plan (up to 2,500):** built (T-33, T-101). The numbers above are the old single value and are kept for comparison. A firm is now a small core in `firm_state`, one sealed row per client in `firm_parts`, and audit rows in `firm_audit` (`packages/core/parts.js`). A text, email or upload from a known client loads the core and that client's row: 12 KB and 12 ms at 2,500 clients (`node tools/scale.js 2500`). The engine's interface did not change.
+* **What still loads the whole firm:** the five-minute timer and every staff action (about 0.8 s at 2,500 clients; only the rows that changed are written), and `/api/state`, which sends the browser the whole workspace. Scoping staff actions to one client is the next step if a Large firm finds clicks slow.
+* **The model is called before the lock (T-106).** An inbound event is first run against an unlocked copy to collect the model's answers, then run again under the lock, where it finds them. A slow model call no longer blocks other events for the same firm.
 
 ## Hosting (designed, not provisioned)
 

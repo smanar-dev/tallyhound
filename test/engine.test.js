@@ -345,3 +345,38 @@ test("costs: a landline check and a reminder call are counted and priced like ev
   T.setLine(c.id, "mobile"); T.setLine(c.id, "mobile"); assert.equal(T.usage().totals.lookup, 1, "asked about once per number"); T.meter("voice"); assert.equal(T.usage().totals.voice, 1);
   assert.equal(Math.round((T.usage().cost - before) * 100), 4, "3.8 cents, shown to the nearest cent");
 });
+test("T-63: on a day the firm says it is closed nothing automated is sent, and what was due moves to the next open day", () => {
+  const { T, c, e } = started(); T.setUser("u1"); const day = (n) => { const d = new Date(T.S.now.getTime() + n * T.DAY); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+  assert.match(T.setClosedDays(["next friday"]), /Not a date/); assert.match(T.setClosedDays(["2027-02-31"]), /Not a date/); assert.equal(T.setClosedDays(["2020-01-01", day(2), day(2), day(3)]), null);
+  assert.deepEqual(T.S.firm.closedDays, [day(2), day(3)].sort(), "past dates dropped, each day once");
+  const at = (n, h) => { const d = new Date(T.S.now.getTime() + n * T.DAY); d.setHours(h, 0, 0, 0); return d; }, open = [1, 2, 3, 4, 5, 6].filter((n) => T.allowed(at(n, 11)));
+  assert.ok(!open.includes(2) && !open.includes(3)); e.next = at(2, 11); T.setClosedDays([day(2), day(3)]); assert.ok(T.allowedC(e.next, c), "moved to an open day"); assert.ok(+e.next > +at(3, 20));
+  T.setUser("u2"); assert.match(T.setClosedDays([]), /Only an owner/); T.setUser("u1"); assert.equal(T.setClosedDays([]), null); assert.equal(T.allowed(at(2, 11)), at(2, 11).getDay() !== 0);
+});
+test("T-115: once a month the audit trail gets one line of deletion evidence, with counts and no document details", () => {
+  const { T, c, e } = started(); T.inboundDoc(c.id, { form: "W2", year: 2026, payer: "Acme Logistics" }, "text"); const lines = () => T.S.audit.filter((a) => a.action === "retention.month");
+  T.tick(); assert.equal(lines().length, 0, "nothing to say about the month before the firm began");
+  for (let i = 0; i < 70; i++) { T.setNow(new Date(T.S.now.getTime() + T.DAY)); T.tick(); }
+  assert.ok(lines().length >= 2 && lines().length <= 3, "one a month"); const l = lines()[0].detail; assert.match(l, /^[A-Z][a-z]+ \d{4}: \d+ cop(y|ies) deleted on schedule\. Held now: \d+/); assert.doesNotMatch(l, /Acme|W-2|Jo/);
+  assert.equal(new Set(lines().map((x) => x.detail.split(":")[0])).size, lines().length, "never the same month twice");
+});
+test("T-121: an email with a link and no file is answered like a text with a link: Tallyhound does not open it and asks for the file", () => {
+  const { T, c, e } = started(); const n = T.S.msgs.length, r = T.inboundEmail(c.id, "Here it is: https://drive.google.com/file/d/abc/view", [], null);
+  assert.equal(r.link, true); assert.equal(r.docs.length, 0); const out = T.S.msgs.slice(n).filter((m) => m.dir === "out"); assert.equal(out.length, 1); assert.equal(out[0].tpl, "M30K"); assert.equal(T.S.msgs[n].understood, "Sent a link instead of a file");
+  // With a file attached the link is beside the point, and ordinary handling carries on.
+  const r2 = T.inboundEmail(c.id, "W-2 attached, also at https://dropbox.com/x", [{ form: "W2", year: 2026, payer: "Acme Logistics" }], null); assert.ok(!r2.link); assert.equal(r2.docs.length, 1);
+});
+test("T-123: a start of more than 50 clients goes out in groups of 50 half an hour apart; a small start is not held back", () => {
+  const mk = (n) => { const T = require("../packages/engine").createEngine(); T.blank({ plan: "Firm", now: new Date(2027, 0, 26, 9, 0), senderStatus: "approved", mode: "autopilot" }); for (let i = 0; i < n; i++) T.addClient({ first: "C" + i, last: "L" + i, email: "c" + i + "@x.example" }); T.S.engs.forEach((e) => { e.confirmed = true; }); return T; };
+  const A = mk(30), a = A.startMany(A.S.engs.map((e) => e.id)); assert.equal(a.started, 30); assert.equal(a.paced, 0); assert.ok(A.S.engs.every((e) => +e.next <= +A.S.now + 60000));
+  const B = mk(170), b = B.startMany(B.S.engs.map((e) => e.id)); assert.equal(b.started, 170); assert.equal(b.paced, 120);
+  const waves = {}; B.S.engs.forEach((e) => { const m = Math.round((+e.next - +B.S.now) / 60000); waves[m] = (waves[m] || 0) + 1; }); assert.deepEqual(waves, { 0: 50, 30: 50, 60: 50, 90: 20 }); assert.ok(B.S.audit.some((x) => x.action === "outreach.paced"));
+  const again = B.startMany(B.S.engs.map((e) => e.id)); assert.equal(again.started, 0); assert.deepEqual(again.refused, ["Already started"]);
+});
+test("T-66: a discarded document can be put back for ten minutes, exactly as it was; after that it cannot", () => {
+  const { T, c, e } = started(); T.setUser("u1"); T.inboundDoc(c.id, { form: "W2", year: 2026, payer: "Acme Logistics", read: { conf: 0.5, legible: 0.9, note: "unsure", missing: [] } }, "text");
+  const t = T.S.tasks.find((x) => x.kind === "document" && x.status === "open"); assert.ok(t, "a document is waiting for a person"); const d = T.S.docs.find((x) => x.id === t.docId), was = d.state;
+  assert.equal(T.undiscard(t.id), "Nothing to undo"); T.decideTask(t.id, "discard", { reason: "not needed" }); assert.equal(d.state, "discarded"); assert.equal(t.status, "decided");
+  assert.equal(T.undiscard(t.id), null); assert.equal(d.state, was); assert.equal(t.status, "open"); assert.ok(!d.reasons.some((r) => /^Discarded by/.test(r))); assert.ok(T.S.audit.some((a) => a.action === "review.undiscard"));
+  T.decideTask(t.id, "discard", { reason: "not needed" }); T.setNow(new Date(T.S.now.getTime() + 11 * 60000)); assert.match(T.undiscard(t.id), /Too late to undo/); assert.equal(d.state, "discarded");
+});

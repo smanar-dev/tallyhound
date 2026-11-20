@@ -112,9 +112,12 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
   // Which emails Tallyhound sends this person. Their own choice, for themselves only.
   f.post("/api/me/notes", { preHandler: full }, async (req) => { const u = req.who!.user, b = body(req), next = { morningOff: typeof b.morning === "boolean" ? !b.morning : u.morningOff, urgentOff: typeof b.urgent === "boolean" ? !b.urgent : u.urgentOff }; await d.auth.setNotes(u.id, next); await d.auth.audit(u.firmId, u.id, "me.notes", (next.morningOff ? "no" : "") + "morning " + (next.urgentOff ? "no" : "") + "urgent"); return { notes: { morning: !next.morningOff, urgent: !next.urgentOff } }; });
   // The firm's whole workspace, as the engine saves it. File bytes are never in it, only their keys.
+  const looked = new Map<string, number>();
   f.get("/api/state", { preHandler: full }, async (req, reply) => {
     const u = req.who!.user, json = await d.readState(u.firmId); if (!json) return reply.code(404).send({ error: "no_firm", message: "This firm's workspace could not be found." });
     const s = JSON.parse(json); s.userId = u.id;
+    // T-107: the firm's history shows when support looked. One line per quarter hour, not one per page.
+    if (u.supportUntil) { const t = Date.now(), last = looked.get(u.id) || 0; if (t - last > 15 * 60000) { looked.set(u.id, t); await d.app.withFirm(u.firmId, (T: Engine) => { T.audit("support.view", u.name + " looked at the firm's pages", u.name); }); await d.auth.audit(u.firmId, u.id, "support.view"); } }
     // A client's link key opens that client's own pages. No screen needs it, so it never leaves the server.
     // The same goes for the copy of the link inside a sent message: staff see that a link was sent, not the link.
     const keys: string[] = []; for (const c of s.state.clients || []) { if (c.key) keys.push(c.key); delete c.key; delete c.keyAt; delete c.code; }
@@ -274,6 +277,8 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
     const u = req.who!.user, what = (req.params as { what: string }).what; if (u.role !== "owner") return reply.code(403).send({ error: "role", message: NO.other });
     if (what !== "consent" && what !== "audit") return reply.code(404).send({ error: "unknown_export", message: "Tallyhound does not have that export." });
     const cell = (v: unknown) => { let t = v == null ? "" : v instanceof Date ? v.toISOString() : String(v); if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; return /[",\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+    // The audit trail is kept as rows of its own (T-101), so it is read from the store, every line of it, not from the engine.
+    const saved = what === "audit" ? await d.readState(u.firmId) : null, trail: { at: { $d?: string } | string; actor: string; action: string; detail?: string }[] = saved ? JSON.parse(saved).state.audit || [] : [];
     const rows = await d.app.staff(u.firmId, u.id, (T: Engine) => {
       const out: unknown[][] = [];
       if (what === "consent") {
@@ -284,7 +289,7 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
           for (const l of L) out.push([...now, new Date(l.at), l.channel || "", l.what, l.mobile || "", l.wording || "", l.shown || "", l.ip || "", l.agent || ""]); }
         T.audit("export.consent", T.S.clients.length + " clients");
       } else {
-        out.push(["When", "Who", "Action", "Detail"]); for (const a of T.S.audit) out.push([new Date(a.at), a.actor, a.action, a.detail || ""]);
+        out.push(["When", "Who", "Action", "Detail"]); for (const a of trail) out.push([new Date(typeof a.at === "string" ? a.at : a.at.$d || 0), a.actor, a.action, a.detail || ""]);
         T.audit("export.audit", (out.length - 1) + " lines");
       }
       return out;
@@ -294,7 +299,8 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
   });
 
   // ---- people at the firm (owner only for changes) ----
-  f.get("/api/users", { preHandler: full }, async (req, reply) => req.who!.user.role !== "owner" ? reply.code(403).send({ error: "role", message: "Only an owner can see who has access." }) : (await d.auth.usersOfFirm(req.who!.user.firmId)).map((u) => ({ ...me(u), twoStep: !!u.mfaSecret, left: !!u.leftAt })));
+  f.get("/api/users", { preHandler: full }, async (req, reply) => req.who!.user.role !== "owner" ? reply.code(403).send({ error: "role", message: "Only an owner can see who has access." }) : (await d.auth.usersOfFirm(req.who!.user.firmId)).map((u) => ({ ...me(u), twoStep: !!u.mfaSecret, left: !!u.leftAt, supportUntil: u.supportUntil && !u.leftAt ? u.supportUntil.toISOString() : null })));
+  f.post("/api/support", { preHandler: full }, async (req) => { const b = body(req), u = req.who!.user, r = await d.firms.addSupport(u.firmId, u, { email: str(b.email), name: str(b.name), hours: Number(b.hours) }); return { id: r.id, until: r.until.toISOString() }; });
   f.post("/api/users", { preHandler: full }, async (req) => { const b = body(req), u = req.who!.user; return { id: await d.firms.addUser(u.firmId, u, { email: str(b.email), name: str(b.name), role: str(b.role) as Role }) }; });
   f.post("/api/users/:id/role", { preHandler: full }, async (req) => { const u = req.who!.user; await d.firms.setRole(u.firmId, u, (req.params as { id: string }).id, str(body(req).role) as Role); return { ok: true }; });
   f.delete("/api/users/:id", { preHandler: full }, async (req) => { const u = req.who!.user; return { ok: true, ...(await d.firms.removeUser(u.firmId, u, (req.params as { id: string }).id)) }; });

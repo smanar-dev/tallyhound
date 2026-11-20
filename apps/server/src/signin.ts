@@ -32,6 +32,7 @@ export function createSignIn(d: SignInDeps) {
     const now = clock(), s: Session = { hash, userId: u.id, stage: "link", createdAt: now, expiresAt: new Date(now.getTime() + PRE_MINUTES * 60000), fails: 0 };
     await auth.createSession(s); return s;
   }
+  const over = (u: User) => !!u.supportUntil && u.supportUntil <= clock();
   async function complete(u: User, s: Session, how: string) {
     await auth.updateSession(s.hash, { stage: "full", expiresAt: new Date(clock().getTime() + IDLE_HOURS * 3600000) });
     await auth.audit(u.firmId, u.id, "signin", how);
@@ -56,14 +57,14 @@ export function createSignIn(d: SignInDeps) {
       const now = clock(), h = emailHash(email);
       if (await auth.linkRequestsSince(h, new Date(now.getTime() - 3600000)) >= LINKS_PER_HOUR) return;
       await auth.noteLinkRequest(h, now);
-      const u = await auth.userByEmail(email); if (!u || u.leftAt || isLocked(u)) return;
+      const u = await auth.userByEmail(email); if (!u || u.leftAt || over(u) || isLocked(u)) return;
       await d.mailer.signInLink(email, d.appUrl.replace(/\/$/, "") + "/signin/open#t=" + kitAuth.issueLink(d.linkSecret, email, now));
     },
     // Step 2. The link is opened. It works once. The answer says what the browser should ask for next.
     async openLink(token: string): Promise<{ sessionToken: string; expiresAt: Date; next: "setup" | "code" }> {
       const now = clock(), r = kitAuth.checkLink(d.linkSecret, token, now);
       if (!r.ok) throw bad("link_" + r.why, r.why === "expired" ? "That link has expired. Ask for a new one." : "That link is not valid. Ask for a new one.", 401);
-      const u = await auth.userByEmail(r.email); if (!u || u.leftAt) throw bad("link_invalid", "That link is not valid. Ask for a new one.", 401);
+      const u = await auth.userByEmail(r.email); if (!u || u.leftAt || over(u)) throw bad("link_invalid", "That link is not valid. Ask for a new one.", 401);
       if (isLocked(u)) throw bad("locked", "Sign-in is locked after too many wrong codes. Try again in " + Math.max(1, Math.ceil((u.lockedUntil!.getTime() - now.getTime()) / 60000)) + " minutes.", 423);
       if (!(await auth.claimLink(r.jti, new Date(now.getTime() + kitAuth.LINK_MIN * 60000 * 2)))) throw bad("link_used", "That link has already been used. Ask for a new one.", 401);
       const t = kitAuth.newSession(now), s = await open(u, t.hash);
@@ -108,6 +109,7 @@ export function createSignIn(d: SignInDeps) {
       const hash = kitAuth.hashToken(sessionToken), s = await auth.session(hash), now = clock(); if (!s) return null;
       if (s.expiresAt <= now || now.getTime() - s.createdAt.getTime() > MAX_HOURS * 3600000) { await auth.deleteSession(hash); return null; }
       const user = await auth.userById(s.userId); if (!user || user.leftAt) return null;
+      if (over(user)) { await auth.deleteSession(hash); return null; }   // T-107: support access ends on the minute, open tab or not
       // Slide the idle timeout, at most once every few minutes so a busy page is not one write per request.
       const fresh = new Date(now.getTime() + IDLE_HOURS * 3600000);
       if (s.stage === "full" && fresh.getTime() - s.expiresAt.getTime() > 5 * 60000) { await auth.updateSession(hash, { expiresAt: fresh }); s.expiresAt = fresh; }

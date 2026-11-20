@@ -183,4 +183,28 @@ for (const kind of KINDS) {
     assert.match((await H.twilioPost("/hooks/twilio/voice", { To: "+16155559999", From: JO, CallSid: "CA2" })).body, /only receives text messages/);
     await H.close();
   });
+
+  test(name("T-108: Twilio's copy of a photo and of the words is removed once ours is saved; what fails is listed and retried; no other address is ever called"), async () => {
+    const calls: { url: string; method: string; body?: string }[] = []; let down = true;
+    const fake = (async (url: string, init: { method: string; body?: string; headers: Record<string, string> }) => { calls.push({ url: String(url), method: init.method, body: init.body }); assert.match(init.headers.authorization!, /^Basic /); return new Response(null, { status: down ? 503 : 204 }); }) as unknown as typeof fetch;
+    const H = await build(kind, { ai: model(), cleanup: fake }), { firmId, ownerId } = await H.newFirm();
+    await H.app.staff(firmId, ownerId, (T: Engine) => { T.S.firm.hound.mode = "autopilot"; T.S.firm.senderStatus = "approved"; T.S.firm.phone = "(615) 555-0100";
+      T.importRows(T.parseCSV("First,Last,Email,Mobile\nJo,Day,jo@x.example,6155550111")); const e = T.S.engs[0]; e.confirmed = true; T.start(e.id); T.giveConsent(T.S.clients[0].id, "sms"); });
+    H.media.set("https://api.twilio.com/2010-04-01/Accounts/AC1/Messages/MMc1000001/Media/MEMMc10000010", JPEG);
+    await H.twilioPost("/hooks/twilio", { To: FIRM_NO, From: JO, Body: "here you go", NumMedia: "1", MessageSid: "MMc1000001", MediaUrl0: "https://api.twilio.com/2010-04-01/Accounts/AC1/Messages/MMc1000001/Media/MEMMc10000010", MediaContentType0: "image/jpeg" });
+    await H.inbox.drain();
+    // Twilio was down: both the photo and the words are on the list, and our own copy is already saved.
+    assert.equal(await H.cleanupStore.count(), 2); const T = createEngine(); T.load(await H.store.readState(firmId)); assert.ok(T.S.docs.some((d: { engId?: string }) => d.engId));
+    assert.deepEqual(calls.map((c) => c.method).sort(), ["DELETE", "POST"]); assert.equal(calls.find((c) => c.method === "POST")!.body, "Body=");
+    // A message we sent reaches the phone: its words are queued, not removed inside the webhook.
+    const before = calls.length; await H.twilioPost("/hooks/twilio/status", { MessageSid: "SMout00001", MessageStatus: "delivered", To: JO, From: FIRM_NO }); assert.equal(calls.length, before); assert.equal(await H.cleanupStore.count(), 3);
+    await H.twilioPost("/hooks/twilio/status", { MessageSid: "SMout00002", MessageStatus: "sent", To: JO, From: FIRM_NO }); assert.equal(await H.cleanupStore.count(), 3);
+    // The sweep retries; while Twilio is down nothing leaves the list.
+    assert.equal(await H.cleanup!.sweep(true), 0); assert.equal(await H.cleanupStore.count(), 3);
+    down = false; assert.equal(await H.cleanup!.sweep(true), 3); assert.equal(await H.cleanupStore.count(), 0);
+    for (const c of calls) assert.ok(c.url.startsWith("https://api.twilio.com/2010-04-01/Accounts/AC1/Messages/"), c.url);
+    // An address that is not this account's is dropped without a call.
+    const n = calls.length; await H.cleanup!.now({ media: ["https://evil.example/Messages/MM1/Media/ME1", "https://api.twilio.com/2010-04-01/Accounts/AC2/Messages/MM1/Media/ME1"], body: "MM1/../../AC2" }); assert.equal(calls.length, n); assert.equal(await H.cleanupStore.count(), 0);
+    await H.close();
+  });
 }

@@ -85,7 +85,7 @@ function StartCollecting({ onClose }: { onClose: () => void }) {
   const go = async () => {
     setBusy(true);
     try {
-      const r = (await act("startMany", [...pick])) as { started: number; capped: number; refused: string[] };
+      const r = (await act("startMany", [...pick])) as { started: number; capped: number; refused: string[]; paced?: number };
       toast("Started " + plural(r.started, "client") + "." + (r.capped ? " " + r.capped + " more are waiting: the free trial collects from " + T.TRIAL_CLIENTS + " clients. Choose a plan to start them." : "") + (r.refused.length ? " Not started: " + r.refused.join("; ") + "." : ""));
       onClose(); if (r.capped) nav("/settings?tab=plan");
     } catch { /* the toast has said why */ } finally { setBusy(false); }
@@ -129,7 +129,7 @@ export function Clients() {
   // One action for everyone selected. Whoever it does not apply to is left alone and counted.
   const bulk = async (kind: "checkin" | "recommend" | "confirm" | "start" | "pause" | "resume") => {
     try {
-      if (kind === "start") { const r = (await act("startMany", ids)) as { started: number; capped: number; refused: string[] }; toast("Started " + r.started + (ids.length - r.started ? ", left " + (ids.length - r.started) + " that could not be started" + (r.refused.length ? " (" + r.refused.join("; ").toLowerCase() + ")" : "") : "") + "."); }
+      if (kind === "start") { const r = (await act("startMany", ids)) as { started: number; capped: number; refused: string[]; paced?: number }; toast((r.paced ? "The first 50 go now and the rest in groups of 50 every half hour. " : "") + "Started " + r.started + (ids.length - r.started ? ", left " + (ids.length - r.started) + " that could not be started" + (r.refused.length ? " (" + r.refused.join("; ").toLowerCase() + ")" : "") : "") + "."); }
       else if (kind === "checkin") { const r = await actMany(ids.map((id) => ["sendCheckin", id])), ok = r.filter((x) => !x).length; toast("Check-in sent to " + plural(ok, "client") + "." + (ids.length - ok ? " " + (ids.length - ok) + " left out: already collecting, already answered, or no way to reach them." : "")); }
       else if (kind === "recommend") { const r = (await actMany(ids.map((id) => ["addRecommended", id]))) as number[], n = r.reduce((a, b) => a + (+b || 0), 0), m = r.filter((x) => +x > 0).length; toast("Added " + plural(n, "suggested document") + " across " + plural(m, "client") + ". Each one shows the reason on the checklist."); }
       else {

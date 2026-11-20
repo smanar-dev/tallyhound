@@ -68,5 +68,10 @@ scene("settings: an owner changes the firm's details and manages who can sign in
   await alex.goto(W.url + "/clients"); await alex.waitForURL("**/signin");
   await page.locator("tr", { hasText: "Alex Staff" }).getByRole("button", { name: "Remove" }).click(); await page.getByRole("dialog").getByRole("button", { name: "Remove" }).click(); await page.getByText("Alex Staff can no longer sign in.").waitFor();
   const us = await W.auth.usersOfFirm(firmId); assert.equal(us.filter((u) => !u.leftAt).length, 1); assert.equal(us.length, 2, "switched off, not deleted");
-  await page.getByText(/No longer here: Alex Staff\./).waitFor(); assert.equal(await page.locator("tr", { hasText: "Alex Staff" }).count(), 0);
+  // T-107: the owner lets one named support person look for a set time, sees until when, and ends it.
+  await page.getByRole("button", { name: "Let support in" }).click(); const sd = page.getByRole("dialog"); await sd.getByLabel("Support person's name").fill("Sam Help"); await sd.getByLabel("Their Tallyhound email").fill("sam@tallyhound.test"); await sd.getByLabel("For how long").selectOption("24");
+  await sd.getByRole("button", { name: "Let them in" }).click(); await sd.waitFor({ state: "detached" }); const row = page.locator("tr", { hasText: "Sam Help (Tallyhound support)" }); await row.getByText("Can look only").waitFor(); assert.match(text(await row.textContent()), /Until .*Every visit is written in the audit trail/);
+  const sam = (await W.auth.usersOfFirm(firmId)).find((u) => u.email === "sam@tallyhound.test")!; assert.equal(sam.role, "read_only"); assert.ok(sam.supportUntil);
+  await row.getByRole("button", { name: "End now" }).click(); await page.getByRole("dialog").getByRole("button", { name: "Remove" }).click(); await page.getByText("Sam Help (Tallyhound support) can no longer sign in.").waitFor();
+  await page.getByText(/No longer here: Alex Staff/).waitFor(); assert.equal(await page.locator("tr", { hasText: "Alex Staff" }).count(), 0);
 });

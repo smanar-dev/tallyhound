@@ -7,7 +7,7 @@ import { needsYou } from "./needs.ts";
 
 export const DIGEST_HOUR = 7;      // firm time
 export const DIGEST_UNTIL = 12;    // a timer that was down at 7 still sends, but not after midday
-export interface StaffMail { to: string; kind: "digest" | "urgent"; subject: string; body: string }
+export interface StaffMail { to: string; kind: "digest" | "urgent" | "allowance"; subject: string; body: string }
 export interface StaffMailer { staff(to: string, subject: string, body: string): Promise<void> }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -36,6 +36,12 @@ export function createNotifier({ appUrl }: { appUrl: string }) {
           const names = [...new Set(p.names)], one = names.length === 1;
           out.push({ to: p.u.email, kind: "urgent", subject: (one ? names[0] + " needs" : names.length + " clients need") + " you in Tallyhound", body: "Hi " + firstName(p.u) + ",\n\n" + (one ? names[0] + " needs a person now." : "These need a person now:\n" + list(names)) + "\n\n" + url + (one && p.cid ? "/clients/" + p.cid : "/needs-you") + "\n\nThe details are left out of this email on purpose. Sign in to see them.\n\n" + S.firm.name + ", by Tallyhound" });
         }
+      }
+      // T-95: the plan's yearly allowance. The owners are emailed when the firm reaches 80% and 100% of it, as well as seeing it in the
+      // app. It says what happens next (nothing is cut off) and carries no client's name. The timer also tells Tallyhound.
+      for (const a of S.alerts.filter((x: any) => x.kind === "fair_use" && !x.mailed)) {
+        a.mailed = true;
+        for (const u of staff.filter((x) => x.role === "owner")) out.push({ to: u.email, kind: "allowance", subject: S.firm.name + ": " + (a.level === "medium" ? "you have used this year's allowance" : "you are close to this year's allowance"), body: "Hi " + firstName(u) + ",\n\n" + String(a.text || "") + "\n\nNothing is switched off and nothing extra is charged. If your client list has grown, the next plan gives you more room: " + url + "/settings?tab=plan\n\n" + S.firm.name + ", by Tallyhound" });
       }
       // Once each working morning.
       const today = dayKey(now), h = now.getHours(), working = now.getDay() >= 1 && now.getDay() <= 5 && T.allowed(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12));

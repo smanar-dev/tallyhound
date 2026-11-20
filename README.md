@@ -47,6 +47,6 @@ The engine holds one firm's whole workspace in memory. The pipeline loads it, ru
 ## Two decisions made for speed. Review both.
 
 1. **Node, not Python.** The earlier build specification chose Python. The engine is JavaScript and already works, so the kit keeps one language and reuses it as is. Porting it would cost about two weeks you do not have.
-2. **One saved workspace per firm, not 33 tables.** For the pilot each firm's state is one JSON document in Postgres behind a row lock. It is simple and already tested. It is fine for a firm with a few hundred clients and will not scale to thousands or support cross-firm reporting. Ticket T-33 moves to proper tables after tax season starts.
+2. **One workspace per firm to the engine; rows per client in the database.** The engine loads and saves one workspace, which keeps every rule in one tested file. Underneath (T-33, T-101) a firm is a small core, one sealed row per client and audit rows, so a text from one client reads and writes that client's row, not the firm. There is still no cross-firm reporting from these tables: everything in them is sealed with each firm's own key.
 
 Read `docs/GAPS.md` (round 14: the end-to-end walk, what was fixed, what must be closed before a pilot). Then `docs/ARCHITECTURE.md`, `docs/SECURITY.md` and `docs/INTEGRATIONS.md` (round 13) for how data is stored, locked up and deleted, and how email, texts and client lists connect. Then `docs/LAUNCH_PLAN.md` and `docs/TICKETS.md`.

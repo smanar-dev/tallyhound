@@ -4,7 +4,7 @@
 
 | Thing | Where it lives | Backed up by |
 | :-- | :-- | :-- |
-| Every firm's state (clients, checklists, messages, records), sealed with that firm's key | Postgres, `firm_state` | `tools/backup.sh`, nightly, 30 days kept |
+| Every firm's state (clients, checklists, messages, records), sealed with that firm's key | Postgres, `firm_state` (the core), `firm_parts` (one row per client), `firm_audit`, `firm_index` | `tools/backup.sh`, nightly, 30 days kept |
 | Each firm's key, wrapped by the master key | Postgres, `firms.wrapped_key` | the same dump |
 | Sign-in accounts, the audit log, the arriving-message queue, usage and status | Postgres | the same dump |
 | The files clients send, sealed | The file bucket | Not backed up, on purpose. See below |

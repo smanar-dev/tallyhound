@@ -19,6 +19,7 @@ import { kmsKeyring } from "./keys.ts";
 import { createClosure } from "./closure.ts";
 import { twilioLookup } from "./lookup.ts";
 import { createAsk } from "./ask.ts";
+import { createCleanup, postgresCleanupStore } from "./twiliocleanup.ts";
 import { createPrior } from "./prior.ts";
 import { kitPrompts } from "./kit.ts";
 import { twilioVoice } from "./voice.ts";
@@ -54,7 +55,7 @@ export function runtime() {
   // Files: a private S3-compatible bucket when S3_BUCKET is set. Local disk otherwise, which production refuses.
   if (production && !env("S3_BUCKET")) throw new Error("Set S3_BUCKET: production keeps files in a private bucket, not on the server's disk");
   const bucket = env("S3_BUCKET") ? s3Bucket({ bucket: env("S3_BUCKET"), region: env("S3_REGION") || undefined, endpoint: env("S3_ENDPOINT") || undefined }) : diskBucket(env("TH_FILES_DIR") || join(ROOT, ".data/files"));
-  const store = trackFirm(kitCrypto.encryptedStore(kitPostgres.postgresStore(pool, bucket), keyring));
+  const store = trackFirm(kitCrypto.encryptedStore(kitPostgres.postgresStore(pool, bucket, { parts: true }), keyring));
   const auth = postgresAuthStore(pool), clock = () => new Date();
   // Ids and outcomes only. The kit names an unconfirmed sender when it logs one; an address never reaches the log.
   const log = (event: string, ...ids: unknown[]) => console.log(JSON.stringify({ at: new Date().toISOString(), event, ids: ids.map((v) => (typeof v === "string" && v.includes("@") ? "[address]" : v)) }));
@@ -76,16 +77,17 @@ export function runtime() {
         async locked(to, minutes) { await email.send({ from: need("TH_SIGNIN_FROM"), fromName: "Tallyhound", to, subject: "Tallyhound sign-in is locked for " + minutes + " minutes", body: "Someone entered the wrong sign-in code for your Tallyhound account several times, so sign-in is locked for " + minutes + " minutes. Nothing else has changed.\n\nIf that was you, wait and then ask for a new sign-in link. If it was not you, tell your firm's owner: someone may have reached your email." }); } }
     : { async signInLink(to, url) { console.log("\n  Sign-in link for " + to + " (development only, no email service connected):\n  " + url + "\n"); }, async locked(to, minutes) { console.log("  Sign-in locked for " + to + " for " + minutes + " minutes"); }, async staff(to, subject) { console.log("  Staff email not sent (no email service connected): " + subject.replace(/^\S+ \S+ /, "")); } };
   const signIn = createSignIn({ auth, secrets: firmSecrets(store, keyring, kitCrypto), mailer, linkSecret: need("TH_LINK_SECRET"), appUrl, clock });
-  const firms = createFirms({ app, auth, store, linkHost: env("LINK_HOST") || new URL(appUrl).host });
+  const firms = createFirms({ app, auth, store, clock, linkHost: env("LINK_HOST") || new URL(appUrl).host });
   const prepare = prepareOpts({ clamav: env("CLAMAV_HOST") ? { host: env("CLAMAV_HOST"), port: +(env("CLAMAV_PORT") || 3310) } : undefined });
   if (production && !env("CLAMAV_HOST")) log("warning_no_virus_scanner");
   // Card billing (T-81). On once STRIPE_SECRET_KEY is set, with the webhook secret and one price id per plan on offer.
   const prices: Record<string, string> = {}, pricesB: Record<string, string> = {}; for (const p of ["Solo", "Practice", "Firm", "Large"]) { const id = env("STRIPE_PRICE_" + p.toUpperCase()); if (id) prices[p] = id; const idB = env("STRIPE_PRICE_" + p.toUpperCase() + "_B"); if (idB) pricesB[p] = idB; }
   const billing = env("STRIPE_SECRET_KEY") ? createBilling({ store: postgresBillingStore(pool), app, secretKey: env("STRIPE_SECRET_KEY")!, webhookSecret: need("STRIPE_WEBHOOK_SECRET"), prices, pricesB, appUrl, clock, log }) : undefined;
   if (billing && !Object.keys(prices).length) throw new Error("Set STRIPE_PRICE_SOLO, STRIPE_PRICE_PRACTICE, STRIPE_PRICE_FIRM or STRIPE_PRICE_LARGE: card billing has no plan to sell");
-  const inbox = createInbox({ queue: postgresQueue(pool), store, app, handlers: handlers({ app, twilio, prepare }), clock, log });
-  const hooks = { store, inbox, twilioAuthToken: env("TWILIO_AUTH_TOKEN") || undefined, postmarkHook: env("POSTMARK_HOOK_PASSWORD") ? { user: env("POSTMARK_HOOK_USER") || "postmark", pass: env("POSTMARK_HOOK_PASSWORD") } : undefined };
-  return { production, appUrl, pool, store, auth, app, signIn, firms, inbox, hooks, prepare, clock, log, root: ROOT, bucket, keyring, sms, email, twilioOn: !!twilio, emailOn: !!env("POSTMARK_TOKEN"), mailer, notify: createNotifier({ appUrl }), ops, lookup, storage, billing, voiceOn: !!voice,
+  const cleanup = env("TWILIO_ACCOUNT_SID") ? createCleanup({ store: postgresCleanupStore(pool), accountSid: env("TWILIO_ACCOUNT_SID")!, authToken: need("TWILIO_AUTH_TOKEN"), clock, log, tell: env("TH_ALERT_EMAIL") ? (what) => mailer.staff(env("TH_ALERT_EMAIL")!, "Tallyhound: " + what, what) : undefined }) : undefined;   // T-108
+  const inbox = createInbox({ queue: postgresQueue(pool), store, app, handlers: handlers({ app, twilio, prepare, cleanup }), clock, log });
+  const hooks = { cleanup, store, inbox, twilioAuthToken: env("TWILIO_AUTH_TOKEN") || undefined, postmarkHook: env("POSTMARK_HOOK_PASSWORD") ? { user: env("POSTMARK_HOOK_USER") || "postmark", pass: env("POSTMARK_HOOK_PASSWORD") } : undefined };
+  return { production, appUrl, pool, store, auth, app, signIn, firms, inbox, hooks, prepare, clock, log, root: ROOT, bucket, keyring, sms, email, twilioOn: !!twilio, emailOn: !!env("POSTMARK_TOKEN"), mailer, notify: createNotifier({ appUrl }), ops, lookup, storage, billing, cleanup, voiceOn: !!voice,
     prior: ai ? createPrior({ read: (firmId, prompt, images) => forFirm(firmId, () => ai.json(prompt, { images, tier: "default" })), prompt: () => kitPrompts.priorReturn(), forms: () => createEngine().FORMS }) : undefined,   // T-46
     domains: env("POSTMARK_ACCOUNT_TOKEN") ? createDomains({ app, accountToken: env("POSTMARK_ACCOUNT_TOKEN")!, log }) : undefined,   // T-110
     // Public sign-up (TH_SIGNUP=on) and the price page. New sign-ups go on the second price list when TH_PRICE_TEST=on (T-97).

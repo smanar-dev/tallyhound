@@ -66,3 +66,8 @@ table.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 
 tr.sel td{background:var(--tint)}
 .note.good{background:#E2F3EA;color:#0C5A39}
 .notesbtn{margin:0 14px 12px;align-self:flex-start;color:inherit;opacity:.8}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chipx{border:0;background:none;font:inherit;cursor:pointer;padding:0 2px;line-height:1;color:inherit;min-width:20px;min-height:20px}
+.toastbtn{margin-left:14px;background:none;border:0;color:inherit;font:inherit;font-weight:700;text-decoration:underline;cursor:pointer;min-height:32px}
+.helpn{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--ink);color:#fff;font-size:14px;margin-right:10px}
+.helplist{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}

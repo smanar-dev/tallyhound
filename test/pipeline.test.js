@@ -215,3 +215,37 @@ test("T-50: a recorded reminder call is placed once through the voice service, w
   const m = T.S.msgs.find((x) => x.channel === "voice"); assert.ok(m.sentAt || m.providerId, "recorded as placed");
   placed.length = 0; const U = await mk(undefined), n = U.S.msgs.find((x) => x.channel === "voice"); assert.equal(placed.length, 0); assert.ok(n.failed || n.status === "failed", "marked as failed, for a person to see");
 });
+
+// ---- T-106: the model reads before the firm is locked ----
+test("T-106: the model reads a document with the firm's lock free, every prompt is asked once, and nothing is stored twice", async () => {
+  let locked = false, inLock = 0, outLock = 0;
+  const ai = model(); const json = ai.json.bind(ai); ai.json = async (p, o) => { if (locked) inLock++; else outLock++; return json(p, o); };
+  const x = await setup(ai), lock = x.store.lock.bind(x.store); x.store.lock = (id, fn) => lock(id, async (j) => { locked = true; try { return await fn(j); } finally { locked = false; } });
+  await x.app.inboundSms({ to: FIRM_NO, from: JO, body: "START", media: [], providerId: "a0" });
+  const before = ai.calls.length, files = x.store.files.size; inLock = outLock = 0;
+  const r = await x.app.inboundSms({ to: FIRM_NO, from: JO, body: "here is my w2", media: [{ bytes: Buffer.from("photo-1"), contentType: "image/jpeg" }], providerId: "a1" });
+  assert.deepEqual(r.docs, ["accepted"]); assert.equal(inLock, 0, "no model call while the firm was locked"); assert.ok(outLock >= 2, "the photo and the words were both read");
+  const prompts = ai.calls.slice(before).map((c) => c.prompt.slice(0, 40) + (c.opts.images ? c.opts.images.length : "")); assert.equal(new Set(prompts).size, prompts.length, "no prompt asked twice");
+  assert.equal(x.store.files.size, files + 1, "one stored file, not two"); const T = x.state(); assert.ok(x.store.files.has(T.S.docs.find((d) => d.engId).fileKey));
+  // The same picture twice in one message is two documents with two stored files, as before.
+  const n = x.store.files.size; await x.app.clientUpload({ firmId: "f1", clientId: T.S.clients[0].id, files: [{ bytes: Buffer.from("same"), contentType: "image/jpeg" }, { bytes: Buffer.from("same"), contentType: "image/jpeg" }], providerId: "a2" });
+  assert.equal(x.store.files.size, n + 2); const keys = x.state().S.docs.map((d) => d.fileKey).filter(Boolean); assert.equal(new Set(keys).size, keys.length);
+  // A repeat of an event already handled reads nothing and stores nothing.
+  const c2 = ai.calls.length, f2 = x.store.files.size; assert.equal((await x.app.inboundSms({ to: FIRM_NO, from: JO, body: "here is my w2", media: [{ bytes: Buffer.from("photo-1"), contentType: "image/jpeg" }], providerId: "a1" })).duplicate, true);
+  assert.equal(ai.calls.length, c2); assert.equal(x.store.files.size, f2);
+});
+test("T-106: if the firm changes between the read and the lock, the locked run decides and no file is left behind", async () => {
+  const ai = model(), x = await setup(ai); await x.app.inboundSms({ to: FIRM_NO, from: JO, body: "START", media: [], providerId: "b0" });
+  // The firm is paused while the model is reading: the locked run must hold the file, not file it.
+  const json = ai.json.bind(ai); let once = true;
+  ai.json = async (p, o) => { if (once && p.startsWith("You read photos")) { once = false; const E = createEngine(); E.load(x.store.read("f1")); E.billing().state = "paused"; x.store.firms.set("f1", E.dump()); } return json(p, o); };
+  assert.ok(x.state().canRead()); const files = x.store.files.size, docs = x.state().S.docs.length;
+  const r = await x.app.inboundSms({ to: FIRM_NO, from: JO, body: "", media: [{ bytes: Buffer.from("photo-2"), contentType: "image/jpeg" }], providerId: "b1" });
+  const T = x.state(); assert.equal(once, false); assert.equal(r.held, true); assert.equal(T.S.docs.length, docs, "nothing was filed on the strength of the earlier read"); assert.equal(T.S.held.length, 1);
+  assert.equal(x.store.files.size, files + 1, "the one stored file is the held one"); assert.ok(x.store.files.has(T.S.held[0].fileKey));
+});
+test("T-106: an email a staff member forwarded is still credited to the client when the handler runs twice", async () => {
+  const x = await setup(model());
+  const r = await x.app.inboundEmail({ to: "docs@test.example", from: "pat@test.example", body: "fwd", attachments: [{ bytes: Buffer.from("pdf-1"), contentType: "application/pdf" }], providerId: "c1", trusted: true, forwarded: { from: "jo@x.example", body: "my w2" } });
+  assert.equal(r.forwardedBy, "pat@test.example"); assert.equal(r.client, x.state().S.clients[0].id);
+});

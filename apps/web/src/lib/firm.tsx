@@ -28,7 +28,8 @@ export interface Firm {
   /** Many actions in one turn: the firm is loaded and saved once. Resolves with each result, in order. */
   actMany: (calls: [fn: string, ...args: unknown[]][]) => Promise<unknown[]>;
   reload: () => Promise<void>;
-  toast: (text: string) => void;
+  /** A short note at the foot of the screen. With an action (Undo), it stays for ten seconds. */
+  toast: (text: string, action?: { label: string; run: () => void }) => void;
 }
 const Ctx = createContext<Firm | null>(null);
 export const useFirm = (): Firm => { const f = useContext(Ctx); if (!f) throw new Error("useFirm outside FirmProvider"); return f; };
@@ -37,9 +38,10 @@ type Phase = { at: "loading" } | { at: "signin" } | { at: "error"; message: stri
 const REFRESH_MS = 30000;
 
 export function FirmProvider({ children, onSignedOut }: { children: ReactNode; onSignedOut: () => void }) {
-  const [phase, setPhase] = useState<Phase>({ at: "loading" }), [toastText, setToast] = useState<string | null>(null);
+  const [phase, setPhase] = useState<Phase>({ at: "loading" }), [toastText, setToast] = useState<string | null>(null), [undo, setUndo] = useState<{ label: string; run: () => void } | null>(null);
   const meRef = useRef<Me | null>(null), timer = useRef<number | undefined>(undefined);
-  const toast = useCallback((text: string) => { setToast(text); window.clearTimeout(timer.current); timer.current = window.setTimeout(() => setToast(null), 4500); }, []);
+  // A plain note lasts a few seconds. One with an action (Undo, T-66) stays for ten, which is how long the action is offered.
+  const toast = useCallback((text: string, action?: { label: string; run: () => void }) => { setToast(text); setUndo(action || null); window.clearTimeout(timer.current); timer.current = window.setTimeout(() => { setToast(null); setUndo(null); }, action ? 10000 : 4500); }, []);
   const reload = useCallback(async () => {
     try {
       const me = meRef.current || (meRef.current = await api.me());
@@ -69,5 +71,5 @@ export function FirmProvider({ children, onSignedOut }: { children: ReactNode; o
 
   if (phase.at === "loading" || phase.at === "signin") return <div className="main"><div className="empty" role="status">Loading your firm…</div></div>;
   if (phase.at === "error") return <div className="main"><div className="empty" role="alert"><b>Tallyhound could not load your firm.</b><br />{phase.message}<br /><button className="btn" style={{ marginTop: 12 }} onClick={() => { setPhase({ at: "loading" }); void reload(); }}>Try again</button></div></div>;
-  return <Ctx.Provider value={value}>{children}{toastText ? <div className="toast" role="status">{toastText}</div> : null}</Ctx.Provider>;
+  return <Ctx.Provider value={value}>{children}{toastText ? <div className="toast" role="status">{toastText}{undo ? <button className="toastbtn" onClick={() => { const u = undo; setToast(null); setUndo(null); window.clearTimeout(timer.current); u.run(); }}>{undo.label}</button> : null}</div> : null}</Ctx.Provider>;
 }

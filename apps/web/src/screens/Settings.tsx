@@ -8,9 +8,9 @@ import { Page } from "./Shell";
 import { Modal } from "../components/Modal";
 import { Avatar, Chip, Icon } from "../components/ui";
 import type { Row } from "../lib/select";
-import { fmtDay, fname, plural, senderState, when } from "../lib/fmt";
+import { dt, fmtDay, fname, plural, senderState, when } from "../lib/fmt";
 
-type Person = { id: string; name: string; email: string; role: "owner" | "staff" | "read_only"; twoStep: boolean; left?: boolean };
+type Person = { id: string; name: string; email: string; role: "owner" | "staff" | "read_only"; twoStep: boolean; left?: boolean; supportUntil?: string | null };
 const ROLE: Record<string, [string, string]> = { owner: ["Owner", "Everything, including settings, people and deleting documents"], staff: ["Staff", "Clients, checklists, messages, documents and handing off files"], read_only: ["Read-only", "Can look at clients and progress, and change nothing"] };
 
 function FirmTab() {
@@ -37,7 +37,8 @@ function NextSeason() {
 }
 
 function PeopleTab() {
-  const { me, toast, reload } = useFirm(), [people, setPeople] = useState<Person[] | null>(null), [add, setAdd] = useState(false), [v, setV] = useState({ name: "", email: "", role: "staff" }), [why, setWhy] = useState(""), [gone, setGone] = useState<Person | null>(null);
+  const { me, toast, reload } = useFirm(), [people, setPeople] = useState<Person[] | null>(null), [add, setAdd] = useState(false), [v, setV] = useState({ name: "", email: "", role: "staff" }), [why, setWhy] = useState(""), [gone, setGone] = useState<Person | null>(null), [sup, setSup] = useState<null | { name: string; email: string; hours: string }>(null);
+  const letIn = async () => { setWhy(""); try { await api.post("/api/support", { name: sup!.name, email: sup!.email, hours: Number(sup!.hours) }); setSup(null); toast("Done. They can look, not change anything, and it ends by itself."); await load(); await reload(); } catch (e) { setWhy((e as Error).message); } };
   const load = () => api.get<Person[]>("/api/users").then(setPeople, (e: Error) => toast(e.message));
   useEffect(() => { void load(); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   const owners = (people || []).filter((p) => p.role === "owner" && !p.left).length, former = (people || []).filter((p) => p.left);
@@ -47,11 +48,18 @@ function PeopleTab() {
   return <div className="card"><div className="hd"><h2>People</h2><span className="sp" /><button className="btn sm" onClick={() => { setWhy(""); setAdd(true); }}><Icon name="plus" small />Add a person</button></div>
     {people === null ? <div className="bd muted" role="status">Loading…</div> : <div className="tbl"><table><thead><tr><th>Name</th><th>Can do</th><th>Two-step sign-in</th><th></th></tr></thead><tbody>{people.filter((p) => !p.left).map((p) => <tr key={p.id}>
       <td><span className="row" style={{ gap: 8, flexWrap: "nowrap" }}><Avatar first={p.name.split(" ")[0]} last={p.name.split(" ")[1] || " "} small /><span><b>{p.name}</b>{p.id === me.id ? <span className="small faint"> (you)</span> : null}<br /><span className="small faint">{p.email}</span></span></span></td>
-      <td><select aria-label={"What " + p.name + " can do"} value={p.role} disabled={p.id === me.id} onChange={(ev) => void setRole(p, ev.target.value)}>{Object.keys(ROLE).map((r) => <option key={r} value={r}>{ROLE[r]![0]}</option>)}</select><div className="small muted">{ROLE[p.role]![1]}</div></td>
+      <td>{p.supportUntil ? <><Chip tone="info">Can look only</Chip><div className="small muted">Until {dt(new Date(p.supportUntil))}. Every visit is written in the audit trail.</div></> : <><select aria-label={"What " + p.name + " can do"} value={p.role} disabled={p.id === me.id} onChange={(ev) => void setRole(p, ev.target.value)}>{Object.keys(ROLE).map((r) => <option key={r} value={r}>{ROLE[r]![0]}</option>)}</select><div className="small muted">{ROLE[p.role]![1]}</div></>}</td>
       <td>{p.twoStep ? <Chip tone="good">On</Chip> : <Chip tone="warn">Set up at first sign-in</Chip>}</td>
-      <td>{p.id !== me.id ? <button className="btn sm ghost" onClick={() => setGone(p)}>Remove</button> : null}</td></tr>)}</tbody></table></div>}
+      <td>{p.id !== me.id ? <button className="btn sm ghost" onClick={() => setGone(p)}>{p.supportUntil ? "End now" : "Remove"}</button> : null}</td></tr>)}</tbody></table></div>}
     {former.length ? <div className="bd small muted">No longer here: {former.map((p) => p.name).join(", ")}. Their names stay on the firm's history. Add one again with the same email to bring them back.</div> : null}
     {owners < 2 && people ? <div className="bd"><div className="note"><Icon name="alert" small /><span>You are the only owner. Add a second owner so the firm is never locked out if you lose your phone and your recovery codes.</span></div></div> : null}
+    <div className="bd"><div className="row" style={{ gap: 12 }}><span><b>Need help from Tallyhound?</b><br /><span className="small muted">Nobody at Tallyhound can see your firm unless you let them in here. You choose who and for how long. They can look, not change anything, and it ends by itself.</span></span><span className="sp" /><button className="btn sm" onClick={() => { setWhy(""); setSup({ name: "", email: "", hours: "4" }); }}>Let support in</button></div></div>
+    {sup ? <Modal title="Let Tallyhound support in" onClose={() => setSup(null)} footer={<><button className="btn" onClick={() => setSup(null)}>Cancel</button><button className="btn pri" onClick={letIn}>Let them in</button></>}>
+      {why ? <div className="note bad" role="alert">{why}</div> : null}
+      <label className="f">Support person's name<input type="text" value={sup.name} onChange={(ev) => setSup({ ...sup, name: ev.target.value })} autoComplete="off" /></label>
+      <label className="f">Their Tallyhound email<input type="email" value={sup.email} onChange={(ev) => setSup({ ...sup, email: ev.target.value })} autoComplete="off" /></label>
+      <label className="f">For how long<select value={sup.hours} onChange={(ev) => setSup({ ...sup, hours: ev.target.value })}><option value="4">4 hours</option><option value="24">1 day</option><option value="72">3 days</option></select></label>
+      <p className="small muted">Use the name and email the support person gave you. They will see your clients and documents while this is on, so end it as soon as you are done.</p></Modal> : null}
     {add ? <Modal title="Add a person" onClose={() => setAdd(false)} footer={<><button className="btn" onClick={() => setAdd(false)}>Cancel</button><button className="btn pri" onClick={invite}>Add</button></>}>
       {why ? <div className="note bad" role="alert">{why}</div> : null}
       <label className="f">Name<input type="text" value={v.name} onChange={(ev) => setV({ ...v, name: ev.target.value })} autoComplete="off" /></label>
@@ -65,20 +73,20 @@ function PeopleTab() {
 
 // Ready-made checklists. Applying one only ever adds documents to a client's list; it never removes any.
 function ChecklistsTab() {
-  const { T, act, toast } = useFirm(), tpls: Row[] = T.templates(), forms = Object.keys(T.FORMS).filter((k) => k !== "OTHER"), [edit, setEdit] = useState<null | { id?: string; name: string; note: string; items: Set<string> }>(null), [gone, setGone] = useState<Row | null>(null), [why, setWhy] = useState("");
+  const { T, act, toast } = useFirm(), tpls: Row[] = T.templates(), forms = Object.keys(T.FORMS).filter((k) => k !== "OTHER"), [edit, setEdit] = useState<null | { id?: string; name: string; note: string; items: Set<string> }>(null), [why, setWhy] = useState("");
   const label = (k: string) => (k === "PRIOR" ? "Prior return" : fname(T, k));
+  // T-66: removed at once, with what that affects said in the note and ten seconds to take it back.
+  const removeNow = (t: Row) => { const n = using(t), copy = { name: t.name, note: t.note || "", items: [...t.items] }; void act("removeTemplate", t.id).then(() => toast("Checklist removed. " + (n ? plural(n, "client") + " got their list from it and keep every document on it." : "No client's list came from it."), { label: "Undo", run: () => void act("saveTemplate", copy).then(() => toast("Put back."), () => {}) }), () => {}); };
   const save = async () => { setWhy(""); try { const r = await act("saveTemplate", { id: edit!.id, name: edit!.name, note: edit!.note, items: [...edit!.items] }); if (!r) return setWhy("Give the checklist a name and at least one document."); setEdit(null); toast("Checklist saved."); } catch { /* said */ } };
   const using = (t: Row) => T.S.engs.filter((e: Row) => e.template === t.name).length;
   return <div className="card"><div className="hd"><h2>Ready-made checklists</h2><span className="sp" /><button className="btn sm" onClick={() => { setWhy(""); setEdit({ name: "", note: "", items: new Set() }); }}><Icon name="plus" small />New checklist</button></div>
     <div className="list">{tpls.map((t) => <div className="li" style={{ alignItems: "flex-start" }} key={t.id}><span className="ico"><Icon name="file" small /></span><div className="grow"><b>{t.name}</b><div className="small muted">{t.note || ""}</div><div className="row" style={{ gap: 4, marginTop: 6, flexWrap: "wrap" }}>{t.items.map((k: string) => <span className="chip" key={k}>{label(k)}</span>)}</div></div>
-      <button className="btn sm ghost" onClick={() => { setWhy(""); setEdit({ id: t.id, name: t.name, note: t.note || "", items: new Set(t.items) }); }}>Edit</button><button className="btn sm ghost" onClick={() => setGone(t)}>Remove</button></div>)}</div>
+      <button className="btn sm ghost" onClick={() => { setWhy(""); setEdit({ id: t.id, name: t.name, note: t.note || "", items: new Set(t.items) }); }}>Edit</button><button className="btn sm ghost" onClick={() => removeNow(t)}>Remove</button></div>)}</div>
     <div className="bd small muted" style={{ borderTop: "1px solid var(--line2)" }}>Give one to a client from the Clients list, or to many at once. It only adds documents. It never removes one.</div>
     {edit ? <Modal title={edit.id ? "Edit checklist" : "New checklist"} wide onClose={() => setEdit(null)} footer={<><button className="btn" onClick={() => setEdit(null)}>Cancel</button><button className="btn pri" onClick={save}>Save</button></>}>
       {why ? <div className="note bad" role="alert">{why}</div> : null}
       <div className="grid g2"><label className="f">Name<input type="text" maxLength={40} value={edit.name} onChange={(ev) => setEdit({ ...edit, name: ev.target.value })} /></label><label className="f">Who it is for (optional)<input type="text" maxLength={80} value={edit.note} onChange={(ev) => setEdit({ ...edit, note: ev.target.value })} /></label></div>
       <fieldset className="pickforms"><legend className="small b">Documents on it</legend>{forms.map((k) => <label key={k} className="row small"><input type="checkbox" checked={edit.items.has(k)} onChange={() => { const n = new Set(edit.items); if (n.has(k)) n.delete(k); else n.add(k); setEdit({ ...edit, items: n }); }} />{label(k)}</label>)}</fieldset></Modal> : null}
-    {gone ? <Modal title={"Remove “" + gone.name + "”?"} onClose={() => setGone(null)} footer={<><button className="btn" onClick={() => setGone(null)}>Cancel</button><button className="btn bad" onClick={() => { const t = gone; setGone(null); void act("removeTemplate", t.id).then(() => toast("Checklist removed. Clients who already have it keep their documents."), () => {}); }}>Remove</button></>}>
-      <p>{using(gone) ? plural(using(gone), "client") + " got their list from it. They keep every document on it." : "No client's list came from it."} It will no longer be offered when you choose a checklist.</p></Modal> : null}
   </div>;
 }
 
@@ -107,6 +115,15 @@ function WordingTab() {
     </div></div>;
 }
 
+// T-63: days the firm is closed, beyond Sundays and federal holidays.
+function ClosedDays() {
+  const { T, act, toast } = useFirm(), days: string[] = T.S.firm.closedDays || [], [d, setD] = useState("");
+  const save = (list: string[], said: string) => void act("setClosedDays", list).then((r) => toast(r ? String(r) + "." : said), () => {});
+  const nice = (k: string) => new Date(k + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "long", day: "numeric", year: "numeric" });
+  return <div className="col" style={{ gap: 8, borderTop: "1px solid var(--line2)", paddingTop: 14 }}><h4>Days your firm is closed</h4><p className="small muted">Nothing automated is sent on Sundays, federal holidays, or the days you add here. A message due on a closed day goes on the next open one.</p>
+    {days.length ? <div className="chips">{days.map((k) => <span className="chip plain" key={k}>{nice(k)} <button className="chipx" aria-label={"Remove " + nice(k)} onClick={() => save(days.filter((x) => x !== k), "Removed.")}>×</button></span>)}</div> : <p className="small faint">None added.</p>}
+    <div className="row"><label className="f" style={{ margin: 0 }}>Add a closed day<input type="date" value={d} onChange={(ev) => setD(ev.target.value)} /></label><button className="btn" disabled={!d} onClick={() => { save([...days, d], "Added."); setD(""); }}>Add</button></div></div>;
+}
 // When messages may go.
 function HoursTab() {
   const { T, act, toast } = useFirm(), f = T.S.firm, [v, setV] = useState({ quietStart: f.quietStart, quietEnd: f.quietEnd, newDayHour: f.newDayHour }), days = [0, 2, 5, 9, 14];
@@ -114,6 +131,7 @@ function HoursTab() {
   return <div className="card pad col"><h2>Sending hours and reminders</h2><p className="small muted">Judged on each client's own clock when you have their state or time zone, otherwise on your firm's ({T.ZNAME[Object.keys(T.ZNAME).find((z) => T.ZNAME[z] === f.tz) || ""] || f.tz || "Central"} time).</p>
     <div className="grid g3">{sel("quietStart", "Earliest a message goes", [8, 9, 10])}{sel("quietEnd", "Latest a message goes", [17, 18, 19, 20])}{sel("newDayHour", "When a message waits for the next day, it goes at", [9, 10, 11, 12])}</div>
     <div><button className="btn pri" onClick={() => void act("setSchedule", v).then(() => toast("Saved."), () => {})}>Save</button></div>
+    <ClosedDays />
     <h4 style={{ marginTop: 8 }}>The rhythm when a client goes quiet</h4>
     <ol className="rhythm">{days.map((d, i) => <li key={d}><b>Day {d}</b><span>{["First request", "Reminder", "Reminder", "Reminder", "Final note"][i]}</span></li>)}</ol>
     <p className="small muted">Never on Sundays or federal holidays. At most one automated message a day, unless the client replied in the last {f.liveMin} minutes. After the final note Tallyhound asks you to call, if that is switched on under The Hound, Rules it follows.</p></div>;

@@ -250,7 +250,15 @@
   /* ---------- time rules ---------- */
   function allowed(d) {
     const f = S.firm, h = d.getHours() + d.getMinutes() / 60;
-    return h >= f.quietStart && h < f.quietEnd && d.getDay() !== 0 && !isHoliday(d);
+    return h >= f.quietStart && h < f.quietEnd && d.getDay() !== 0 && !isHoliday(d) && !(f.closedDays || []).includes(dayKey(d));
+  }
+  /* T-63: days the firm itself is closed, beyond Sundays and federal holidays. Nothing automated is sent on them. Owner only.
+     Given as dates (YYYY-MM-DD). Past dates are dropped; at most 60 are kept. */
+  function setClosedDays(list) {
+    if (!may("owner")) return "Only an owner can do this"; const out = [], today = dayKey(S.now), bad = [];
+    for (const raw of Array.isArray(list) ? list : []) { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(raw).trim()); if (!m) { if (String(raw).trim()) bad.push(String(raw).trim().slice(0, 20)); continue; } const d = new Date(+m[1], +m[2] - 1, +m[3]); if (d.getMonth() !== +m[2] - 1) { bad.push(m[0]); continue; } const k = dayKey(d); if (k >= today && !out.includes(k)) out.push(k); }
+    if (bad.length) return "Not a date: " + bad[0]; if (out.length > 60) return "At most 60 closed days";
+    S.firm.closedDays = out.sort(); audit("settings.closed", out.length ? out.length + " closed day" + (out.length === 1 ? "" : "s") : "No closed days"); S.engs.forEach((e) => { if (e.next && !allowedC(e.next, client(e.clientId))) e.next = nextAllowedC(e.next, client(e.clientId)); }); return null;
   }
   function nextAllowed(d) {
     if (allowed(d)) return new Date(d);
@@ -451,6 +459,20 @@
     } else if (c.email) { e.status = "in_progress"; e.emailOnly = true; e.next = nextAllowed(S.now); }
     else { e.status = "awaiting_consent"; setStuck(e, "no_consent"); }
     return null;
+  }
+  /* T-123: starting many clients at once. The first 50 go at the next allowed moment; each further 50 go half an hour after the
+     ones before, so a firm that starts 500 is not answering 500 replies in the same ten minutes and the carriers are not asked to
+     carry them all at once. Invitations to text (which go by email) are not held back. */
+  const PACE_BATCH = 50, PACE_GAP_MIN = 30;
+  function startMany(eids) {
+    const out = { started: 0, capped: 0, refused: [], paced: 0, lastAt: null }; let slot = 0;
+    for (const eid of Array.isArray(eids) ? eids : []) {
+      const e = eng(eid); if (!e) continue; const r = start(eid); if (r) { if (/free trial/.test(r)) out.capped++; else if (!out.refused.includes(r)) out.refused.push(r); continue; }
+      out.started++; if (e.status !== "in_progress" || !e.next) continue;
+      const wave = Math.floor(slot++ / PACE_BATCH); if (wave > 0) { e.next = nextAllowedC(new Date(S.now.getTime() + wave * PACE_GAP_MIN * 60000), client(e.clientId)); out.paced++; out.lastAt = e.next; }
+    }
+    if (out.paced) audit("outreach.paced", out.started + " started. The first " + PACE_BATCH + " go now, the rest in groups of " + PACE_BATCH + " every " + PACE_GAP_MIN + " minutes");
+    return out;
   }
   const GAPS = [2, 3, 4, 5];
   function step(e) {
@@ -834,6 +856,8 @@
     hlog(e, "read", c.first + (via ? " sent " : " emailed ") + (specs || []).length + " attachment" + ((specs || []).length === 1 ? "" : "s") + " and a note", ai && ai.summary ? ai.summary : "", ai ? "Claude" : "Rules");
     if (!["closed", "opted_out"].includes(e.status)) noticeTopics(e, c, body || "", ai && ai.topics, ai && ai.new_document);
     if (e.takeover) alertx(e, "medium", "takeover_msg", c.first + " " + c.last + " emailed while " + e.takeover.by + " has the conversation.", "tm" + m.id);
+    // T-121: a link and no file. Tallyhound never opens links: it says so and asks for the file itself, as it does for a text.
+    if (!via && !(specs || []).length && LINKRE.test(body || "") && !e.takeover && e.status !== "closed") { m.understood = "Sent a link instead of a file"; hlog(e, "read", c.first + " emailed a link", "Tallyhound never opens links. It asked for the photo or PDF itself."); S.hold = null; send(e, "M30K", {}); return { m, docs: [], link: true }; }
     const docs = (specs || []).map((sp) => inboundDoc(cid, sp, via || "email", { parent: m }));
     if (e.status === "closed") { S.hold = null; send(e, "M12", {}); if (!docs.length) addTask({ kind: "question", reason: "Email after close", engId: e.id, msgId: m.id }); return { m, docs }; }
     const later = [], none = []; let question = false;
@@ -956,6 +980,14 @@
   }
 
   /* ---------- staff actions ---------- */
+  /* T-66: undo for a document discarded by mistake. Only the discard itself is undone: the document goes back to waiting for a
+     person, exactly as it was. Allowed for ten minutes, while Tallyhound certainly still holds the copy. */
+  function undiscard(tid) {
+    const t = S.tasks.find((x) => x.id === tid), d = t && t.docId ? S.docs.find((x) => x.id === t.docId) : null; if (!t || !d || t.decision !== "discard" || d.state !== "discarded") return "Nothing to undo";
+    if (!may()) return "Not allowed"; if (S.now - new Date(t.decidedAt) > 10 * 60000 || !hasContent(d)) return "Too late to undo. Ask the client to send it again";
+    d.state = t.was || "in_review"; d.reasons = (d.reasons || []).filter((r) => !/^Discarded by /.test(r)); t.status = "open"; t.decision = null; t.by = null; t.decidedAt = null;
+    const e = eng(t.engId); if (e) timeline(e, "Discard undone", S.user.name); audit("review.undiscard", t.reason || ""); return null;
+  }
   function decideTask(tid, decision, p) {
     const t = S.tasks.find((x) => x.id === tid); if (!t || t.status !== "open") return "Already decided";
     const e = eng(t.engId), c = e ? client(e.clientId) : null, d = t.docId ? S.docs.find((x) => x.id === t.docId) : null, it = t.itemId ? S.items.find((x) => x.id === t.itemId) : null;
@@ -975,7 +1007,7 @@
         const code = { wrong_year: "M7", illegible: "M8", missing_page: "M9" }[p && p.reason] || "M8";
         const item = itemsOf(e.id).find((i) => i.form === d.form && OPEN.includes(i.state)) || { form: d.form, payer: d.payer };
         sendSoon(e, code, { item, doc_year: d.year }); timeline(e, "Re-asked: " + (p && p.reason), S.user.name);
-      } else if (decision === "discard") { d.state = "discarded"; d.reasons.push("Discarded by " + S.user.name + ": " + ((p && p.reason) || "not needed")); timeline(e, "Document discarded", S.user.name); }
+      } else if (decision === "discard") { t.was = d.state; d.state = "discarded"; d.reasons.push("Discarded by " + S.user.name + ": " + ((p && p.reason) || "not needed")); timeline(e, "Document discarded", S.user.name); }
     }
     if (t.kind === "says_none" && it) {
       if (decision === "waive") { it.state = "waived"; it.note = "Client does not have it"; timeline(e, "Waived " + FORMS[it.form].plain, S.user.name); if (e.stuck === "client_says_none") unstick(e); if (checkComplete(e)) finished(e); else if (!e.next) e.next = nextAllowed(S.now); }
@@ -1004,7 +1036,7 @@
   }
   function setItem(iid, state, note) {
     const it = S.items.find((x) => x.id === iid), e = eng(it.engId); it.state = state; if (note) it.note = note;
-    timeline(e, (state === "waived" ? "Waived " : state === "expected" ? "Restored " : "Removed ") + (it.custom || FORMS[it.form].plain) + (note ? ": " + note : ""), S.user.name); audit("item." + state, client(e.clientId).last);
+    timeline(e, (state === "waived" ? "Waived " : state === "removed" ? "Removed " : state === "received" ? "Marked received: " : "Restored ") + (it.custom || FORMS[it.form].plain) + (note ? ": " + note : ""), S.user.name); audit("item." + state, client(e.clientId).last);
   }
   function addItem(eid, form, payer, custom) {
     const e = eng(eid); S.items.push({ id: id("i"), engId: eid, form, payer: payer || null, custom: custom || null, state: "expected", source: "staff" });
@@ -1037,6 +1069,17 @@
   function strip(d, why) { if (!hasContent(d)) return false;
     // With real storage connected, a copy is never let go on schedule until the firm's own copy is confirmed in place.
     if (["delivered", "not needed"].includes(why) && S.firm.delivery && S.firm.delivery.physical && S.firm.delivery.provider !== "Download" && (d.hold === "storage" || (why === "delivered" && !(d.master && d.master.place === "final")))) return false; forget(d); d.image = null; d.pages = null; d.read = null; d.elements = []; d.versions = []; d.findings = []; d.recipientName = ""; d.fileKey = null; d.stripped = new Date(S.now); d.strippedWhy = why; return true; }
+  /* T-115: once a month, one line in the audit trail that a firm can show an examiner: how many copies Tallyhound deleted on
+     schedule last month, how many it holds now, and how old the oldest is. Written on the first sweep of each month, about the
+     month before. Counts only. */
+  const monthKey = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+  function deletionEvidence() {
+    const now = monthKey(S.now); if (S.firm.evidenceFor === now) return; const first = !S.firm.evidenceFor; S.firm.evidenceFor = now; if (first) return;   // nothing to report about a month before the firm began
+    const prev = new Date(S.now.getFullYear(), S.now.getMonth() - 1, 1), pk = monthKey(prev), n = (S.firm.deletedBy || {})[pk] || 0, held = S.docs.filter(hasContent), oldest = held.length ? Math.floor(Math.max(...held.map((d) => (S.now - d.at) / DAY))) : 0;
+    audit("retention.month", MONTHS[prev.getMonth()] + " " + prev.getFullYear() + ": " + n + " cop" + (n === 1 ? "y" : "ies") + " deleted on schedule. Held now: " + held.length + (held.length ? ", the oldest for " + oldest + " day" + (oldest === 1 ? "" : "s") : "") + ". Keep-for limits: " + retain().afterDelivery + " days after hand-off, " + retain().max + " at most", "Tallyhound");
+    Object.keys(S.firm.deletedBy || {}).forEach((k) => { if (k < monthKey(new Date(S.now.getFullYear() - 2, S.now.getMonth(), 1))) delete S.firm.deletedBy[k]; });
+  }
+  const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   function retentionSweep() {
     const r = retain(); let n = 0;
     S.docs.forEach((d) => { if (!hasContent(d)) return; const age = (S.now - d.at) / DAY;
@@ -1047,7 +1090,8 @@
     if (old.length) { old.forEach((y) => { const d = y.docId && S.docs.find((x) => x.id === y.docId); if (d) { d.state = "discarded"; n += strip(d, "unknown sender") ? 1 : 0; } }); S.tray = S.tray.filter((y) => !old.includes(y)); audit("retention.unmatched", old.length + " messages from unknown senders deleted", "Tallyhound"); }
     // files that arrived during a pause and were never claimed: the same outer limit applies
     if (S.held && S.held.length) { const gone = S.held.filter((h) => (S.now - new Date(h.at)) / DAY >= r.max); if (gone.length) { gone.forEach((h) => { if (h.fileKey) (S.purgeFiles = S.purgeFiles || []).push(h.fileKey); }); S.held = S.held.filter((h) => !gone.includes(h)); n += gone.length; } }
-    if (n) audit("retention.sweep", n + " document" + (n === 1 ? "" : "s") + " deleted from Tallyhound", "Tallyhound");
+    if (n) { audit("retention.sweep", n + " document" + (n === 1 ? "" : "s") + " deleted from Tallyhound", "Tallyhound"); const mk = monthKey(S.now); S.firm.deletedBy = S.firm.deletedBy || {}; S.firm.deletedBy[mk] = (S.firm.deletedBy[mk] || 0) + n; }
+    deletionEvidence();
     // deliver by itself when the firm asked for that and a real storage folder is connected
     if (S.firm.delivery && S.firm.delivery.auto === "on" && S.firm.delivery.provider && S.firm.delivery.provider !== "Download" && access().ok) S.engs.forEach((e) => { if ((["each", "arrival"].includes(S.firm.delivery.when) ? e.status !== "not_started" : ["complete", "closed"].includes(e.status)) && !e.purged && S.docs.some((d) => d.engId === e.id && d.state === "accepted" && !d.deliveredAt && hasContent(d))) deliver(e.id, "Tallyhound"); });
     return n;
@@ -1471,7 +1515,7 @@
     if (e.status === "complete" && open) { e.status = "in_progress"; e.completedAt = null; e.step = 0; if (!e.next) e.next = nextAllowed(S.now); timeline(e, "Reopened: a document is outstanding again"); }
     else if (["in_progress", "stuck"].includes(e.status) && !open && any) { if (checkComplete(e)) finished(e); }
   }
-  window.TH = { setCallOk, plans, quoteFor, areaZone, zoneFor, addContact, removeContact, planEnded, setLine, isLandline, RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
+  window.TH = { undiscard, setClosedDays, startMany, deletionEvidence, setCallOk, plans, quoteFor, areaZone, zoneFor, addContact, removeContact, planEnded, setLine, isLandline, RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
     dump, load, blank, setNow, setUser, linkFor, linkLive, LINK_DAYS, consentFromPage, declineTexts, stopEmail, unsubscribeLink, CONSENT_WORDING,
     get S() { return S; }, FORMS, TPL, TPL_USE, QUESTIONS, STUCK, DAY, HOUR, MIN,
     client, eng, engOf, itemsOf, openItems, progress, fill, outputCheck, channelFor, allowed, nextAllowed, live, nextItem,

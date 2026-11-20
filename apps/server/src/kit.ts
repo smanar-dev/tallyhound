@@ -67,7 +67,7 @@ export const kitCrypto = require("../../../packages/core/crypto.js") as {
 export const kitMemory = require("../../../packages/core/memory.js") as {
   memoryStore(): any; fakeSender(): Sender & { sent: any[] }; fakeAI(fn: (p: string, o: unknown) => unknown): any; memoryFiles(): any;
 };
-export const kitPostgres = require("../../../packages/adapters/postgres.js") as { postgresStore(pool: unknown, bucket: unknown): any; memoryBucket(): any };
+export const kitPostgres = require("../../../packages/adapters/postgres.js") as { postgresStore(pool: unknown, bucket: unknown, opt?: { parts?: boolean }): any; memoryBucket(): any };
 export interface TwilioAdapter extends Sender { inbound(p: Record<string, string>, opt?: { keep?: boolean }): Promise<{ to: string; from: string; body: string; media: { bytes: Buffer; contentType: string }[]; providerId: string | null }>; forget(p: Record<string, string>): Promise<number> }
 export const kitTwilio = require("../../../packages/adapters/twilio.js") as { twilio(o: Record<string, unknown>): TwilioAdapter; verifySignature(t: string, url: string, p: Record<string, string>, sig: string): boolean; voiceForward(n: string): string };
 export const kitEmailOut = require("../../../packages/adapters/email-out.js") as { postmark(o: Record<string, unknown>): Sender; bounceEvent(j: unknown): any };

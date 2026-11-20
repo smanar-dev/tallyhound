@@ -53,7 +53,7 @@ The honest limit: the document images themselves contain Social Security numbers
 * Sessions expire. Stored as a hash, so a database reader cannot use them.
 * Every view of a document, every delivery, every deletion, every setting change and every sign-in is written to an append-only log the application cannot edit. The firm can read it on the Security and data page.
 * Clients have no account. Their upload link is signed, expires, and opens only their own checklist. It never shows a document back to them.
-* Tallyhound staff have no standing access to firm data. Support access is designed as: requested, approved by the firm, time-limited, logged (T-107, not built).
+* Tallyhound staff have no standing access to firm data. Support access (T-107) exists only when a firm's owner grants it under Settings, People: one named person, look-only, for 4 hours, 1 day or 3 days. It ends by itself, and the grant, each visit and the end are written in the firm's audit trail.
 
 ## What comes in from outside
 
@@ -68,7 +68,7 @@ The honest limit: the document images themselves contain Social Security numbers
 | Company | What they see | Note |
 |---|---|---|
 | Cloud host | Sealed data only | United States region |
-| Twilio | Mobile numbers, message text, photos in transit | Their retention of message bodies and media can be shortened; T-108 sets it to the minimum |
+| Twilio | Mobile numbers, message text, photos in transit | T-108: once our sealed copy is saved we delete their copy of each picture and blank the words of each text, in and out; what fails is retried by the timer. Not yet run against the live account |
 | Mail service | Email addresses, message text, attachments in transit | |
 | Model provider (Anthropic) | Document images and message text, to read them | No training on the data and the shortest retention on offer must be in the contract. **Needs counsel** |
 | Stripe | The firm's billing contact and card | Never client data |

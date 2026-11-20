@@ -41,6 +41,8 @@ scene("the checklist can be changed the ways a preparer needs, and every change 
   await row.getByText(/Not needed · .*Account closed in 2025/).waitFor(); T = await W.state(firmId); assert.equal(T.itemsOf(ana.id).find((i: { payer: string }) => i.payer === "First Farmers Bank").state, "waived");
   await row.getByRole("button", { name: /^Actions for/ }).click(); await page.getByRole("button", { name: "Restore" }).click(); await row.getByText(/Not requested yet/).waitFor();
   await row.getByRole("button", { name: /^Actions for/ }).click(); await page.getByRole("button", { name: "Remove from checklist" }).click(); await row.waitFor({ state: "detached" });
+  // T-66: no question first, and ten seconds to take it back.
+  await page.getByRole("button", { name: "Undo" }).click(); await page.getByText("Put back.").waitFor(); await row.waitFor(); await row.getByRole("button", { name: /^Actions for/ }).click(); await page.getByRole("button", { name: "Remove from checklist" }).click(); await row.waitFor({ state: "detached" });
   // Confirm, then start from the card beside the checklist.
   await page.getByRole("button", { name: "Confirm checklist" }).first().click(); await page.getByRole("button", { name: "Start collecting" }).waitFor(); await page.getByRole("button", { name: "Start collecting" }).click(); await page.getByText(/^Collecting started/).waitFor();
   T = await W.state(firmId); assert.equal(engOf(T, "Ana").confirmed, true); assert.notEqual(engOf(T, "Ana").status, "not_started");

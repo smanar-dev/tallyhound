@@ -9,6 +9,8 @@
 // email:  { send({ from, to, subject, body }) -> providerId }
 // ai:     { json(prompt, { images?, tier }) -> object }   may be null: the engine then uses rules and standard wording
 // clock:  () -> Date
+const { AsyncLocalStorage } = require("node:async_hooks");
+const { createHash } = require("node:crypto");
 const { createEngine } = require("../engine");
 const prompts = require("./prompts");
 const precheck = require("./precheck");
@@ -53,21 +55,49 @@ function ownerOf(T, list, spec, fallback) {
 const UNKNOWN_FILES_PER_DAY = 20;
 function createApp({ store, sms, email, ai, clock, log, files, voice }) {
   const now = clock || (() => new Date());
-  const say = log || (() => {});
-  const ask = async (prompt, opts) => { if (!ai) return null; try { const r = await ai.json(prompt, opts || {}); return r && typeof r === "object" ? r : null; } catch (err) { say("ai_error", String(err && err.message || err)); return null; } };
+  // T-106: the model reads before the firm is locked. An inbound event is first run against a throwaway copy of the firm with no lock held.
+  // Nothing from that run is kept except what the model answered (by the exact prompt and pictures) and where each file was stored.
+  // Then the same code runs under the lock and finds its answers waiting. If the firm changed in between, the prompt differs, the answer
+  // is not found, and the model is asked under the lock as before: slower, never wrong.
+  const ahead = new AsyncLocalStorage();
+  const say = (...a) => { const m = ahead.getStore(); if (log && !(m && m.record)) log(...a); };
+  const call = async (prompt, opts) => { if (!ai) return null; try { const r = await ai.json(prompt, opts || {}); return r && typeof r === "object" ? r : null; } catch (err) { if (log) log("ai_error", String(err && err.message || err)); return null; } };
+  const sum = (parts) => { const h = createHash("sha256"); for (const p of parts) { h.update(Buffer.isBuffer(p) || p instanceof Uint8Array ? p : JSON.stringify(p === undefined ? null : p)); h.update("|"); } return h.digest("hex"); };
+  const ask = async (prompt, opts) => {
+    const m = ahead.getStore(); if (!m || !ai) return call(prompt, opts);
+    const k = sum([prompt, (opts && opts.tier) || ""].concat((opts && opts.images) || [])); if (m.answers.has(k)) return m.answers.get(k);
+    const r = await call(prompt, opts); m.answers.set(k, r); return r;
+  };
+  const put = async (firmId, bytes, contentType) => {
+    const m = ahead.getStore(); if (!m) return store.putFile(firmId, bytes, contentType);
+    const k = sum([firmId, contentType || "", bytes]), L = m.files.get(k) || []; m.files.set(k, L);
+    if (m.record) { const key = await store.putFile(firmId, bytes, contentType); L.push(key); return key; }
+    return L.length ? L.shift() : store.putFile(firmId, bytes, contentType);
+  };
+  const open = (json) => { const T = createEngine(); T.load(json); T.setNow(T.S.firm.iana ? wallTime(now(), T.S.firm.iana) : now()); T.S.firm.hound.aiLive = !!ai && T.S.firm.hound.aiWrite !== false; if (T.S.firm.delivery) T.S.firm.delivery.physical = !!files; return T; };
+  async function readFirst(firmId, fn, scope) {
+    if (!store.readState) return withFirm(firmId, fn, scope);
+    const memo = { record: true, answers: new Map(), files: new Map() };
+    try { const json = scope && store.readScope ? await store.readScope(firmId, scope) : await store.readState(firmId); const first = () => ahead.run(memo, async () => { const T0 = open(json); await fn(T0); await write(T0); }); if (json) await (store.forFirm ? store.forFirm(firmId, first) : first()); } catch (err) { /* the locked run below decides what happens */ }
+    memo.record = false;
+    try { return await ahead.run(memo, () => withFirm(firmId, fn, scope)); }
+    // A file stored by the first run that the locked run did not take is in no saved state, so it can go at once.
+    finally { if (store.deleteFile) for (const L of memo.files.values()) for (const key of L) await store.deleteFile(firmId, key).catch(() => {}); }
+  }
 
   // Load one firm, run fn against its engine, let the model write, send what is ready, save. One firm at a time.
   // Send once. A message is claimed and saved before the provider is called, and the provider's answer is saved after.
   // If we crash or the save fails in between, the message is left claimed with no answer: it is flagged for a person
   // and never sent again automatically. A late text is a nuisance; a duplicate text to a client is worse.
   const CLAIM_STALE_MS = 2 * 60 * 1000;
-  async function withFirm(firmId, fn) {
+  // scope (T-101): { mobile, email, emails, clientIds } when the event is about known clients only. The store then loads the core and
+  // those clients' parts instead of the whole firm. Leave it out for anything that looks across clients (the timer, staff actions).
+  async function withFirm(firmId, fn, scope) {
     let result, jobs = [], fjobs = [];
-    await store.lock(firmId, async (json) => {
+    const lock = (f) => (scope && store.lockScope ? store.lockScope(firmId, scope, f) : store.lock(firmId, f));
+    await lock(async (json) => {
       if (!json) throw new Error("Unknown firm " + firmId);
-      const T = createEngine(); T.load(json); T.setNow(T.S.firm.iana ? wallTime(now(), T.S.firm.iana) : now());
-      T.S.firm.hound.aiLive = !!ai && T.S.firm.hound.aiWrite !== false;
-      if (T.S.firm.delivery) T.S.firm.delivery.physical = !!files;   // tells the engine a real storage connection exists, so it waits for the firm's copy before letting go of ours
+      const T = open(json);   // also tells the engine whether a real storage connection exists, so it waits for the firm's copy before letting go of ours
       await dropFiles(T, firmId);
       result = await fn(T);
       await write(T); sweep(T, firmId); jobs = claim(T); fjobs = fileJobs(T);
@@ -88,7 +118,7 @@ function createApp({ store, sms, email, ai, clock, log, files, voice }) {
         done.push({ id: j.id, providerId: j.channel === "voice" ? await voice.call({ from: j.from, to: j.to, say: j.body, idempotencyKey: j.id }) : j.channel === "text" ? await sms.send({ from: j.from, to: j.to, body: j.body, idempotencyKey: j.id }) : await email.send({ from: j.from, replyTo: j.replyTo, fromName: j.fromName, to: j.to, subject: j.subject, body: j.body, idempotencyKey: j.id, unsubscribe: j.unsubscribe }) }); }
       catch (err) { done.push({ id: j.id, error: String(err && err.message || err), code: err && err.code }); }
     }
-    await store.lock(firmId, async (json) => {
+    await lock(async (json) => {
       const T = createEngine(); T.load(json); T.setNow(T.S.firm.iana ? wallTime(now(), T.S.firm.iana) : now());
       for (const r of fdone) {
         const d = T.S.docs.find((x) => x.id === r.docId); if (!d) continue; const m = (d.master = d.master || { at: new Date(T.S.now) }); delete m.busy;
@@ -165,7 +195,7 @@ function createApp({ store, sms, email, ai, clock, log, files, voice }) {
   // Send every outgoing message that is approved for delivery and has not gone out yet.
   // Read one file with the model and turn the answer into what the engine expects.
   async function readFile(T, c, firmId, file) {
-    const key = await store.putFile(firmId, file.bytes, file.contentType);
+    const key = await put(firmId, file.bytes, file.contentType);
     // A PDF made by a payroll company or a broker carries its own text. Code reads the form number and year from it, with no model involved.
     const pre = file.text ? precheck.fromText(file.text, T.FORMS) : null;
     const r = await ask(prompts.readDocument(T), { images: file.pages || [file.bytes], tier: "default" });
@@ -202,7 +232,7 @@ function createApp({ store, sms, email, ai, clock, log, files, voice }) {
       const k = kindOf(f); if (k === "skip") continue; if (k !== "ok") { bad = bad || k; continue; }
       if (f.pages && f.pages.length > 1) {
         const total = f.pages.length, pages = f.pages.slice(0, MAX_PAGES);
-        const key = await store.putFile(firmId, f.bytes, f.contentType), r = await ask(prompts.readBundle(T), { images: pages, tier: "default" });
+        const key = await put(firmId, f.bytes, f.contentType), r = await ask(prompts.readBundle(T), { images: pages, tier: "default" });
         const groups = r && Array.isArray(r.documents) ? r.documents.filter((d) => d && typeof d === "object") : [];
         if (!groups.length) { specs.push({ form: "OTHER", year: 0, payer: "", fileKey: key, read: { legible: 0.9, conf: 0, note: "Could not be read automatically", missing: [] } }); continue; }
         const used = new Set();
@@ -214,7 +244,7 @@ function createApp({ store, sms, email, ai, clock, log, files, voice }) {
   // While a firm is paused or its trial has ended, nothing runs: files are stored and held, the model is not called.
   async function hold(T, firmId, c, files, channel) {
     T.S.held = T.S.held || [];
-    for (const f of files || []) { if (kindOf(f) === "skip") continue; T.S.held.push({ clientId: c ? c.id : null, fileKey: await store.putFile(firmId, f.bytes, f.contentType), contentType: f.contentType, channel, at: new Date(T.S.now) }); }
+    for (const f of files || []) { if (kindOf(f) === "skip") continue; T.S.held.push({ clientId: c ? c.id : null, fileKey: await put(firmId, f.bytes, f.contentType), contentType: f.contentType, channel, at: new Date(T.S.now) }); }
   }
 
   return {
@@ -223,7 +253,7 @@ function createApp({ store, sms, email, ai, clock, log, files, voice }) {
     // A text arrives at one of our numbers. media: [{ bytes, contentType }]
     async inboundSms({ to, from, body, media, providerId }) {
       const firmId = await store.firmIdByNumber(digits(to)); if (!firmId) { say("unknown_number", to); return { handled: false }; }
-      return withFirm(firmId, async (T) => {
+      return readFirst(firmId, async (T) => {
         if (seen(T, providerId)) return { handled: true, duplicate: true };
         const ten = digits(from).slice(-10), shown = ten.length === 10 ? "(" + ten.slice(0, 3) + ") " + ten.slice(3, 6) + "-" + ten.slice(6) : String(from || "");
         const own = T.S.clients.filter((x) => x.mobile && digits(x.mobile) === ten), second = own.length ? [] : T.S.clients.filter((x) => also(x, "mobile", ten));
@@ -241,7 +271,7 @@ function createApp({ store, sms, email, ai, clock, log, files, voice }) {
         if (bad && !specs.length && c) { T.inboundUnusable(c.id, bad, "text"); out.unusable = bad; }
         if (text) { const r = e ? await ask(prompts.readText(T, e, text), { tier: "quick" }) : null; out.intent = T.inboundText(c ? c.id : null, text, r, shown); }
         return out;
-      });
+      }, { mobile: digits(from) });
     },
     // An email arrives at a firm's Tallyhound address. attachments: [{ bytes, contentType, pages?, inline?, width?, height? }]
     // trusted: false when the receiving mail server could not confirm the sender (see adapters/email-inbound.js). Such mail is never
@@ -250,7 +280,9 @@ function createApp({ store, sms, email, ai, clock, log, files, voice }) {
     async inboundEmail({ to, from, body, attachments, providerId, trusted, forwarded }) {
       to = addr(to); from = addr(from);
       const firmId = await store.firmIdByInbox(String(to || "").toLowerCase()); if (!firmId) { say("unknown_inbox", to); return { handled: false }; }
-      return withFirm(firmId, async (T) => {
+      const from0 = from, body0 = body;
+      return readFirst(firmId, async (T) => {
+        let from = from0, body = body0;   // this runs twice (T-106), so it must not change what it was given
         if (seen(T, providerId)) return { handled: true, duplicate: true };
         const staffAddr = [T.S.firm.email].concat(T.S.users.map((u) => u.email)).filter(Boolean).map((x) => String(x).toLowerCase());
         let byStaff = null;
@@ -278,12 +310,12 @@ function createApp({ store, sms, email, ai, clock, log, files, voice }) {
         res.docs.forEach((d, i) => { filed(d, specs[i]); });
         if (byStaff && e) T.timeline ? T.timeline(e, "Email forwarded in by " + byStaff) : null;
         return { handled: true, client: c.id, understood: res.m.understood, docs: res.docs.map((d) => d.state), forwardedBy: byStaff || undefined, routed: others.length ? others : undefined };
-      });
+      }, { emails: [from0, forwarded && forwarded.from ? addr(forwarded.from) : null] });
     },
     // The client sends files from their own upload page (no login: the page is reached by their private link).
     // Checked exactly like a text or an email from them, and they get one reply. Held, not read, while the firm has no access.
     async clientUpload({ firmId, clientId, files, providerId }) {
-      return withFirm(firmId, async (T) => {
+      return readFirst(firmId, async (T) => {
         if (seen(T, providerId)) return { handled: true, duplicate: true };
         const c = T.client(clientId); if (!c) return { handled: false };
         if (!T.canRead()) { await hold(T, firmId, c, files, "portal"); return { handled: true, client: c.id, held: true, docs: [] }; }
@@ -292,10 +324,10 @@ function createApp({ store, sms, email, ai, clock, log, files, voice }) {
         else for (const spec of specs) { const d = T.inboundDoc(c.id, spec, "portal"); if (d) { filed(d, spec); out.docs.push(d.state); } }
         if (bad && !specs.length) { T.inboundUnusable(c.id, bad, "portal"); out.unusable = bad; }
         return out;
-      });
+      }, { clientIds: [clientId] });
     },
     // A staff member adds a document they received some other way. It is checked like any other and the client is not messaged.
-    async staffUpload(firmId, userId, clientId, file) { return withFirm(firmId, async (T) => { if (!T.setUser(userId)) throw new Error("Unknown user"); const c = T.client(clientId); if (!c) throw new Error("Unknown client"); const k = kindOf(file); if (k !== "ok") return { error: k }; const { specs } = await readAll(T, c, firmId, [file]); return { docs: specs.map((sp) => { const d = T.staffDoc(c.id, sp); if (d) filed(d, sp); return d && d.state; }) }; }); },
+    async staffUpload(firmId, userId, clientId, file) { return readFirst(firmId, async (T) => { if (!T.setUser(userId)) throw new Error("Unknown user"); const c = T.client(clientId); if (!c) throw new Error("Unknown client"); const k = kindOf(file); if (k !== "ok") return { error: k }; const { specs } = await readAll(T, c, firmId, [file]); return { docs: specs.map((sp) => { const d = T.staffDoc(c.id, sp); if (d) filed(d, sp); return d && d.state; }) }; }, { clientIds: [clientId] }); },
     // Files that arrived while the firm was paused. Call after a plan is chosen or a pause ends. The reader gets the stored bytes back.
     async readHeld(firmId, load) { load = load || (async (key) => { const f = await store.getFile(firmId, key); return f ? f.bytes : null; }); return withFirm(firmId, async (T) => { if (!T.canRead()) return 0; const L = T.S.held || []; T.S.held = []; let n = 0; for (const h of L) { const c = h.clientId && T.client(h.clientId); if (!c) { (T.S.purgeFiles = T.S.purgeFiles || []).push(h.fileKey); continue; } const bytes = await load(h.fileKey); if (!bytes) continue; const { specs } = await readAll(T, c, firmId, [{ bytes, contentType: h.contentType }]); for (const sp of specs) { const d = T.inboundDoc(c.id, sp, h.channel); if (d) filed(d, sp); n++; } (T.S.purgeFiles = T.S.purgeFiles || []).push(h.fileKey); } return n; }); },
     // Run on a timer, every few minutes, for every firm: sends whatever is due.

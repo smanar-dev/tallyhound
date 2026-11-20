@@ -93,7 +93,8 @@ create table sessions (
 -- grant usage on sequence audit_log_id_seq to tallyhound_app;
 
 -- ---------------------------------------------------------------------------------------------------------------------
--- Target layout for firms over about 500 clients (T-101). Not used by the code yet.
+-- T-101 is built differently from the sketch below: see db/migrations/015_firm_parts.sql (one sealed row per client, audit rows,
+-- a hashed contact index). The sketch is kept only as a record of the earlier idea.
 -- Messages and documents become rows so that one inbound text reads and writes kilobytes, not megabytes.
 -- create table messages  (id text primary key, firm_id text not null, engagement_id text not null, at timestamptz not null, sealed bytea not null);
 -- create table documents (id text primary key, firm_id text not null, engagement_id text, state text not null, file_key text, at timestamptz not null, delivered_at timestamptz, stripped_at timestamptz, sealed bytea);

@@ -35,7 +35,7 @@ export function Side({ open, onClose }: { open: boolean; onClose: () => void }) 
         {item("/", "Home", "home")}{item("/clients", "Clients", "users")}{item("/needs-you", "Needs you", "review", waiting)}
         {item("/hound", <>The Hound <small style={{ fontWeight: 500, opacity: 0.6, marginLeft: 4 }}>your assistant</small></>, "spark")}
         <div className="navsec">More</div>
-        {item("/add-clients", "Add clients", "upload")}{item("/messages", "All messages", "inbox", s.tray.length)}{item("/progress", "Progress", "chart")}
+        {item("/add-clients", "Add clients", "upload")}{item("/messages", "All messages", "inbox", s.tray.length)}{item("/progress", "Progress", "chart")}{item("/help", "How it works", "eye")}
         {can("owner") ? item("/settings", "Settings", "gear") : null}
       </nav>
       <div className="grow" />

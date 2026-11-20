@@ -6,6 +6,7 @@ import type { AuthStore, User } from "./authstore.ts";
 
 export class FirmError extends Error { status: number; constructor(message: string, status = 400) { super(message); this.status = status; } }
 const ROLES: Role[] = ["owner", "staff", "read_only"];
+export const SUPPORT_HOURS = [4, 24, 72];
 const ZONE_OF: Record<string, string> = { "America/New_York": "Eastern", "America/Chicago": "Central", "America/Denver": "Mountain", "America/Phoenix": "Arizona", "America/Los_Angeles": "Pacific", "America/Anchorage": "Alaska", "Pacific/Honolulu": "Hawaii" };
 const email = (v: string) => { const e = String(v || "").trim().toLowerCase(); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) throw new FirmError("That is not an email address: " + v); return e; };
 const clean = (v: string) => String(v || "").replace(/[<>]/g, "").replace(/\s+/g, " ").trim().slice(0, 80);
@@ -18,7 +19,8 @@ export interface NewFirm { name: string; sender?: string; phone?: string; inbox:
 const LETTERS = "abcdefghijkmnpqrstuvwxyz";
 export const slugOf = (name: string) => name.toLowerCase().replace(/&/g, " and ").replace(/\b(cpas?|llc|llp|pllc|pc|inc|and|the|co|company|associates|group)\b/g, " ").replace(/[^a-z]/g, "").slice(0, 24) || "firm";
 
-export function createFirms({ app, auth, linkHost, store }: { app: App; auth: AuthStore; linkHost?: string; store?: { firmIdByNumber(n: string): Promise<string | null>; setNumber(id: string, n: string | null): Promise<void> } }) {
+export function createFirms({ app, auth, linkHost, store, clock }: { app: App; auth: AuthStore; linkHost?: string; clock?: () => Date; store?: { firmIdByNumber(n: string): Promise<string | null>; setNumber(id: string, n: string | null): Promise<void> } }) {
+  const now = clock || (() => new Date());
   async function owners(firmId: string) { return (await auth.usersOfFirm(firmId)).filter((u) => u.role === "owner" && !u.leftAt); }
   return {
     // T-05. New firms start unchecked (T-116): nothing sends and nothing is read until the firm check is passed and setVerified is called.
@@ -68,11 +70,35 @@ export function createFirms({ app, auth, linkHost, store }: { app: App; auth: Au
       catch (err) { if (back) await auth.deactivateUser(u.id, new Date()); else await auth.removeUser(u.id); throw err; }
       await auth.audit(firmId, by.id, "user.added", u.id + " as " + u.role); return u.id;
     },
+    // T-107: an owner lets one named Tallyhound support person look, not change, for a set time. It ends by itself.
+    async addSupport(firmId: string, by: User, o: { email: string; name: string; hours: number }): Promise<{ id: string; until: Date }> {
+      if (by.role !== "owner") throw new FirmError("Only an owner can let support in", 403);
+      if (!SUPPORT_HOURS.includes(o.hours)) throw new FirmError("Choose 4 hours, 1 day or 3 days");
+      const name = clean(o.name).replace(/\s*\(Tallyhound support\)$/, ""); if (!name) throw new FirmError("Enter the support person's name");
+      const u = { id: newId("u_"), name: name + " (Tallyhound support)", email: email(o.email), role: "read_only" as Role }, until = new Date(now().getTime() + o.hours * 3600000);
+      const old = await auth.userByEmail(u.email), back = !!old && old.firmId === firmId && (!!old.leftAt || !!old.supportUntil); if (old && !back) throw new FirmError("That email address already has an account");
+      if (back) { u.id = old!.id; if (old!.leftAt) await auth.reactivateUser(u.id, { role: u.role, name: u.name }); }
+      else try { await auth.createUser({ ...u, firmId }); } catch (err) { throw new FirmError((err as Error).message); }
+      await auth.setSupport(u.id, until); await auth.setNotes(u.id, { morningOff: true, urgentOff: true });   // support gets no notes about the firm's clients
+      await app.staff(firmId, by.id, (T: Engine) => { T.S.users = T.S.users.filter((y: { id: string }) => y.id !== u.id); T.S.users.push({ ...engineUser(u), support: true }); T.audit("support.granted", u.name + " can look, not change, for " + (o.hours < 24 ? o.hours + " hours" : o.hours === 24 ? "1 day" : o.hours / 24 + " days"), by.name); });
+      await auth.audit(firmId, by.id, "support.granted", u.id + " for " + o.hours + "h"); return { id: u.id, until };
+    },
+    /** The timer's part: support people whose time is up are switched off, and the firm's history says so. */
+    async expireSupport(): Promise<number> {
+      const due = await auth.supportDue(now());
+      for (const u of due) {
+        await auth.deactivateUser(u.id, now()); await auth.setSupport(u.id, null);
+        await app.withFirm(u.firmId, (T: Engine) => { T.S.users = T.S.users.filter((y: { id: string }) => y.id !== u.id); T.audit("support.ended", u.name + "'s access ended on time", "Tallyhound"); });
+        await auth.audit(u.firmId, "tallyhound", "support.ended", u.id);
+      }
+      return due.length;
+    },
     // A role change signs the person out everywhere, so the old role cannot linger in an open tab.
     async setRole(firmId: string, by: User, userId: string, role: Role): Promise<void> {
       if (by.role !== "owner") throw new FirmError("Only an owner can change roles", 403);
       if (!ROLES.includes(role)) throw new FirmError("Role must be owner, staff or read_only");
       const u = await auth.userById(userId); if (!u || u.firmId !== firmId || u.leftAt) throw new FirmError("No such person", 404);
+      if (u.supportUntil) throw new FirmError("Support can only look. Remove them and add them as a person if they join the firm.");
       if (u.role === "owner" && role !== "owner" && (await owners(firmId)).length < 2) throw new FirmError("A firm needs at least one owner. Make someone else an owner first.");
       await app.staff(firmId, by.id, (T: Engine) => { const x = T.S.users.find((y: { id: string }) => y.id === userId); if (x) x.role = role; T.audit("user.role", u.name + " is now " + role, by.name); });
       await auth.setRole(userId, role); await auth.deleteSessionsOf(userId); await auth.audit(firmId, by.id, "user.role", userId + " to " + role);
@@ -83,6 +109,7 @@ export function createFirms({ app, auth, linkHost, store }: { app: App; auth: Au
       const u = await auth.userById(userId); if (!u || u.firmId !== firmId || u.leftAt) throw new FirmError("No such person", 404);
       if (u.role === "owner" && (await owners(firmId)).length < 2) throw new FirmError("A firm needs at least one owner. Make someone else an owner first.");
       await auth.deactivateUser(userId, new Date());   // sign-in goes first: from this line the person cannot get in
+      if (u.supportUntil) await auth.setSupport(userId, null);
       let moved = 0;
       await app.staff(firmId, by.id, (T: Engine) => { T.S.users = T.S.users.filter((y: { id: string }) => y.id !== userId); for (const c of T.S.clients) if (c.preparer === userId) { c.preparer = by.id; moved++; } T.audit("user.removed", u.name + " removed" + (moved ? ". " + moved + (moved === 1 ? " client" : " clients") + " passed to " + by.name : ""), by.name); });
       await auth.audit(firmId, by.id, "user.removed", userId); return { moved };

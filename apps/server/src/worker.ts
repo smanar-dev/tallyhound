@@ -7,7 +7,7 @@ import type { Notifier, StaffMail, StaffMailer } from "./notify.ts";
 import { snapshot, type FirmSnapshot, type OpsStore, type Watch } from "./ops.ts";
 
 export interface WorkerStatus { lastPass: Date | null; firms: number; failed: number; lastError: string | null }
-export function createWorker({ app, auth, clock, log, inbox, notify, mailer, ops, watch, lines, billing }: { notify?: Notifier; mailer?: StaffMailer; ops?: OpsStore; watch?: Watch; lines?: (firmId: string) => Promise<number>; billing?: { check(firmId: string, b: { state: string; pausedUntil: Date | null }): Promise<void> }; app: App; auth: AuthStore; clock: () => Date; log?: (event: string, ...ids: unknown[]) => void; inbox?: { drain(): Promise<number>; sweep(): Promise<number>; counts(): Promise<{ waiting: number; dead: number }> } }) {
+export function createWorker({ app, auth, clock, log, inbox, notify, mailer, ops, watch, lines, billing, cleanup, expireSupport }: { notify?: Notifier; mailer?: StaffMailer; ops?: OpsStore; watch?: Watch; lines?: (firmId: string) => Promise<number>; cleanup?: { sweep(force?: boolean): Promise<number> }; expireSupport?: () => Promise<number>; billing?: { check(firmId: string, b: { state: string; pausedUntil: Date | null }): Promise<void> }; app: App; auth: AuthStore; clock: () => Date; log?: (event: string, ...ids: unknown[]) => void; inbox?: { drain(): Promise<number>; sweep(): Promise<number>; counts(): Promise<{ waiting: number; dead: number }> } }) {
   const status: WorkerStatus = { lastPass: null, firms: 0, failed: 0, lastError: null }; const failedBefore = new Map<string, number>(); let deadBefore = 0, running = false, timer: NodeJS.Timeout | null = null, quick: NodeJS.Timeout | null = null;
   async function pass(): Promise<WorkerStatus> {
     if (running) return status; running = true;
@@ -20,6 +20,7 @@ export function createWorker({ app, auth, clock, log, inbox, notify, mailer, ops
         const people = notify && mailer ? await auth.usersOfFirm(id) : []; let mails: StaffMail[] = [], snap: FirmSnapshot | null = null, bill: { state: string; pausedUntil: Date | null } | null = null;
         await app.withFirm(id, (T: Engine) => { T.tick(); mails = notify && mailer ? notify.collect(T, people) : []; snap = ops ? snapshot(T) : null; const b = T.billing(); bill = { state: b.state, pausedUntil: b.pausedUntil ? new Date(b.pausedUntil) : null }; return true; });
         if (billing && bill) { try { await billing.check(id, bill); } catch (err) { if (log) log("billing_check_failed", id, (err as Error).message); } }
+        if (watch && mails.some((m) => m.kind === "allowance")) await watch.tell("allowance", id, "A firm has reached its plan's allowance. Offer the next plan");   // T-95: the internal list
         for (const m of mails) { try { await mailer!.staff(m.to, m.subject, m.body); if (log) log("staff_mail", id, m.kind); } catch (err) { if (log) log("staff_mail_failed", id, m.kind, (err as Error).message); } }
         if (ops) { await ops.noteTick(id, clock(), null, snap); const f = (snap as FirmSnapshot | null)?.failed || 0; if (watch && f > (failedBefore.get(id) || 0)) await watch.tell("sends", id, f + (f === 1 ? " message" : " messages") + " failed to send for a firm today"); failedBefore.set(id, f); }
       } catch (err) {
@@ -27,6 +28,8 @@ export function createWorker({ app, auth, clock, log, inbox, notify, mailer, ops
         if (ops) await ops.noteTick(id, clock(), status.lastError, null).catch(() => {}); if (watch) await watch.tell("tick", id, "The timer could not finish a firm's turn");
       } }
       if (inbox && watch) { const dead = (await inbox.counts()).dead; if (dead > deadBefore) await watch.tell("webhook", "", (dead - deadBefore) + " arriving " + (dead - deadBefore === 1 ? "message" : "messages") + " could not be processed after every retry"); deadBefore = dead; }
+      if (expireSupport) await expireSupport().catch((err: Error) => { if (log) log("support_expire_failed", err.message); });   // T-107
+      if (cleanup) await cleanup.sweep().catch((err: Error) => { if (log) log("twilio_cleanup_failed", err.message); });   // T-108
       if (ops) await ops.sweep(clock());
       await auth.sweep(clock()); Object.assign(status, { lastPass: clock(), firms: ids.length, failed });
     } catch (err) { status.lastError = (err as Error).message; if (log) log("worker_failed", status.lastError); }

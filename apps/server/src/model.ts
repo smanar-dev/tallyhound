@@ -23,7 +23,9 @@ const turn = new AsyncLocalStorage<{ firmId: string }>();
 /** Runs a model call on a firm's behalf outside the pipeline, so it is counted against that firm's cap and recorded under its name. */
 export function forFirm<R>(firmId: string, fn: () => Promise<R>): Promise<R> { return turn.run({ firmId }, fn); }
 export function trackFirm<S extends KitStore>(store: S): S {
-  return Object.assign(Object.create(store), { lock: (id: string, fn: (json: string | null) => Promise<string>) => turn.run({ firmId: id }, () => store.lock(id, fn)) }) as S;
+  return Object.assign(Object.create(store), { lock: (id: string, fn: (json: string | null) => Promise<string>) => turn.run({ firmId: id }, () => store.lock(id, fn)),
+    // T-106: the pipeline's read before the lock is on the same firm's behalf, counted the same way.
+    forFirm: <R>(id: string, fn: () => Promise<R>) => turn.run({ firmId: id }, fn) }) as S;
 }
 
 export class ModelError extends Error { code: string; constructor(code: string, message: string, options?: ErrorOptions) { super(message, options); this.code = code; } }
