@@ -19,6 +19,7 @@ import { kmsKeyring } from "./keys.ts";
 import { createClosure } from "./closure.ts";
 import { twilioLookup } from "./lookup.ts";
 import { createAsk } from "./ask.ts";
+import { createStorage, postgresStorageStore } from "./storage.ts";
 import { createEngine, wallTime } from "./kit.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -55,7 +56,9 @@ export function runtime() {
   const email = env("POSTMARK_TOKEN") ? kitEmailOut.postmark({ serverToken: env("POSTMARK_TOKEN") }) : notConnected("Email");
   const ops = postgresOpsStore(pool);
   const ai = env("ANTHROPIC_API_KEY") ? claude({ apiKey: env("ANTHROPIC_API_KEY"), dailyCapUsd: +(env("TH_MODEL_DAILY_CAP_USD") || 10), log, record: (c) => { void ops.modelCall(c).catch((err: Error) => log("model_record_failed", c.firmId, err.message)); } }) : null;   // no key: rules and standard wording
-  const app = createApp({ store, sms, email, ai, clock, log });
+  // A firm's own Google Drive (T-111). On once GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set; until then finished files are handed off as a zip.
+  const storage = env("GOOGLE_CLIENT_ID") ? createStorage({ store: postgresStorageStore(pool), secrets: firmSecrets(store, keyring, kitCrypto), clientId: env("GOOGLE_CLIENT_ID")!, clientSecret: need("GOOGLE_CLIENT_SECRET"), appUrl, stateSecret: need("TH_LINK_SECRET"), clock, log }) : undefined;
+  const app = createApp({ store, sms, email, ai, clock, log, files: storage ? storage.files : undefined });
   if (production && !env("POSTMARK_TOKEN")) throw new Error("Set POSTMARK_TOKEN: without it nobody can be sent a sign-in link");
   const mailer: Mailer & StaffMailer = env("POSTMARK_TOKEN")
     ? { async signInLink(to, url) { await email.send({ from: need("TH_SIGNIN_FROM"), fromName: "Tallyhound", to, subject: "Your Tallyhound sign-in link", body: "Open this link to sign in to Tallyhound. It works once and expires in 15 minutes.\n\n" + url + "\n\nIf you did not ask for this, ignore this email." }); },
@@ -68,7 +71,7 @@ export function runtime() {
   if (production && !env("CLAMAV_HOST")) log("warning_no_virus_scanner");
   const inbox = createInbox({ queue: postgresQueue(pool), store, app, handlers: handlers({ app, twilio, prepare }), clock, log });
   const hooks = { store, inbox, twilioAuthToken: env("TWILIO_AUTH_TOKEN") || undefined, postmarkHook: env("POSTMARK_HOOK_PASSWORD") ? { user: env("POSTMARK_HOOK_USER") || "postmark", pass: env("POSTMARK_HOOK_PASSWORD") } : undefined };
-  return { production, appUrl, pool, store, auth, app, signIn, firms, inbox, hooks, prepare, clock, log, root: ROOT, mailer, notify: createNotifier({ appUrl }), ops, lookup,
+  return { production, appUrl, pool, store, auth, app, signIn, firms, inbox, hooks, prepare, clock, log, root: ROOT, mailer, notify: createNotifier({ appUrl }), ops, lookup, storage,
     ask: ai ? createAsk({ model: ai, readState: (id) => store.readState(id), createEngine, wallNow: (T) => (T.S.firm.iana ? wallTime(clock(), T.S.firm.iana) : clock()) }) : undefined, closure: createClosure({ store, auth, markers: bucket, clock, log }),
     // TH_ALERT_EMAIL: where the developer is told that sends are failing, a firm's turn failed, or an arriving message was lost.
     watch: env("TH_ALERT_EMAIL") ? createWatch({ to: env("TH_ALERT_EMAIL")!, send: (to, subject, body) => mailer.staff(to, subject, body), clock, log }) : undefined };

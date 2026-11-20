@@ -14,7 +14,9 @@ scene("the Hound shows what it did and why, what is coming up, and lets an owner
   const rows = page.locator(".card .list .li"); assert.equal(await rows.count(), Math.min(80, T.S.hlog.length)); assert.ok((await page.locator(".card .list").textContent())!.includes("Why: "));
   await page.getByRole("button", { name: "Messages", exact: true }).click(); await page.waitForFunction((n) => document.querySelectorAll(".card .list .li").length === n, T.S.hlog.filter((h: { kind: string }) => h.kind === "message").length);
   // Coming up: Sam's invitation reminder is planned; put it off a day.
-  await page.getByRole("tab", { name: "Coming up" }).click(); await page.getByRole("heading", { name: "Next 3 days" }).waitFor(); const sam = page.locator(".li", { hasText: "Sam Lee" }); await sam.waitFor(); assert.match(text(await sam.textContent()), /Invitation reminder by email/);
+  await page.getByRole("tab", { name: "Coming up" }).click(); await page.getByRole("heading", { name: "Next 3 days" }).waitFor(); const sam = page.locator(".li", { hasText: "Sam Lee" });
+  // This step has failed now and then under load without a readable cause, so when it does, say what the page and the clocks held.
+  try { await sam.waitFor({ timeout: 15000 }); } catch (err) { const E: Engine = await W.state(firmId), se = E.S.engs.find((e: { clientId: string }) => E.client(e.clientId).first === "Sam"); throw new Error("Sam's reminder is not under Coming up. Page: " + page.url() + " " + text(await page.locator("body").textContent({ timeout: 3000 }).catch(() => "(no body)")).slice(0, 500) + " | server now " + new Date(E.S.now).toISOString() + " | Sam next " + (se.next ? new Date(se.next).toISOString() : "none") + " status " + se.status + " | browser now " + (await page.evaluate(() => new Date().toISOString())), { cause: err }); } assert.match(text(await sam.textContent()), /Invitation reminder by email/);
   const was = +new Date(T.S.engs.find((e: { clientId: string }) => T.client(e.clientId).first === "Sam").next); await sam.getByRole("button", { name: "Put off a day" }).click(); await page.getByText("Put off by a day.").waitFor();
   T = await W.state(firmId); assert.ok(+new Date(T.S.engs.find((e: { clientId: string }) => T.client(e.clientId).first === "Sam").next) > was);
   // Rules it follows: switch to Copilot. It is saved, audited, and the next message is a draft.
@@ -108,4 +110,19 @@ scene("Your plan: an owner sees the plan and what is used, pauses for the quiet 
   // Paused: every screen but Settings is the lock page, and the plan page offers the way back.
   await page.getByRole("button", { name: "Resume now" }).first().waitFor(); T = await W.state(firmId); assert.equal(T.billing().state, "paused"); assert.equal(T.access().ok, false);
   await page.goto(W.url + "/settings?tab=plan"); await page.getByText(/^Paused until /).waitFor(); await page.getByRole("button", { name: "Resume now" }).click(); await page.getByText("Resumed. Collecting carries on.").waitFor(); assert.equal((await W.state(firmId)).billing().state, "active");
+});
+
+scene("Finished files: an owner connects Google Drive by a visit to Google and back, sets the folder, and disconnects; a refusal at Google is said in words", async (W) => {
+  const { firmId } = await busyFirm(W), page = await W.signIn("pat1@firm1.test"); let answer = "error=access_denied";
+  // Google's own pages are stood in for, and never visited: the address Tallyhound would send the owner to is read, and the owner
+  // comes straight back with the state they left with.
+  await page.route("**/api/storage/google/start", async (route) => { const r = await route.fetch({ maxRedirects: 0 }), u = new URL(r.headers().location!); assert.equal(u.host, "accounts.google.com"); assert.equal(u.searchParams.get("scope"), "https://www.googleapis.com/auth/drive.file"); return route.fulfill({ status: 302, headers: { location: W.url + "/api/storage/google/callback?" + answer + "&state=" + encodeURIComponent(u.searchParams.get("state")!) } }); });
+  await page.goto(W.url + "/settings?tab=files"); await page.getByRole("heading", { name: "Where finished files go" }).waitFor(); await page.getByText("In use").waitFor();
+  await page.getByRole("link", { name: "Connect Google Drive" }).click(); await page.getByRole("alert").getByText("Google was not given permission, so nothing was connected.").waitFor(); assert.equal((await W.state(firmId)).S.firm.delivery.provider, "Download");
+  answer = "code=good-code"; await page.getByRole("link", { name: "Connect Google Drive" }).click(); await page.getByRole("status").getByText(/Google Drive is connected/).waitFor();
+  let T: Engine = await W.state(firmId); assert.equal(T.S.firm.delivery.provider, "Google Drive"); assert.equal(T.S.firm.delivery.auto, "on");
+  await page.getByLabel("Folder").fill("Tax intake"); await page.getByLabel("When").selectOption("each"); await page.getByRole("button", { name: "Save", exact: true }).click(); await page.getByText("Saved.", { exact: true }).waitFor();
+  T = await W.state(firmId); assert.equal(T.S.firm.delivery.folder, "Tax intake"); assert.equal(T.S.firm.delivery.when, "each"); assert.match(text(await page.locator(".note.info").textContent()), /Tax intake \/ \d{4} \/ /);
+  await page.getByRole("button", { name: "Disconnect" }).click(); await page.getByRole("dialog").getByRole("button", { name: "Disconnect" }).click(); await page.getByText("Disconnected. Finished files are handed off as a zip.").waitFor();
+  assert.equal((await W.state(firmId)).S.firm.delivery.provider, "Download"); await page.getByRole("link", { name: "Connect Google Drive" }).waitFor();
 });

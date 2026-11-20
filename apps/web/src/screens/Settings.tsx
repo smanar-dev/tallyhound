@@ -108,6 +108,36 @@ function HoursTab() {
     <p className="small muted">Never on Sundays or federal holidays. At most one automated message a day, unless the client replied in the last {f.liveMin} minutes. After the final note Tallyhound asks you to call, if that is switched on under The Hound, Rules it follows.</p></div>;
 }
 
+// Where finished files go: the firm's own Google Drive, or a zip a preparer downloads. Connecting is a visit to Google and back;
+// this page only starts it and shows the result.
+const PROBLEM: Record<string, string> = { state: "That did not come from a sign-in you started here. Try connecting again.", declined: "Google was not given permission, so nothing was connected.", token: "Google did not finish the connection. Try again.", scope: "Tallyhound needs the permission to add files. Connect again and leave that box ticked.", unavailable: "Connecting Google Drive is not switched on for Tallyhound yet. Finished files are handed off as a zip.", error: "That did not work. Try again." };
+function FilesTab() {
+  const { T, act, toast, reload } = useFirm(), dl = T.S.firm.delivery, [params, setParams] = useSearchParams(), [st, setSt] = useState<{ available: boolean; connected: boolean; since: string | null } | null>(null), [off, setOff] = useState(false);
+  const [v, setV] = useState({ folder: dl.folder as string, when: (dl.when || "arrival") as string, auto: dl.auto === "on" }), connected = !!st?.connected && dl.provider === "Google Drive", keep = T.retain().afterDelivery;
+  const load = () => api.get<{ available: boolean; connected: boolean; since: string | null }>("/api/storage").then(setSt, () => setSt({ available: false, connected: false, since: null }));
+  useEffect(() => { void load(); }, []);
+  const problem = params.get("problem"), justNow = params.get("connected") === "1";
+  const save = async () => { try { const r = await act("setDelivery", v); if (r) return toast(String(r) + "."); toast("Saved."); } catch { /* said */ } };
+  const disconnect = async () => { setOff(false); try { await api.post("/api/storage/disconnect", {}); toast("Disconnected. Finished files are handed off as a zip."); setParams({ tab: "files" }); await load(); await reload(); } catch (e) { toast((e as Error).message); } };
+  const c0: Row = T.S.clients[0] || { first: "Alex", last: "Sample" }, e0: Row = T.S.engs[0] || { year: T.S.firm.taxYear || 2026 };
+  return <div className="col" style={{ gap: 16 }}>
+    <div className="card pad col"><h2>Where finished files go</h2><p className="small muted">Accepted documents are filed into your own storage with consistent names. Your storage holds the permanent copy. Tallyhound deletes its own copy {keep ? keep + " days after that" : "right after that"} (change this under Security and data).</p>
+      {problem ? <div className="note bad" role="alert">{PROBLEM[problem] || PROBLEM.error}</div> : null}
+      {justNow && connected ? <div className="note good" role="status"><Icon name="check" small /><span>Google Drive is connected. New documents are filed there from now on.</span></div> : null}
+      <div className="card pad row" style={{ boxShadow: "none" }}><div className="grow"><b>Google Drive</b><div className="small muted">{connected ? "Connected" + (st?.since ? " since " + new Date(st.since).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "") + ". Tallyhound can add files to the folder below and can see nothing else in your drive." : "You sign in to Google and allow Tallyhound to add files. It can only see the folders and files it makes itself."}</div></div>
+        {st === null ? <span className="small muted" role="status">Checking…</span> : connected ? <><Chip tone="good">Connected</Chip><button className="btn sm" onClick={() => setOff(true)}>Disconnect</button></> : st.available ? <a className="btn pri sm" href="/api/storage/google/start">Connect Google Drive</a> : <Chip>Not available yet</Chip>}</div>
+      <div className="card pad row" style={{ boxShadow: "none" }}><div className="grow"><b>Download as a zip</b><div className="small muted">No connection. A preparer hands off each client's finished files from the client's page and saves the zip. Nothing is deleted from Tallyhound until someone has taken it.</div></div>{connected ? null : <Chip tone="good">In use</Chip>}</div>
+      <p className="small muted">OneDrive, Dropbox and SharePoint come after launch.</p></div>
+    <div className="card pad col"><h3>Folder and timing</h3>
+      <label className="f">Folder<input type="text" value={v.folder} maxLength={80} onChange={(ev) => setV({ ...v, folder: ev.target.value })} /></label>
+      <div className="note info"><Icon name="file" small /><span>Example: {v.folder || "Client Tax Docs"} / {e0.year} / {c0.last}, {c0.first} / {T.fileName(c0, e0, { form: "W2", payer: "Acme Logistics" })}</span></div>
+      <label className="row"><span className="toggle"><input type="checkbox" checked={v.auto && connected} disabled={!connected} onChange={(ev) => setV({ ...v, auto: ev.target.checked })} /><span /></span>File documents by itself{connected ? "" : " (needs connected storage)"}</label>
+      <label className="f">When<select value={v.when} disabled={!connected} onChange={(ev) => setV({ ...v, when: ev.target.value })}><option value="arrival">The original the moment it arrives, renamed once checked (recommended)</option><option value="each">Each document, once it is accepted</option><option value="complete">All together, when a client is complete</option></select></label>
+      <div><button className="btn pri" onClick={save}>Save</button></div></div>
+    {off ? <Modal title="Disconnect Google Drive?" onClose={() => setOff(false)} footer={<><button className="btn" onClick={() => setOff(false)}>Cancel</button><button className="btn bad" onClick={disconnect}>Disconnect</button></>}><p>Tallyhound gives up its permission at Google and stops filing. Files already in your drive stay where they are. Finished files are handed off as a zip until you connect again.</p></Modal> : null}
+  </div>;
+}
+
 // The firm's plan: what it is on, how much of it is used, and a pause for the quiet months. Card billing is not built, so a plan
 // is started or changed by Tallyhound and invoiced; nothing on this page takes money.
 function PlanTab() {
@@ -156,13 +186,12 @@ function SecurityTab() {
   </div>;
 }
 
-const TABS: [string, string][] = [["firm", "Your firm"], ["people", "People"], ["checklists", "Checklists"], ["wording", "Message wording"], ["hours", "Sending hours"], ["plan", "Your plan"], ["security", "Security and data"]];
+const TABS: [string, string][] = [["firm", "Your firm"], ["people", "People"], ["checklists", "Checklists"], ["wording", "Message wording"], ["hours", "Sending hours"], ["files", "Finished files"], ["plan", "Your plan"], ["security", "Security and data"]];
 export function Settings() {
   const { can } = useFirm(), [params, setParams] = useSearchParams(), tab = TABS.some((t) => t[0] === params.get("tab")) ? params.get("tab")! : "firm";
   if (!can("owner")) return <Page title="Settings"><div className="card pad"><p>Settings are for owners. Ask an owner at your firm if something here needs changing.</p></div></Page>;
   return <Page title="Settings">
     <div className="tabs" role="tablist">{TABS.map((t) => <button key={t[0]} role="tab" aria-selected={tab === t[0]} className={tab === t[0] ? "on" : ""} onClick={() => setParams(t[0] === "firm" ? {} : { tab: t[0] })}>{t[1]}</button>)}</div>
-    {tab === "firm" ? <FirmTab /> : tab === "people" ? <PeopleTab /> : tab === "checklists" ? <ChecklistsTab /> : tab === "wording" ? <WordingTab /> : tab === "hours" ? <HoursTab /> : tab === "plan" ? <PlanTab /> : <SecurityTab />}
-    <p className="small muted">Still to come here: connecting your firm's own storage. Until then, hand off finished files from each client's page.</p>
+    {tab === "firm" ? <FirmTab /> : tab === "people" ? <PeopleTab /> : tab === "checklists" ? <ChecklistsTab /> : tab === "wording" ? <WordingTab /> : tab === "hours" ? <HoursTab /> : tab === "files" ? <FilesTab /> : tab === "plan" ? <PlanTab /> : <SecurityTab />}
   </Page>;
 }

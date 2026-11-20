@@ -93,6 +93,13 @@ export const ACTIONS: Record<string, Rule> = {
   // the emergency stop is lifted by an owner
   resumeAll: { role: "owner", n: 0, run: (T) => { T.S.firm.stopped = false; T.audit("emergency.resume", "Messages resumed"); return true; } },
   // The firm's own details. The Tallyhound address is not editable: mail to it is how the firm is found.
+  // Where finished files go. The folder, whether filing happens by itself, and when. Which storage is connected is not set here:
+  // that changes only when an owner signs in to it (apps/server/src/storage.ts), so the state can never claim a connection that does not exist.
+  setDelivery: { role: "owner", n: 1, run: (T, [v]) => {
+    const dl = T.S.firm.delivery, x = (v && typeof v === "object" ? v : {}) as Record<string, unknown>, connected = !!dl.provider && dl.provider !== "Download";
+    const folder = String(x.folder ?? dl.folder).replace(/[<>:"|?*\\]/g, "").replace(/[^\x20-\uffff]/g, "").split("/").map((p) => p.trim()).filter((p) => p && p !== "." && p !== "..").join("/").slice(0, 80); if (!folder) return "Give the folder a name";
+    dl.folder = folder; if (["arrival", "each", "complete"].includes(x.when as string)) dl.when = x.when; if (typeof x.auto === "boolean") dl.auto = x.auto && connected ? "on" : "off";
+    T.audit("settings.delivery", (connected ? dl.provider : "Download") + ", folder " + dl.folder + (connected ? ", files " + (dl.auto === "on" ? "by itself" : "when asked") : "")); return null; } },
   saveFirm: { role: "owner", n: 1, run: (T, [v]) => {
     const f = T.S.firm, x = (v && typeof v === "object" ? v : {}) as Record<string, unknown>, str = (k: string, max: number) => String(x[k] ?? "").replace(/[<>]/g, "").replace(/\s+/g, " ").trim().slice(0, max);
     f.name = str("name", 80) || f.name; f.sender = str("sender", 30) || f.sender; f.phone = str("phone", 20);

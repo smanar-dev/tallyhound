@@ -1,5 +1,6 @@
 // The web service. Sign-in, the firm's state for the web app, and one endpoint per kind of staff action.
 // It holds no product rules: every action runs the engine through the pipeline (app.staff), which loads, decides, saves and sends.
+import { GOOGLE, StorageError, type Storage } from "./storage.ts";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import cookie from "@fastify/cookie";
 import QRCode from "qrcode";
@@ -23,6 +24,8 @@ export interface ServerDeps {
   appUrl: string; secureCookies: boolean; webDir: string; prepare?: PrepareOpts;
   /** The client's own pages. Present whenever there is a queue to put uploads on. */
   clientPages?: Omit<PublicDeps, "app" | "auth" | "log">;
+  /** A firm's own storage. Absent when no Google sign-in has been set up for this service. */
+  storage?: Storage;
   /** Ask the Hound. Absent when no model is connected. */
   ask?: (firmId: string, who: { name: string; role: string }, turns: { role: "user" | "assistant"; text: string }[]) => Promise<string>;
   health?: () => Record<string, unknown> | Promise<Record<string, unknown>>;
@@ -174,6 +177,25 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
     entries["manifest.csv"] = strToU8(r.manifest + "\n");
     const zip = Buffer.from(zipSync(entries, { level: 0 })), safe = r.folder.split("/").slice(-2).reverse().join(" ").replace(/[^A-Za-z0-9 ,._-]/g, "").trim() || "files";
     return reply.header("content-disposition", 'attachment; filename="' + safe + '.zip"').header("x-tallyhound-files", String(lines.length)).header("x-tallyhound-missing", String(r.missing.length)).type("application/zip").send(zip);
+  });
+
+  // ---- the firm's own storage (owner only). Connecting is a visit to Google and back; nothing else can mark a drive as connected. ----
+  const ownerOnly = (req: FastifyRequest, reply: FastifyReply) => (req.who!.user.role === "owner" ? null : reply.code(403).send({ error: "role", message: NO.other }));
+  const useStorage = async (firmId: string, userId: string, on: boolean) => d.app.staff(firmId, userId, (T: Engine) => { const dl = T.S.firm.delivery; dl.provider = on ? GOOGLE : "Download"; dl.auto = on ? "on" : "off"; if (on && !dl.when) dl.when = "arrival"; T.audit("settings.delivery", on ? GOOGLE + " connected" : "Storage disconnected. Finished files are handed off as a zip"); });
+  f.get("/api/storage", { preHandler: full }, async (req) => { const st = d.storage ? await d.storage.status(req.who!.user.firmId) : { connected: false, provider: null, since: null }; return { available: !!d.storage, ...st }; });
+  f.get("/api/storage/google/start", { preHandler: full }, async (req, reply) => {
+    if (ownerOnly(req, reply)) return reply; if (!d.storage) return reply.redirect("/settings?tab=files&problem=unavailable", 303);
+    const u = req.who!.user; return reply.header("cache-control", "no-store").redirect(d.storage.startUrl(u.firmId, u.id), 303);
+  });
+  f.get("/api/storage/google/callback", { preHandler: full }, async (req, reply) => {
+    if (ownerOnly(req, reply)) return reply; const u = req.who!.user, q = req.query as { code?: string; state?: string; error?: string };
+    if (!d.storage) return reply.redirect("/settings?tab=files&problem=unavailable", 303);
+    try { await d.storage.finish(u.firmId, u.id, q); await useStorage(u.firmId, u.id, true); await d.auth.audit(u.firmId, u.id, "storage.connected", GOOGLE); return reply.header("cache-control", "no-store").redirect("/settings?tab=files&connected=1", 303); }
+    catch (err) { const code = err instanceof StorageError ? err.code : "error"; say("storage_connect_failed", u.firmId, code); return reply.header("cache-control", "no-store").redirect("/settings?tab=files&problem=" + encodeURIComponent(code), 303); }
+  });
+  f.post("/api/storage/disconnect", { preHandler: full }, async (req, reply) => {
+    if (ownerOnly(req, reply)) return reply; const u = req.who!.user; if (d.storage) await d.storage.disconnect(u.firmId);
+    await useStorage(u.firmId, u.id, false); await d.auth.audit(u.firmId, u.id, "storage.disconnected"); return { ok: true };
   });
 
   // Ask the Hound: a question about the firm's own collecting, answered from a read-only copy of its state. Anyone signed in may ask.

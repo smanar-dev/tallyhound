@@ -64,3 +64,4 @@ table.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 
 .phone-btn{border:1px solid var(--ink);border-radius:10px;padding:9px 12px;text-align:center;font-weight:700;background:#fff}
 .bar{height:8px;border-radius:99px;background:var(--line2);overflow:hidden}.bar i{display:block;height:100%;background:var(--ink)}.bar i.warn{background:#C98A00}.bar i.bad{background:#B3361B}
 tr.sel td{background:var(--tint)}
+.note.good{background:#E2F3EA;color:#0C5A39}
