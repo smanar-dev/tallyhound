@@ -4,22 +4,28 @@ import type { App } from "./kit.ts";
 import type { AuthStore } from "./authstore.ts";
 import type { Engine } from "./kit.ts";
 import type { Notifier, StaffMail, StaffMailer } from "./notify.ts";
+import { snapshot, type FirmSnapshot, type OpsStore, type Watch } from "./ops.ts";
 
 export interface WorkerStatus { lastPass: Date | null; firms: number; failed: number; lastError: string | null }
-export function createWorker({ app, auth, clock, log, inbox, notify, mailer }: { notify?: Notifier; mailer?: StaffMailer; app: App; auth: AuthStore; clock: () => Date; log?: (event: string, ...ids: unknown[]) => void; inbox?: { drain(): Promise<number>; sweep(): Promise<number> } }) {
-  const status: WorkerStatus = { lastPass: null, firms: 0, failed: 0, lastError: null }; let running = false, timer: NodeJS.Timeout | null = null, quick: NodeJS.Timeout | null = null;
+export function createWorker({ app, auth, clock, log, inbox, notify, mailer, ops, watch }: { notify?: Notifier; mailer?: StaffMailer; ops?: OpsStore; watch?: Watch; app: App; auth: AuthStore; clock: () => Date; log?: (event: string, ...ids: unknown[]) => void; inbox?: { drain(): Promise<number>; sweep(): Promise<number>; counts(): Promise<{ waiting: number; dead: number }> } }) {
+  const status: WorkerStatus = { lastPass: null, firms: 0, failed: 0, lastError: null }; const failedBefore = new Map<string, number>(); let deadBefore = 0, running = false, timer: NodeJS.Timeout | null = null, quick: NodeJS.Timeout | null = null;
   async function pass(): Promise<WorkerStatus> {
     if (running) return status; running = true;
     try {
       if (inbox) { await inbox.drain(); await inbox.sweep(); }   // retries that have come due, and events nobody could process past their keep-for time
       const ids = await auth.activeFirmIds(); let failed = 0;
       for (const id of ids) { try {
-        if (!notify || !mailer) { await app.tick(id); continue; }
         // The same load and save as the tick: what to email staff is decided and marked with the firm locked, and sent after the save.
-        const people = await auth.usersOfFirm(id); let mails: StaffMail[] = [];
-        await app.withFirm(id, (T: Engine) => { T.tick(); mails = notify.collect(T, people); return true; });
-        for (const m of mails) { try { await mailer.staff(m.to, m.subject, m.body); if (log) log("staff_mail", id, m.kind); } catch (err) { if (log) log("staff_mail_failed", id, m.kind, (err as Error).message); } }
-      } catch (err) { failed++; status.lastError = (err as Error).message; if (log) log("tick_failed", id, status.lastError); } }
+        const people = notify && mailer ? await auth.usersOfFirm(id) : []; let mails: StaffMail[] = [], snap: FirmSnapshot | null = null;
+        await app.withFirm(id, (T: Engine) => { T.tick(); mails = notify && mailer ? notify.collect(T, people) : []; snap = ops ? snapshot(T) : null; return true; });
+        for (const m of mails) { try { await mailer!.staff(m.to, m.subject, m.body); if (log) log("staff_mail", id, m.kind); } catch (err) { if (log) log("staff_mail_failed", id, m.kind, (err as Error).message); } }
+        if (ops) { await ops.noteTick(id, clock(), null, snap); const f = (snap as FirmSnapshot | null)?.failed || 0; if (watch && f > (failedBefore.get(id) || 0)) await watch.tell("sends", id, f + (f === 1 ? " message" : " messages") + " failed to send for a firm today"); failedBefore.set(id, f); }
+      } catch (err) {
+        failed++; status.lastError = (err as Error).message; if (log) log("tick_failed", id, status.lastError);
+        if (ops) await ops.noteTick(id, clock(), status.lastError, null).catch(() => {}); if (watch) await watch.tell("tick", id, "The timer could not finish a firm's turn");
+      } }
+      if (inbox && watch) { const dead = (await inbox.counts()).dead; if (dead > deadBefore) await watch.tell("webhook", "", (dead - deadBefore) + " arriving " + (dead - deadBefore === 1 ? "message" : "messages") + " could not be processed after every retry"); deadBefore = dead; }
+      if (ops) await ops.sweep(clock());
       await auth.sweep(clock()); Object.assign(status, { lastPass: clock(), firms: ids.length, failed });
     } catch (err) { status.lastError = (err as Error).message; if (log) log("worker_failed", status.lastError); }
     finally { running = false; }

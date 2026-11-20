@@ -32,7 +32,9 @@ function mediaOf(b: Buffer): Media | "application/pdf" | null {
   if (s.startsWith("RIFF") && s.slice(8, 12) === "WEBP") return "image/webp"; if (s.startsWith("GIF8")) return "image/gif"; return null;
 }
 
-export interface ModelOpts { apiKey: string; dailyCapUsd?: number; clock?: () => Date; log?: (event: string, ...ids: unknown[]) => void; fetch?: typeof fetch; retries?: number; timeoutMs?: number }
+export interface ModelOpts { apiKey: string; dailyCapUsd?: number; clock?: () => Date; log?: (event: string, ...ids: unknown[]) => void; fetch?: typeof fetch; retries?: number; timeoutMs?: number;
+  /** One line per call: tokens, cost, time and outcome. Never the prompt or the answer. */
+  record?: (c: { firmId: string; at: Date; model: string; tier: string; inputTokens: number; outputTokens: number; usd: number; ms: number; outcome: string }) => void }
 export function claude(o: ModelOpts) {
   const client = new Anthropic({ apiKey: o.apiKey, timeout: o.timeoutMs ?? TIMEOUT_MS, maxRetries: o.retries ?? RETRIES, ...(o.fetch ? { fetch: o.fetch } : {}) });
   const cap = o.dailyCapUsd ?? 10, now = o.clock || (() => new Date()), say = o.log || (() => {});
@@ -45,16 +47,18 @@ export function claude(o: ModelOpts) {
     async json(prompt: string, opt: { images?: Buffer[]; tier?: Tier } = {}): Promise<Record<string, unknown>> {
       const firmId = turn.getStore()?.firmId; if (!firmId) throw new ModelError("no_firm", "The model is only called on a firm's behalf");   // no anonymous spending, nothing uncounted
       const b = book(firmId), model = MODELS[opt.tier || "default"] || MODELS.default;
-      if (b.usd >= cap) { if (!b.told) { b.told = true; say("model_cap_reached", firmId, b.calls); } throw new ModelError("cap", "Daily model limit reached for this firm"); }
+      if (b.usd >= cap) { if (!b.told) { b.told = true; say("model_cap_reached", firmId, b.calls); try { if (o.record) o.record({ firmId, at: now(), model, tier: opt.tier || "default", inputTokens: 0, outputTokens: 0, usd: 0, ms: 0, outcome: "cap" }); } catch { /* never breaks a read */ } } throw new ModelError("cap", "Daily model limit reached for this firm"); }
       const content: Anthropic.ContentBlockParam[] = [];
       for (const img of opt.images || []) {
         const t = mediaOf(img); if (!t) throw new ModelError("file", "Not a photo or PDF the model can read");
         content.push(t === "application/pdf" ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: img.toString("base64") } } : { type: "image", source: { type: "base64", media_type: t, data: img.toString("base64") } });
       }
       content.push({ type: "text", text: prompt });
+      const began = Date.now(), tier = opt.tier || "default", note = (outcome: string, inTok = 0, outTok = 0, usd = 0) => { try { if (o.record) o.record({ firmId, at: now(), model, tier, inputTokens: inTok, outputTokens: outTok, usd, ms: Date.now() - began, outcome }); } catch { /* keeping the record must never break a read */ } };
       let res: Anthropic.Message;
       try { res = await client.messages.create({ model, max_tokens: MAX_TOKENS, messages: [{ role: "user", content }] }); }
       catch (err) {
+        note(err instanceof Anthropic.RateLimitError ? "busy" : err instanceof Anthropic.APIConnectionError ? "network" : err instanceof Anthropic.APIError ? "api_" + (err.status ?? "error") : "error");
         // Most specific first. None of these carries the prompt: only the kind of failure is kept.
         if (err instanceof Anthropic.RateLimitError) throw new ModelError("busy", "The model is rate limited", { cause: err });
         if (err instanceof Anthropic.APIConnectionError) throw new ModelError("network", "The model could not be reached in time", { cause: err });
@@ -62,13 +66,14 @@ export function claude(o: ModelOpts) {
         throw err;
       }
       const [pin, pout] = PRICE[model] || FALLBACK_PRICE, u = res.usage;
-      b.calls++; b.usd += ((u.input_tokens + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0)) * pin + u.output_tokens * pout) / 1e6;
-      if (res.stop_reason === "refusal") throw new ModelError("refusal", "The model declined to read this");
-      if (res.stop_reason === "max_tokens") throw new ModelError("cut_off", "The model's answer was cut off");
+      const inTok = u.input_tokens + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0), usd = (inTok * pin + u.output_tokens * pout) / 1e6, done = (outcome: string) => note(outcome, inTok, u.output_tokens, usd);
+      b.calls++; b.usd += usd;
+      if (res.stop_reason === "refusal") { done("refusal"); throw new ModelError("refusal", "The model declined to read this"); }
+      if (res.stop_reason === "max_tokens") { done("cut_off"); throw new ModelError("cut_off", "The model's answer was cut off"); }
       const text = res.content.filter((x): x is Anthropic.TextBlock => x.type === "text").map((x) => x.text).join("");
-      const m = /\{[\s\S]*\}/.exec(text); if (!m) throw new ModelError("no_json", "No JSON in the model's answer");
-      try { const out = JSON.parse(m[0]); if (!out || typeof out !== "object" || Array.isArray(out)) throw new Error("not an object"); return out as Record<string, unknown>; }
-      catch { throw new ModelError("bad_json", "The model's answer was not valid JSON"); }
+      const m = /\{[\s\S]*\}/.exec(text); if (!m) { done("no_json"); throw new ModelError("no_json", "No JSON in the model's answer"); }
+      try { const out = JSON.parse(m[0]); if (!out || typeof out !== "object" || Array.isArray(out)) throw new Error("not an object"); done("ok"); return out as Record<string, unknown>; }
+      catch { done("bad_json"); throw new ModelError("bad_json", "The model's answer was not valid JSON"); }
     }
   };
 }

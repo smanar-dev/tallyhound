@@ -28,6 +28,7 @@ Put every one of these in the host's secret store, never in the repo.
 | `TH_LINK_SECRET` | yes | A long random string. Signs staff sign-in links |
 | `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT` | yes | The private bucket. `S3_ENDPOINT` only for a store that is not Amazon's. Credentials come from `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` |
 | `POSTMARK_TOKEN`, `TH_SIGNIN_FROM` | yes | Sends client email and staff sign-in links. Production will not start without the token |
+| `TH_ALERT_EMAIL` | recommended | Where the developer is emailed when sends fail for a firm, a firm's turn on the timer fails, or an arriving message is lost after every retry. At most once an hour for the same trouble. Point an uptime check at `/healthz` as well: it answers 503 when the timer has not run for 10 minutes |
 | `POSTMARK_HOOK_USER`, `POSTMARK_HOOK_PASSWORD` | for email in | The name and password inside the webhook address given to Postmark |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_MESSAGING_SERVICE_SID` | for texts | Without them texting is "not connected" and Tallyhound collects by email |
 | `ANTHROPIC_API_KEY` | for reading | Without it documents go to a person and messages use the standard wording |
@@ -55,3 +56,10 @@ Generate the two secrets:
 ## Not done
 
 Backups and a timed restore (T-28), alerting on the events above (T-29), the cloud key service (T-102), a second region, and a staging environment separate from production.
+
+## Looking at how it is running
+
+- `npm run admin -- status` prints one line per firm: last tick, messages sent and failed today, model calls, model errors and model cost today, and the last error.
+- `npm run admin -- usage --month 2027-02` prints what each firm used that month and what it cost us, from the engine's rates.
+- The tables behind these (`firm_status`, `usage_monthly`, `model_calls`) hold counts, times and outcomes only, and sit outside each firm's sealed state, so they survive a restore of it.
+- Not built in: an error tracker. The service writes one JSON line per event to standard output; send that to the host's log search and alert on `tick_failed`, `worker_failed`, `act_failed` and `watch_failed`.

@@ -1,9 +1,10 @@
 // The web service end to end: sign-in, roles, firm separation, the timer. Runs in memory, and again on a real Postgres when DATABASE_URL is set.
+import { costOf } from "../src/ops.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { build, KINDS, APP_URL } from "./harness.ts";
 import { ACTIONS } from "../src/actions.ts";
-import { createEngine } from "../src/kit.ts";
+import { createEngine, type Engine } from "../src/kit.ts";
 
 for (const kind of KINDS) {
   const name = (s: string) => "server (" + kind + "): " + s;
@@ -207,6 +208,24 @@ for (const kind of KINDS) {
     H.advance(4 * 86400); const m = H.staffMails.length; await H.worker.pass(); assert.equal(H.staffMails.slice(m).filter((x) => /waiting for you/.test(x.subject)).length, 0, "Saturday: no morning note");
     H.advance(2 * 86400 - 4 * 3600); const k = H.staffMails.length; await H.worker.pass(); assert.equal(H.staffMails.slice(k).filter((x) => /waiting for you/.test(x.subject)).length, 0, "Monday at 6: not yet");
     H.advance(3600); await H.worker.pass(); assert.equal(H.staffMails.slice(k).filter((x) => /waiting for you/.test(x.subject)).length, 2, "Monday at 7");
+    await H.close();
+  });
+
+  test(name("T-29, T-91: after each pass there is a status line and a month of usage for every firm, kept outside the firm's own state; the developer is told once when sends fail"), async () => {
+    const H = await build(kind), { firmId, ownerId } = await H.newFirm();
+    await H.app.staff(firmId, ownerId, (T: Engine) => { T.S.firm.hound.mode = "autopilot"; T.importRows(T.parseCSV("First,Last,Email\nJo,Day,jo@x.example")); const e = T.S.engs[0]; e.confirmed = true; T.start(e.id); });
+    await H.worker.pass(); let line = (await H.ops.status(H.clock())).find((l) => l.firmId === firmId)!;
+    assert.ok(line.lastTick); assert.equal(line.lastError, null); assert.ok(line.sent >= 1, "the first request went by email"); assert.equal(line.failed, 0); assert.equal(H.devMails.length, 0);
+    const T = createEngine(); T.load(await H.store.readState(firmId)); const month = Object.keys(T.S.usage)[0]!, use = (await H.ops.usage(month)).find((l) => l.firmId === firmId)!;
+    assert.equal(use.usage.email, T.S.usage[month].email); assert.ok(use.usage.email >= 1); assert.ok(costOf(use.usage, T.RATES) > 0);
+    // A send fails for good: counted, and the developer hears once, not on every pass.
+    await H.app.withFirm(firmId, (E: Engine) => { const m = E.S.msgs.find((x: { dir: string }) => x.dir === "out"); m.status = "failed"; });
+    await H.worker.pass(); await H.worker.pass(); line = (await H.ops.status(H.clock())).find((l) => l.firmId === firmId)!; assert.equal(line.failed, 1);
+    assert.equal(H.devMails.length, 1); assert.match(H.devMails[0]!.subject, /1 message failed to send/); assert.match(H.devMails[0]!.body, new RegExp(firmId)); assert.doesNotMatch(H.devMails[0]!.body, /Jo|Day|x\.example/);
+    // A firm whose turn fails keeps its last good tick and shows the error.
+    const real = H.app.withFirm; H.app.withFirm = async () => { throw new Error("boom"); }; await H.worker.pass(); H.app.withFirm = real;
+    line = (await H.ops.status(H.clock())).find((l) => l.firmId === firmId)!; assert.equal(line.lastError, "boom"); assert.ok(line.lastTick); assert.ok(H.devMails.some((m) => /could not finish a firm's turn/.test(m.subject)));
+    await H.worker.pass(); assert.equal((await H.ops.status(H.clock())).find((l) => l.firmId === firmId)!.lastError, null, "cleared by the next good pass");
     await H.close();
   });
 

@@ -2,7 +2,11 @@
 //   npm run admin -- migrate
 //   npm run admin -- create-firm --name "Larkin & Poe CPAs" --inbox larkinpoe@docs.tallyhound.com --zone America/Chicago --owner-name "Pat Larkin" --owner-email pat@larkinpoe.com [--sms 6155550100] [--phone "(615) 555-0100"] [--plan Practice] [--checked]
 //   npm run admin -- firm-check --firm f_... --by "Jordan" [--suspend]
+//   npm run admin -- status                    one line per firm: last tick, sent and failed today, model calls and errors today
+//   npm run admin -- usage [--month 2027-02]   what each firm used that month and what it cost us
 //   npm run admin -- firms
+import { costOf } from "./ops.ts";
+import { createEngine } from "./kit.ts";
 import { migrate, runtime } from "./runtime.ts";
 
 const [cmd, ...rest] = process.argv.slice(2), o: Record<string, string> = {};
@@ -18,6 +22,16 @@ try {
     console.log("Firm created: " + r.firmId + "\nOwner: " + need("owner-email") + " (" + r.ownerId + ")\n" + (o.checked === "true" ? "Checked: it can send." : "Not checked yet: nothing sends until you run firm-check.") + "\nThe owner signs in at " + R.appUrl + "/signin");
   }
   else if (cmd === "firm-check") { await R.firms.setVerified(need("firm"), o.suspend !== "true", need("by")); console.log(o.suspend === "true" ? "Suspended." : "Checked: the firm can send."); }
+  else if (cmd === "status") {
+    // One line per firm: when the timer last visited, how today's sending went, and what the model did today.
+    const L = await R.ops.status(new Date()); if (!L.length) console.log("No firm has been visited by the timer yet.");
+    for (const l of L) console.log([l.firmId, "last tick " + (l.lastTick ? l.lastTick.toISOString() : "never"), "sent today " + l.sent, "failed " + l.failed, "model calls " + l.modelCalls, "model errors " + l.modelErrors, "model $" + l.modelUsd.toFixed(2), l.lastError ? "LAST ERROR: " + l.lastError : ""].filter(Boolean).join("  |  "));
+  }
+  else if (cmd === "usage") {
+    // What each firm used in a month and what that cost us, from the engine's own rates.
+    const month = o.month || new Date().toISOString().slice(0, 7), rates = createEngine().RATES as Record<string, number>; if (!/^\d{4}-\d{2}$/.test(month)) throw new Error("Give the month as --month 2027-02");
+    for (const l of await R.ops.usage(month)) console.log([l.firmId, month, "texts out " + l.usage.segOut, "texts in " + l.usage.segIn, "pictures " + l.usage.mmsIn, "emails " + l.usage.email, "documents read " + l.usage.docRead, "texts read " + l.usage.textRead, "written " + l.usage.write, "cost $" + costOf(l.usage, rates).toFixed(2)].join("  |  "));
+  }
   else if (cmd === "firms") { for (const id of await R.auth.activeFirmIds()) { const us = (await R.auth.usersOfFirm(id)).filter((u) => !u.leftAt); console.log(id + "  " + us.filter((u) => u.role === "owner").map((u) => u.email).join(", ") + "  (" + us.length + (us.length === 1 ? " person)" : " people)")); } }
   else { console.log("Commands: migrate, create-firm, firm-check, firms. See the top of apps/server/src/admin.ts."); process.exitCode = 1; }
 } catch (err) { console.error((err as Error).message); process.exitCode = 1; }

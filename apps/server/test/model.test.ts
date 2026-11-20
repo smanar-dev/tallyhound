@@ -148,3 +148,14 @@ test("T-11: the bucket adapter puts sealed bytes with encryption asked for, retu
   assert.equal(seen[0]!.input.Bucket, "th-files"); assert.equal(seen[0]!.input.ServerSideEncryption, "AES256"); assert.equal(seen[0]!.input.ContentType, "application/octet-stream", "the real type is kept in the database, not on the object");
   assert.equal((await b.get("f1/abc"))!.toString(), "sealed"); assert.equal(await b.get("f1/missing"), null); await b.del("f1/abc"); assert.equal(await b.get("f1/abc"), null); await b.del("f1/abc");
 });
+
+test("model: every call leaves one record of tokens, cost, time and outcome, and never the prompt or the answer", async () => {
+  const seen: Record<string, unknown>[] = [], rec = (c: Record<string, unknown>) => { seen.push(c); };
+  const good = api([answer('{"form":"W2"}')]); await inFirm(() => claude({ apiKey: "k", fetch: good.f, record: rec }).json("SECRET PROMPT", { tier: "quick" }));
+  const junk = api([answer("no braces here")]); assert.equal(await code(inFirm(() => claude({ apiKey: "k", fetch: junk.f, record: rec }).json("x"))), "no_json");
+  const down = api([500]); assert.equal(await code(inFirm(() => claude({ apiKey: "k", fetch: down.f, record: rec, retries: 0 }).json("x"))), "api_500");
+  assert.deepEqual(seen.map((c) => c.outcome), ["ok", "no_json", "api_500"]); assert.equal(seen[0]!.firmId, "f1"); assert.equal(seen[0]!.tier, "quick"); assert.ok((seen[0]!.inputTokens as number) > 0); assert.ok((seen[0]!.usd as number) > 0); assert.equal(seen[2]!.usd, 0);
+  assert.doesNotMatch(JSON.stringify(seen), /SECRET|W2|braces/);
+  // A record that throws never breaks a read.
+  const again = api([answer('{"a":1}')]); assert.deepEqual(await inFirm(() => claude({ apiKey: "k", fetch: again.f, record: () => { throw new Error("database down"); } }).json("x")), { a: 1 });
+});

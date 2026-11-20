@@ -69,7 +69,8 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
   const body = (req: FastifyRequest) => (req.body && typeof req.body === "object" ? req.body : {}) as Record<string, unknown>;
   const str = (v: unknown) => (typeof v === "string" ? v : "");
 
-  f.get("/healthz", async () => ({ ok: true, ...(d.health ? await d.health() : {}) }));
+  // 503 when the service says it is not well (the timer has stopped), so an uptime check pages someone.
+  f.get("/healthz", async (_req, reply) => { const h = d.health ? await d.health() : {}, ok = h.ok !== false; return reply.code(ok ? 200 : 503).send({ ...h, ok }); });
   if (d.hooks) registerHooks(f, { ...d.hooks, app: d.app, publicUrl: d.appUrl, log: d.log });
   if (d.clientPages) await registerPublic(f, { ...d.clientPages, app: d.app, auth: d.auth, log: d.log });
 

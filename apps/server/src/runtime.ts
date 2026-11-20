@@ -9,6 +9,7 @@ import { createApp, kitCrypto, kitEmailOut, kitPostgres, kitTwilio, type Sender,
 import { postgresAuthStore } from "./authstore.ts";
 import { createSignIn, firmSecrets, type Mailer } from "./signin.ts";
 import { createNotifier, type StaffMailer } from "./notify.ts";
+import { createWatch, postgresOpsStore } from "./ops.ts";
 import { createFirms } from "./firms.ts";
 import { createInbox, postgresQueue } from "./queue.ts";
 import { handlers } from "./hooks.ts";
@@ -41,7 +42,8 @@ export function runtime() {
   const twilio: TwilioAdapter | null = env("TWILIO_ACCOUNT_SID") ? kitTwilio.twilio({ accountSid: env("TWILIO_ACCOUNT_SID"), authToken: need("TWILIO_AUTH_TOKEN"), messagingServiceSid: need("TWILIO_MESSAGING_SERVICE_SID") }) : null;
   const sms = twilio || notConnected("Texting");
   const email = env("POSTMARK_TOKEN") ? kitEmailOut.postmark({ serverToken: env("POSTMARK_TOKEN") }) : notConnected("Email");
-  const ai = env("ANTHROPIC_API_KEY") ? claude({ apiKey: env("ANTHROPIC_API_KEY"), dailyCapUsd: +(env("TH_MODEL_DAILY_CAP_USD") || 10), log }) : null;   // no key: rules and standard wording
+  const ops = postgresOpsStore(pool);
+  const ai = env("ANTHROPIC_API_KEY") ? claude({ apiKey: env("ANTHROPIC_API_KEY"), dailyCapUsd: +(env("TH_MODEL_DAILY_CAP_USD") || 10), log, record: (c) => { void ops.modelCall(c).catch((err: Error) => log("model_record_failed", c.firmId, err.message)); } }) : null;   // no key: rules and standard wording
   const app = createApp({ store, sms, email, ai, clock, log });
   if (production && !env("POSTMARK_TOKEN")) throw new Error("Set POSTMARK_TOKEN: without it nobody can be sent a sign-in link");
   const mailer: Mailer & StaffMailer = env("POSTMARK_TOKEN")
@@ -55,7 +57,9 @@ export function runtime() {
   if (production && !env("CLAMAV_HOST")) log("warning_no_virus_scanner");
   const inbox = createInbox({ queue: postgresQueue(pool), store, app, handlers: handlers({ app, twilio, prepare }), clock, log });
   const hooks = { store, inbox, twilioAuthToken: env("TWILIO_AUTH_TOKEN") || undefined, postmarkHook: env("POSTMARK_HOOK_PASSWORD") ? { user: env("POSTMARK_HOOK_USER") || "postmark", pass: env("POSTMARK_HOOK_PASSWORD") } : undefined };
-  return { production, appUrl, pool, store, auth, app, signIn, firms, inbox, hooks, prepare, clock, log, root: ROOT, mailer, notify: createNotifier({ appUrl }) };
+  return { production, appUrl, pool, store, auth, app, signIn, firms, inbox, hooks, prepare, clock, log, root: ROOT, mailer, notify: createNotifier({ appUrl }), ops,
+    // TH_ALERT_EMAIL: where the developer is told that sends are failing, a firm's turn failed, or an arriving message was lost.
+    watch: env("TH_ALERT_EMAIL") ? createWatch({ to: env("TH_ALERT_EMAIL")!, send: (to, subject, body) => mailer.staff(to, subject, body), clock, log }) : undefined };
 }
 
 // Brings an empty or older database up to date. Safe to run on every deploy.
