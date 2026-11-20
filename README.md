@@ -30,6 +30,8 @@ Updated November 20, 2026. "Tested" means against stand-ins for the outside serv
 
 Not built, on purpose: reading last year's return (waits for counsel, T-46). Spanish is written but switched off until a native review (T-31). Staff-recorded consent to texts has its gate built and no screen, until counsel approves it (T-145).
 
+**To run it on your own computer, follow `docs/LOCAL.md`.** In short: `npm install`, `npm run local:setup`, a Postgres database, `npm run build`, create a firm, `npm start`, then `npm run admin -- check-services`.
+
 Run the tests: `npm install`, then `npm test`. Node 22.18 or later. `npm run check` adds the type check, lint, the web build and the browser tests; set `DATABASE_URL` to a throwaway Postgres to include the tests that need a real one. `docs/TICKETS.md` has the state of every ticket, step by step.
 
 ## How it fits together

@@ -17,7 +17,7 @@ async function once<T>(body: unknown): Promise<T> {
   try { return await call<T>("POST", "/api/act", body, key); }
   catch (err) { if (!(err instanceof ApiError) || err.status !== 0) throw err; await new Promise((r) => setTimeout(r, 1200)); return call<T>("POST", "/api/act", body, key); }
 }
-export interface Features { ask: boolean; billing: boolean; domain: boolean; voice: boolean; storage: string[] }
+export interface Features { prior: boolean; signup: boolean; ask: boolean; billing: boolean; domain: boolean; voice: boolean; storage: string[] }
 export interface Me { id: string; name: string; email: string; role: "owner" | "staff" | "read_only"; firmId: string; notes?: { morning: boolean; urgent: boolean } }
 export const api = {
   me: () => call<Me>("GET", "/api/me"),
@@ -43,6 +43,14 @@ export const api = {
   },
   /** What this installation has connected. Asked once and remembered for the visit. */
   features: (() => { let p: Promise<Features> | null = null; return () => (p ||= call<Features>("GET", "/api/features").catch((e) => { p = null; throw e; })); })(),
+  /** Last year's return in, a proposed checklist out. The file is read and not kept. */
+  async prior(engId: string, file: File): Promise<{ items: { form: string; payer: string; why: string }[]; year: number | null; note: string; pages: number; total: number }> {
+    let res: Response;
+    try { res = await fetch("/api/clients/" + encodeURIComponent(engId) + "/prior", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/pdf", "x-tallyhound": "1" }, body: file }); }
+    catch { throw new ApiError(0, "offline", "Tallyhound could not be reached. Check your connection and try again."); }
+    const j = (await res.json().catch(() => ({}))) as { message?: string; error?: string }; if (!res.ok) throw new ApiError(res.status, j.error || "error", j.message || "The return could not be read."); return j as never;
+  },
+  site: () => call<{ signup: boolean }>("GET", "/api/site"),
   /** A question for the Hound, with the conversation so far. It only reads. */
   ask: (messages: { role: "user" | "assistant"; text: string }[]) => call<{ text: string }>("POST", "/api/hound/ask", { messages }),
   /** An owner takes a copy of the firm's consent records or its audit trail, as a spreadsheet. */

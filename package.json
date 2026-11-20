@@ -18,7 +18,8 @@
     "admin": "node apps/server/src/admin.ts",
     "build": "vite build -c apps/web/vite.config.ts",
     "dev:web": "vite -c apps/web/vite.config.ts",
-    "test:e2e": "node --test apps/web/e2e/*.test.ts"
+    "test:e2e": "node --test apps/web/e2e/*.test.ts",
+    "local:setup": "node tools/local-setup.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

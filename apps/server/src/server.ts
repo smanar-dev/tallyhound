@@ -1,5 +1,6 @@
 // The web service. Sign-in, the firm's state for the web app, and one endpoint per kind of staff action.
 // It holds no product rules: every action runs the engine through the pipeline (app.staff), which loads, decides, saves and sends.
+import { PriorError, priorOn, type ReadPrior } from "./prior.ts";
 import { DomainError, type Domains } from "./domain.ts";
 import { registerSignup, type SignupDeps } from "./signup.ts";
 import { kitRegistration } from "./kit.ts";
@@ -28,6 +29,8 @@ export interface ServerDeps {
   appUrl: string; secureCookies: boolean; webDir: string; prepare?: PrepareOpts;
   /** The client's own pages. Present whenever there is a queue to put uploads on. */
   clientPages?: Omit<PublicDeps, "app" | "auth" | "log">;
+  /** Reads a prior-year return and proposes a checklist (T-46). Absent when no model is connected. */
+  prior?: ReadPrior;
   /** Whether recorded reminder calls can be placed at all (T-50). */
   voice?: boolean;
   /** Sending from a firm's own domain. Absent until the mail service's account token is set. */
@@ -163,6 +166,18 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
     return reply.header("content-security-policy", "default-src 'none'; sandbox").header("content-disposition", shown ? "inline" : "attachment").type(shown ? file.contentType : "application/octet-stream").send(file.bytes);
   });
 
+  // T-46: a prior-year return in, a proposed checklist out. The file is read in memory and never kept; only the page count is recorded.
+  f.post("/api/clients/:id/prior", { preHandler: full, bodyLimit: MAX_UPLOAD }, async (req, reply) => {
+    const u = req.who!.user, eid = (req.params as { id: string }).id; if (u.role === "read_only") return reply.code(403).send({ error: "role", message: NO.read_only });
+    if (!d.prior) return reply.code(503).send({ error: "not_connected", message: "Reading a return needs Claude, which is not connected yet." });
+    const json = await d.readState(u.firmId), T0 = createEngine(); if (!json) return reply.code(404).send({ error: "no_firm", message: "This firm's workspace could not be found." }); T0.load(json);
+    if (!priorOn(T0)) return reply.code(403).send({ error: "off", message: "An owner has not switched on building a checklist from last year's return." });
+    if (!T0.eng(eid)) return reply.code(404).send({ error: "no_client", message: "That client is not on your list." });
+    if (!Buffer.isBuffer(req.body) || !req.body.length) return reply.code(400).send({ error: "bad_request", message: "Choose last year's return as a PDF." });
+    try { const p = await d.prior(u.firmId, req.body); await d.app.staff(u.firmId, u.id, (T: Engine) => { T.meter("docRead", p.pages); T.audit("prior.read", "Read " + p.pages + (p.total > p.pages ? " of " + p.total : "") + " pages of a prior-year return. The file was not kept"); }); return reply.header("cache-control", "no-store").send(p); }
+    catch (err) { if (err instanceof PriorError) return reply.code(err.status).send({ error: "prior", message: err.message + "." }); say("prior_failed", u.firmId, (err as { code?: string }).code || "error"); return reply.code(502).send({ error: "prior", message: "The return could not be read just now. Try again in a moment." }); }
+  });
+
   // A PDF is shown to staff as pictures of its pages, drawn here, so nothing in the file itself ever runs in their browser.
   f.get("/api/documents/:id/pages", { preHandler: full }, async (req, reply) => {
     const u = req.who!.user, file = await d.app.openFile(u.firmId, u.id, (req.params as { id: string }).id);
@@ -194,8 +209,10 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
     return reply.header("content-disposition", 'attachment; filename="' + safe + '.zip"').header("x-tallyhound-files", String(lines.length)).header("x-tallyhound-missing", String(r.missing.length)).type("application/zip").send(zip);
   });
 
+  // The one thing the sign-in page needs to know before anyone has signed in: whether a firm can sign itself up.
+  f.get("/api/site", async () => ({ signup: !!(d.signup && d.signup.open) }));
   // What this installation has connected, so the screens show only what works (T-45): no tab, switch or button for a service that is not set up.
-  f.get("/api/features", { preHandler: full }, async () => ({ ask: !!d.ask, billing: !!d.billing, domain: !!d.domains, voice: !!d.voice, storage: d.storage ? d.storage.offered() : [] }));
+  f.get("/api/features", { preHandler: full }, async () => ({ ask: !!d.ask, prior: !!d.prior, signup: !!(d.signup && d.signup.open), billing: !!d.billing, domain: !!d.domains, voice: !!d.voice, storage: d.storage ? d.storage.offered() : [] }));
   // The note a firm sends its own clients before Tallyhound's first message, worded for this firm. Read only.
   f.get("/api/headsup", { preHandler: full }, async (req, reply) => {
     const json = await d.readState(req.who!.user.firmId); if (!json) return reply.code(404).send({ error: "no_firm", message: "This firm's workspace could not be found." });

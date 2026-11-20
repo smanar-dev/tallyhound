@@ -340,3 +340,8 @@ test("T-50: one recorded reminder call after the final reminder, only when the o
   // STOP ends calls as well as texts, and staff cannot turn calls back on for someone who said stop.
   const E = started(); E.T.setUser("u1"); E.T.setCallOk(E.c.id, true); E.T.inboundText(E.c.id, "STOP", null); assert.equal(E.c.callOk, false); assert.match(E.T.setCallOk(E.c.id, true), /Only Jo can change that/);
 });
+test("costs: a landline check and a reminder call are counted and priced like everything else", () => {
+  const { T, c } = firm(); const before = T.usage().cost; assert.equal(T.RATES.lookup, 0.008); assert.equal(T.RATES.voice, 0.03);
+  T.setLine(c.id, "mobile"); T.setLine(c.id, "mobile"); assert.equal(T.usage().totals.lookup, 1, "asked about once per number"); T.meter("voice"); assert.equal(T.usage().totals.voice, 1);
+  assert.equal(Math.round((T.usage().cost - before) * 100), 4, "3.8 cents, shown to the nearest cent");
+});

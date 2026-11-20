@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import type { Engine } from "virtual:engine";
-import { useFirm } from "../lib/firm";
+import { useFeatures, useFirm } from "../lib/firm";
 import { api } from "../lib/api";
 import { Page } from "./Shell";
 import { Modal } from "../components/Modal";
@@ -106,8 +106,19 @@ function MentionCard({ e, c }: Ctx) {
     <p className="small muted">Claude read the message and flagged this. Nothing is requested from the client unless you add it.</p></div>;
 }
 
+// Last year's return in, a proposed checklist out (T-46). The return is read and not kept; nothing is added until it is ticked here.
+function PriorReturn({ T, e, c }: Ctx) {
+  const { act, toast } = useFirm(), [busy, setBusy] = useState(false), [p, setP] = useState<Awaited<ReturnType<typeof api.prior>> | null>(null), [pick, setPick] = useState<Set<number>>(new Set());
+  const read = async (file: File | undefined) => { if (!file) return; setBusy(true); try { const r = await api.prior(e.id, file); setP(r); setPick(new Set(r.items.map((_, n) => n))); } catch (err) { toast((err as Error).message); } finally { setBusy(false); } };
+  const add = async () => { const list = p!.items.filter((_, n) => pick.has(n)); setP(null); try { await act("addFromPrior", e.id, list); toast(plural(list.length, "document") + " added to the checklist, where " + c.first + " has not been asked for them already."); } catch { /* said */ } };
+  return <div className="row" style={{ marginTop: 10 }}><span className="small muted grow">Have {c.first}'s return from last year? Tallyhound reads it, suggests what to ask for again, and does not keep it.</span>
+    <label className={"btn sm" + (busy ? " dis" : "")}>{busy ? "Reading…" : "Build from last year's return"}<input type="file" accept="application/pdf,.pdf" hidden disabled={busy} onChange={(ev) => { void read(ev.target.files?.[0]); ev.target.value = ""; }} /></label>
+    {p ? <Modal title="From last year's return" onClose={() => setP(null)} footer={<><button className="btn" onClick={() => setP(null)}>Cancel</button><button className="btn pri" disabled={!pick.size} onClick={add}>Add {pick.size} to the checklist</button></>}>
+      <p className="small muted">Read {p.pages}{p.total > p.pages ? " of " + p.total : ""} {p.pages === 1 ? "page" : "pages"}{p.year ? " of a " + p.year + " return" : ""}. The return was not kept. Tick what {c.first} should be asked for this year.</p>{p.note ? <p className="small">{p.note}</p> : null}
+      <div className="col" style={{ gap: 4 }}>{p.items.map((x, n) => <label key={n} className="row small ckrow"><input type="checkbox" checked={pick.has(n)} onChange={(ev) => { const s2 = new Set(pick); if (ev.target.checked) s2.add(n); else s2.delete(n); setPick(s2); }} /><span><b>{fname(T, x.form)}</b>{x.payer ? " from " + x.payer : ""}{x.why ? <span className="muted"> · {x.why}</span> : null}</span></label>)}</div></Modal> : null}</div>;
+}
 function Checklist({ T, e, c, openDoc }: Ctx & { openDoc: (id: string) => void }) {
-  const { can, act, toast } = useFirm(), s = T.S, items: Row[] = T.itemsOf(e.id), [form, setForm] = useState(Object.keys(T.FORMS).filter((k) => k !== "OTHER")[0]!), [payer, setPayer] = useState(""), [waive, setWaive] = useState<Row | null>(null), [note, setNote] = useState("");
+  const feat = useFeatures(), { can, act, toast } = useFirm(), s = T.S, items: Row[] = T.itemsOf(e.id), [form, setForm] = useState(Object.keys(T.FORMS).filter((k) => k !== "OTHER")[0]!), [payer, setPayer] = useState(""), [waive, setWaive] = useState<Row | null>(null), [note, setNote] = useState("");
   const editable = can() && !["closed", "opted_out"].includes(e.status), docOf = (id: string) => s.docs.find((d: Row) => d.id === id);
   const set = (i: Row, state: string, why?: string, said?: string) => act("setItem", i.id, state, why).then(() => { if (said) toast(said); }, () => {});
   const checkin = async () => { try { const r = await act("sendCheckin", e.id); toast(r ? "Not sent: " + r + "." : "Check-in sent. The answers come back here as a proposed checklist."); } catch { /* said */ } };
@@ -135,6 +146,7 @@ function Checklist({ T, e, c, openDoc }: Ctx & { openDoc: (id: string) => void }
         <select aria-label="Document" value={form} onChange={(ev) => setForm(ev.target.value)}>{Object.keys(T.FORMS).filter((k) => k !== "OTHER").map((k) => <option key={k} value={k}>{cap(T.FORMS[k].plain)}</option>)}</select>
         <input type="text" placeholder="Who it comes from (optional)" aria-label="Who it comes from" style={{ width: 220 }} value={payer} onChange={(ev) => setPayer(ev.target.value)} />
         <button className="btn" onClick={() => void act("addItem", e.id, form, payer.trim()).then(() => { setPayer(""); toast("Added to the checklist."); }, () => {})}><Icon name="plus" small />Add to checklist</button></div> : null}
+      {editable && s.firm.priorReturn === true && feat.prior ? <PriorReturn T={T} e={e} c={c} /> : null}
     </div>
     {waive ? <Modal title="Not needed this year" onClose={() => setWaive(null)} footer={<><button className="btn" onClick={() => setWaive(null)}>Cancel</button><button className="btn pri" onClick={() => { const i = waive; setWaive(null); void set(i, "waived", note.trim() || "Not needed", "Marked not needed."); }}>Waive</button></>}>
       <p className="small muted">{cap(iname(T, waive))}{waive.payer ? " from " + waive.payer : ""} comes off what {c.first} is asked for. You can restore it later.</p>
@@ -228,12 +240,23 @@ function Details({ T, c }: Ctx) {
     <div className="card"><div className="hd"><h3>OK to text</h3><span className="sp" /><span className="small muted">The record of when {c.first} agreed or opted out</span></div>
       {(c.consentLog || []).length ? <div className="list">{c.consentLog.map((l: Row, i: number) => <div className="li" key={i}><span className={"ico " + (/Withdrawn|Reset/.test(l.what) ? "says_none" : "received")}><Icon name={/Withdrawn|Reset/.test(l.what) ? "x" : "check"} small /></span><div className="grow">{l.what}<div className="small faint">{when(T, l.at)} · {l.channel}</div></div></div>)}</div>
         : <div className="bd small muted">{c.first} has not agreed to texts. Email is used under your existing relationship with the client.</div>}</div>
+    {s.firm.staffConsent === true && c.mobile && c.textConsent !== "given" && !ro ? <RecordConsent T={T} c={c} /> : null}
     {s.firm.hound.voicemail === true && c.mobile ? <div className="card pad col"><h3>Reminder calls</h3><p className="small muted">{c.callOk ? c.first + " has said a recorded reminder call is fine. Tallyhound places at most one, after the final written reminder." : "Tallyhound does not call " + c.first + ". Switch this on only if " + c.first + " has told your firm calls are fine."}</p>
       {ro ? null : <label className="row"><span className="toggle"><input type="checkbox" checked={!!c.callOk} onChange={(ev) => void act("setCallOk", c.id, ev.target.checked, ev.target.checked ? "Recorded on the client's page" : "").then((r) => toast(r ? String(r) + "." : ev.target.checked ? "Recorded." : "Calls are off for " + c.first + "."), () => {})} /><span /></span>{c.first} has agreed to reminder calls</label>}</div> : null}
     {(c.also || []).length ? <div className="card"><div className="hd"><h3>Second contacts</h3><span className="sp" /><span className="small muted">Messages from these are filed to {c.first}. Tallyhound never writes to them</span></div><div className="list">{c.also.map((x: Row) => <div className="li" key={x.value}><span className="ico"><Icon name={x.kind === "mobile" ? "phone" : "mail"} small /></span><div className="grow"><b>{x.kind === "mobile" ? phone(x.value) : x.value}</b><div className="small muted">Remembered {dshort(new Date(x.at))} by {x.by}</div></div>{ro ? null : <button className="btn sm ghost" onClick={() => void act("removeContact", c.id, x.value).then(() => toast("Forgotten. Messages from it will wait for a person again."), () => {})}>Forget</button>}</div>)}</div></div> : null}
     <Earlier T={T} c={c} />
   </div>;
 }
+// T-145: consent to texts that the firm already holds on paper, recorded by staff. Shown only when an owner has switched it on.
+function RecordConsent({ T, c }: { T: Engine; c: Row }) {
+  const { act, toast } = useFirm(), [how, setHow] = useState(""), [why, setWhy] = useState("");
+  const save = async () => { setWhy(""); try { const r = await act("recordConsent", c.id, how.trim()); if (r) return setWhy(String(r)); setHow(""); toast("Recorded. " + c.first + " gets the text that confirms it."); } catch { /* said */ } };
+  return <div className="card pad col"><h3>Record consent you already hold</h3><p className="small muted">Only if {c.first} has agreed in writing to get texts from your firm at {phone(c.mobile)}, for example in the letter they signed with your firm. Say where the agreement is, so it can be shown later. {c.first} is sent the usual confirming text and can reply STOP at any time. {T.isLandline(c) ? "This number is a landline and cannot get texts." : ""}</p>
+    {why ? <div className="note bad" role="alert">{why}</div> : null}
+    <label className="f">Where the agreement is<input type="text" placeholder="Client letter signed January 12" value={how} maxLength={120} onChange={(ev) => setHow(ev.target.value)} /></label>
+    <div><button className="btn" disabled={how.trim().length < 5} onClick={save}>Record that {c.first} agreed</button></div></div>;
+}
+
 // Earlier tax years: a summary of each, kept when a new season starts. Which documents came in and when; never the documents themselves.
 function Earlier({ T, c }: { T: Engine; c: Row }) {
   const H: Row[] = T.history(c.id); if (!H.length) return null;

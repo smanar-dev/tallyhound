@@ -4,7 +4,7 @@ import { mkdirSync, readFileSync, readdirSync, existsSync } from "node:fs";
 import { readFile, writeFile, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { claude, trackFirm } from "./model.ts";
+import { claude, forFirm, trackFirm } from "./model.ts";
 import { createApp, kitCrypto, kitEmailOut, kitPostgres, kitTwilio, type Sender, type TwilioAdapter } from "./kit.ts";
 import { postgresAuthStore } from "./authstore.ts";
 import { createSignIn, firmSecrets, type Mailer } from "./signin.ts";
@@ -19,6 +19,8 @@ import { kmsKeyring } from "./keys.ts";
 import { createClosure } from "./closure.ts";
 import { twilioLookup } from "./lookup.ts";
 import { createAsk } from "./ask.ts";
+import { createPrior } from "./prior.ts";
+import { kitPrompts } from "./kit.ts";
 import { twilioVoice } from "./voice.ts";
 import { createDomains } from "./domain.ts";
 import { postgresSignupStore } from "./signup.ts";
@@ -39,6 +41,8 @@ function diskBucket(dir: string) {
 const notConnected = (what: string): Sender => ({ async send() { throw new Error(what + " is not connected yet"); } });
 
 export function runtime() {
+  // A .env file beside package.json is read when there is one, so running locally needs no extra step. Variables already set win.
+  if (process.env.NODE_ENV !== "production" && existsSync(join(ROOT, ".env"))) process.loadEnvFile(join(ROOT, ".env"));
   const production = env("NODE_ENV") === "production", appUrl = env("APP_URL") || "http://localhost:" + (env("PORT") || "3000");
   const pool = new pg.Pool({ connectionString: need("DATABASE_URL"), max: 10 });
   // The master key (T-102). With TH_KMS_KEY_ID it lives in AWS KMS and this service can use it but never read it; TH_MASTER_KEY,
@@ -81,7 +85,8 @@ export function runtime() {
   if (billing && !Object.keys(prices).length) throw new Error("Set STRIPE_PRICE_SOLO, STRIPE_PRICE_PRACTICE, STRIPE_PRICE_FIRM or STRIPE_PRICE_LARGE: card billing has no plan to sell");
   const inbox = createInbox({ queue: postgresQueue(pool), store, app, handlers: handlers({ app, twilio, prepare }), clock, log });
   const hooks = { store, inbox, twilioAuthToken: env("TWILIO_AUTH_TOKEN") || undefined, postmarkHook: env("POSTMARK_HOOK_PASSWORD") ? { user: env("POSTMARK_HOOK_USER") || "postmark", pass: env("POSTMARK_HOOK_PASSWORD") } : undefined };
-  return { production, appUrl, pool, store, auth, app, signIn, firms, inbox, hooks, prepare, clock, log, root: ROOT, mailer, notify: createNotifier({ appUrl }), ops, lookup, storage, billing, voiceOn: !!voice,
+  return { production, appUrl, pool, store, auth, app, signIn, firms, inbox, hooks, prepare, clock, log, root: ROOT, bucket, keyring, sms, email, twilioOn: !!twilio, emailOn: !!env("POSTMARK_TOKEN"), mailer, notify: createNotifier({ appUrl }), ops, lookup, storage, billing, voiceOn: !!voice,
+    prior: ai ? createPrior({ read: (firmId, prompt, images) => forFirm(firmId, () => ai.json(prompt, { images, tier: "default" })), prompt: () => kitPrompts.priorReturn(), forms: () => createEngine().FORMS }) : undefined,   // T-46
     domains: env("POSTMARK_ACCOUNT_TOKEN") ? createDomains({ app, accountToken: env("POSTMARK_ACCOUNT_TOKEN")!, log }) : undefined,   // T-110
     // Public sign-up (TH_SIGNUP=on) and the price page. New sign-ups go on the second price list when TH_PRICE_TEST=on (T-97).
     signup: { store: postgresSignupStore(pool), open: env("TH_SIGNUP") === "on", inboxDomain: env("TH_INBOX_DOMAIN") || "docs.tallyhound.com", priceBook: (env("TH_PRICE_TEST") === "on" ? "B" : "A") as "A" | "B", clock, inboxTaken: async (a: string) => !!(await store.firmIdByInbox(a)), mail: (to: string, subject: string, body: string) => mailer.staff(to, subject, body), tell: env("TH_ALERT_EMAIL") ? (subject: string, body: string) => mailer.staff(env("TH_ALERT_EMAIL")!, "Tallyhound: " + subject, body) : undefined },

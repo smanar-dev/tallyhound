@@ -331,13 +331,13 @@
   // Fair use: a yearly allowance per plan, sized at more than twice normal use. Going over never cuts a firm off.
   const FAIR = { segs: 60, docs: 25 };   // text segments and document reads per client on the plan, per 12 months
   // What each unit costs us, in dollars. Checked against published prices in November 2026; see docs/PRICING.md.
-  const RATES = { segOut: 0.0128, segIn: 0.0108, mmsIn: 0.026, email: 0.0001, docRead: 0.0164, textRead: 0.0003, write: 0.0003, storeGbMonth: 0.023 };
+  const RATES = { segOut: 0.0128, segIn: 0.0108, mmsIn: 0.026, email: 0.0001, docRead: 0.0164, textRead: 0.0003, write: 0.0003, storeGbMonth: 0.023, lookup: 0.008, voice: 0.03 };   // lookup: one landline check (T-119). voice: one reminder call of under a minute, with answering-machine detection (T-50)
   const GSM = /^[A-Za-z0-9 \r\n@£$¥èéùìòÇØøÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ!"#¤%&'()*+,\-.\/:;<=>?¡ÄÖÑÜ§¿äöñüà^{}\\\[~\]|€]*$/;
   // How many billable segments a text is. One accented letter outside the basic set (á, í, ó, ú) makes the whole text cost more.
   function segs(body) { const t = String(body || ""), n = [...t].length; if (!n) return 0; return GSM.test(t) ? (n <= 160 ? 1 : Math.ceil(n / 153)) : (n <= 70 ? 1 : Math.ceil(n / 67)); }
   function meter(kind, n) { const u = S.usage = S.usage || {}, k = S.now.getFullYear() + "-" + String(S.now.getMonth() + 1).padStart(2, "0"); const m = u[k] = u[k] || {}; m[kind] = (m[kind] || 0) + (n == null ? 1 : n); }
   function usage() {
-    const b = billing(), tot = { segOut: 0, segIn: 0, mmsIn: 0, email: 0, docRead: 0, textRead: 0, write: 0 }, from = new Date(S.now.getTime() - 365 * DAY), fk = from.getFullYear() + "-" + String(from.getMonth() + 1).padStart(2, "0");
+    const b = billing(), tot = { segOut: 0, segIn: 0, mmsIn: 0, email: 0, docRead: 0, textRead: 0, write: 0, lookup: 0, voice: 0 }, from = new Date(S.now.getTime() - 365 * DAY), fk = from.getFullYear() + "-" + String(from.getMonth() + 1).padStart(2, "0");
     Object.keys(S.usage || {}).forEach((k) => { if (k >= fk) Object.keys(tot).forEach((x) => { tot[x] += S.usage[k][x] || 0; }); });
     const p = PLANS.find((x) => x[0] === b.plan), trial = b.state === "trial" || b.state === "expired", cap = p ? p[2] : TRIAL_CLIENTS;
     const allow = { segs: trial ? 0 : cap * FAIR.segs, docs: trial ? TRIAL_DOCS : cap * FAIR.docs }, used = { segs: tot.segOut + tot.segIn + tot.mmsIn, docs: tot.docRead };
@@ -928,7 +928,7 @@
   /* T-119: what kind of line a client's number is, as the phone company reports it. A landline cannot get a text, so it can
      never be given consent. The answer belongs to the number it was asked about: a new number starts unknown again. */
   const LINES = ["mobile", "landline", "voip", "unknown"];
-  function setLine(cid, kind) { const c = client(cid); if (!c || !c.mobile || !LINES.includes(kind)) return false; const was = isLandline(c); c.line = kind; c.lineFor = c.mobile; if (isLandline(c) && !was) { audit("client.landline", c.first + " " + c.last, "Rules"); if (c.textConsent === "given") { c.textConsent = "none"; c.consentLog.push({ at: new Date(S.now), what: "Texting stopped: this number is a landline", channel: "text" }); } } return true; }
+  function setLine(cid, kind) { const c = client(cid); if (!c || !c.mobile || !LINES.includes(kind)) return false; if (c.lineFor !== c.mobile) meter("lookup"); const was = isLandline(c); c.line = kind; c.lineFor = c.mobile; if (isLandline(c) && !was) { audit("client.landline", c.first + " " + c.last, "Rules"); if (c.textConsent === "given") { c.textConsent = "none"; c.consentLog.push({ at: new Date(S.now), what: "Texting stopped: this number is a landline", channel: "text" }); } } return true; }
   const isLandline = (c) => !!c && c.line === "landline" && !!c.mobile && c.lineFor === c.mobile;
   function giveConsent(cid, source) {
     const c = client(cid), e = engOf(cid); if (isLandline(c)) return;

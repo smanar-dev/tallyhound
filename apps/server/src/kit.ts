@@ -74,3 +74,4 @@ export const kitEmailOut = require("../../../packages/adapters/email-out.js") as
 export interface PrepareOpts { heic?: (b: Buffer) => Promise<Buffer>; image?: (b: Buffer) => Promise<{ bytes?: Buffer; width: number; height: number; mean?: number; sharp?: number }>; scan?: (b: Buffer) => Promise<{ clean: boolean; name?: string }> }
 export const kitPrepare = require("../../../packages/adapters/prepare.js") as { prepare(file: { bytes: Buffer; contentType?: string; name?: string; inline?: boolean }, opt?: PrepareOpts): Promise<any>; sniff(b: Buffer): string };
 export const kitEmailIn = require("../../../packages/adapters/email-inbound.js") as { fromPostmark(j: unknown): { to: string; from: string; body: string; providerId: string | null; trusted: boolean; forwarded?: unknown; attachments: any[] } };
+export const kitPrompts = require("../../../packages/core/prompts.js") as { priorReturn(): string };

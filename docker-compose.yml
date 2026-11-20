@@ -1,0 +1,26 @@
+# Tallyhound on one computer, for trying it out. Not for production: see docs/DEPLOY.md for that.
+#   docker compose up -d db        only the database, and run the app with npm (docs/LOCAL.md)
+#   docker compose up --build      the database and the app together, at http://localhost:3000
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: th_dev
+      POSTGRES_HOST_AUTH_METHOD: trust      # local only: any program on this computer may connect
+    ports: ["127.0.0.1:5432:5432"]
+    volumes: ["th-db:/var/lib/postgresql/data"]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U postgres -d th_dev"], interval: 5s, timeout: 3s, retries: 12 }
+  app:
+    build: .
+    depends_on: { db: { condition: service_healthy } }
+    env_file: .env                          # made by: npm run local:setup
+    environment:
+      NODE_ENV: development                 # sign-in links print to the log; files rest on a local volume
+      DATABASE_URL: postgres://postgres@db:5432/th_dev
+      TH_FILES_DIR: /data/files
+    ports: ["127.0.0.1:3000:3000"]
+    volumes: ["th-files:/data"]
+    user: root                              # so the local volume can be written; production runs as the unprivileged user
+volumes:
+  th-db:
+  th-files:

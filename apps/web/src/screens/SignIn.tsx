@@ -6,6 +6,7 @@ type Step = "email" | "sent" | "wait" | "setup" | "codes" | "code" | "recovery";
 const Card = ({ title, children }: { title: string; children: ReactNode }) => <section className="card pad col" style={{ gap: 12 }}><h1>{title}</h1>{children}</section>;
 
 export function SignIn() {
+  const [signup, setSignup] = useState(false); useEffect(() => { api.site().then((x) => setSignup(!!x.signup), () => undefined); }, []);
   const [step, setStep] = useState<Step>("email"), [error, setError] = useState(""), [busy, setBusy] = useState(false);
   const [email, setEmail] = useState(""), [code, setCode] = useState(""), [setup, setSetup] = useState<{ secret: string; qr: string } | null>(null), [codes, setCodes] = useState<string[]>([]), [copied, setCopied] = useState("");
   const started = useRef(false);
@@ -36,6 +37,7 @@ export function SignIn() {
       <form className="col" style={{ gap: 8 }} onSubmit={run(async () => { await api.post("/auth/link", { email: email.trim() }); go("sent"); })}>
         <label htmlFor="email">Work email</label><input id="email" type="email" autoComplete="email" required autoFocus value={email} onChange={(e) => setEmail(e.target.value)} />
         <button className="btn pri" disabled={busy}>Email me a sign-in link</button>
+        {signup ? <p className="small muted" style={{ marginTop: 6 }}>New to Tallyhound? <a href="/signup">Start a 14-day free trial</a></p> : null}
       </form>
     </Card>}
     {step === "sent" && <Card title="Check your email">

@@ -20,6 +20,8 @@ export const TIMEOUT_MS = 20000, RETRIES = 2, MAX_TOKENS = 4096;
 
 // Which firm is being worked on. The pipeline does not pass it to the model, so the store wrapper below notes it for the length of each firm's turn.
 const turn = new AsyncLocalStorage<{ firmId: string }>();
+/** Runs a model call on a firm's behalf outside the pipeline, so it is counted against that firm's cap and recorded under its name. */
+export function forFirm<R>(firmId: string, fn: () => Promise<R>): Promise<R> { return turn.run({ firmId }, fn); }
 export function trackFirm<S extends KitStore>(store: S): S {
   return Object.assign(Object.create(store), { lock: (id: string, fn: (json: string | null) => Promise<string>) => turn.run({ firmId: id }, () => store.lock(id, fn)) }) as S;
 }

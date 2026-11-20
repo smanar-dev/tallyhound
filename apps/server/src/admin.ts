@@ -2,6 +2,7 @@
 //   npm run admin -- migrate
 //   npm run admin -- create-firm --name "Larkin & Poe CPAs" --inbox larkinpoe@docs.tallyhound.com --zone America/Chicago --owner-name "Pat Larkin" --owner-email pat@larkinpoe.com [--sms 6155550100] [--phone "(615) 555-0100"] [--plan Practice] [--checked]
 //   npm run admin -- firm-check --firm f_... --by "Jordan" [--suspend]
+//   npm run admin -- check-services [--email you@firm.com] [--text 6155550100 --from <your Twilio number>]   one harmless live question to every service that is set up
 //   npm run admin -- registration --firm f_...   prints what to file with the carriers for this firm's text number
 //   npm run admin -- sender-approved --firm f_... --number 6155550100 --by Jordan   the carriers approved the number
 //   npm run admin -- set-plan --firm f_... --plan Practice --by Jordan   starts or changes a paid plan (invoiced by hand until card billing is built)
@@ -10,6 +11,7 @@
 //   npm run admin -- status                    one line per firm: last tick, sent and failed today, model calls and errors today
 //   npm run admin -- usage [--month 2027-02]   what each firm used that month and what it cost us
 //   npm run admin -- firms
+import { localChecks, preflight } from "./preflight.ts";
 import { costOf } from "./ops.ts";
 import { createEngine } from "./kit.ts";
 import { migrate, runtime } from "./runtime.ts";
@@ -27,6 +29,13 @@ try {
     console.log("Firm created: " + r.firmId + "\nOwner: " + need("owner-email") + " (" + r.ownerId + ")\n" + (o.checked === "true" ? "Checked: it can send." : "Not checked yet: nothing sends until you run firm-check.") + "\nThe owner signs in at " + R.appUrl + "/signin");
   }
   else if (cmd === "firm-check") { await R.firms.setVerified(need("firm"), o.suspend !== "true", need("by")); console.log(o.suspend === "true" ? "Suspended." : "Checked: the firm can send."); }
+  else if (cmd === "check-services") {
+    const env = (k: string) => (process.env[k] || "").trim(), L = localChecks(R, env), stamp = new Date().toISOString().slice(11, 19);
+    const checks = await preflight({ env, ...L, sendEmail: R.emailOn ? async (to) => { const id = await R.email.send({ from: env("TH_SIGNIN_FROM"), fromName: "Tallyhound", to, subject: "Tallyhound test email " + stamp, body: "This is a test from Tallyhound's check-services command. If you can read it, email out works." }); return "accepted by Postmark, id " + id + ". Check the inbox"; } : undefined,
+      sendText: R.twilioOn && o.from ? async (to) => { const id = await R.sms.send({ from: o.from!, to, body: "Tallyhound test " + stamp + ". If you can read this, texting works." }); return "accepted by Twilio, id " + id + ". Check the phone"; } : undefined }, { email: o.email, text: o.text });
+    const w = Math.max(...checks.map((c) => c.name.length)); for (const c of checks) console.log(c.name.padEnd(w + 2) + (c.state === "ok" ? "ok       " : c.state === "failed" ? "FAILED   " : "not set  ") + c.detail);
+    const bad = checks.filter((c) => c.state === "failed").length; console.log("\n" + (bad ? bad + " failed. Fix those before a client is involved." : "Nothing failed. \"not set\" lines are services you have not connected, which is fine for a first local run.")); if (bad) process.exitCode = 1;
+  }
   else if (cmd === "registration") { console.log(JSON.stringify(await R.firms.registration(need("firm")), null, 2)); }
   else if (cmd === "sender-approved") { await R.firms.senderApproved(need("firm"), need("number"), need("by")); console.log("Recorded. Texts to and from " + o.number + " now belong to this firm."); }
   else if (cmd === "set-plan") { const r = await R.app.withFirm(need("firm"), (T: any) => { const x = T.choosePlan(need("plan")); if (!x) T.audit("billing.plan", need("plan") + ", set by Tallyhound for " + need("by"), "Tallyhound"); return x; }); console.log(r ? "Not changed: " + r : "Plan set to " + o.plan + ". The firm is active."); }   // eslint-disable-line @typescript-eslint/no-explicit-any

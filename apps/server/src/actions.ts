@@ -10,6 +10,8 @@ const staff = (n: number): Rule => ({ role: "staff", n }), owner = (n: number): 
 export const ACTIONS: Record<string, Rule> = {
   // client list
   addClient: staff(1), setZone: staff(2), setFact: staff(3),
+  // T-46: whether staff may give Tallyhound a client's prior-year return to build a checklist from. Off for every firm. The return is never stored.
+  setPriorReturn: { role: "owner", n: 1, run: (T, [on]) => { T.S.firm.priorReturn = on === true; T.audit("settings.prior", on === true ? "Staff may build a checklist from last year's return" : "Building a checklist from last year's return switched off"); return null; } },
   // T-145: staff may record consent the firm already holds (a signed letter, an intake form) only once an owner has switched that on.
   // It is off for every new firm. The switch is not on any screen until counsel has approved its use; an owner's request reaches it here.
   recordConsent: { role: "staff", n: 2, run: (T, [cid, how]) => (T.S.firm.staffConsent === true ? T.recordConsent(cid, String(how ?? "").replace(/[<>]/g, "").trim().slice(0, 200)) : "An owner has not switched on recording consent for clients. The client can agree on their own page.") },
@@ -21,7 +23,7 @@ export const ACTIONS: Record<string, Rule> = {
     if (Array.isArray(map) && map.length === p.head.length) p.map = p.map.map((was: string, i: number) => ((p.sensitive || [])[i] ? "" : FIELDS.includes(map[i]) ? map[i] : was));
     return T.importRows(p); } },
   // checklist
-  setItem: staff(3), addItem: staff(4), addRecommended: staff(2), dismissRec: staff(2), addFromPrior: staff(2), setCustomEs: staff(2),
+  setItem: staff(3), addItem: staff(4), addRecommended: staff(2), dismissRec: staff(2), addFromPrior: { role: "staff", n: 2, run: (T, [eid, list]) => (T.S.firm.priorReturn === true ? T.addFromPrior(String(eid || ""), (Array.isArray(list) ? list : []).slice(0, 40).map((x) => { const o = (x && typeof x === "object" ? x : {}) as Record<string, unknown>; return { form: String(o.form || ""), payer: String(o.payer || "").replace(/[<>]/g, "").slice(0, 60), why: String(o.why || "").replace(/[<>]/g, "").slice(0, 140) }; })) : "An owner has not switched this on") }, setCustomEs: staff(2),
   saveTemplate: owner(1), removeTemplate: owner(1), applyTemplate: staff(3), sendCheckin: staff(1), applyCheckin: staff(2), skipQuestions: staff(2), customSuggest: staff(3),
   // Editing a client's details, as the demo's Details tab does it. A changed mobile number is a new number: any OK to text is reset
   // and a wrong-number flag is cleared (spec TH-CON-9). The language is not editable here while Spanish is off for pilots.

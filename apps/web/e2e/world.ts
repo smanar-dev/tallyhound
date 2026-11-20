@@ -25,6 +25,8 @@ export async function world() {
   const reading: { doc: Record<string, unknown>; text: Record<string, unknown> } = { doc: CLEAN_W2, text: SAYS_NONE };
   const ai = kitMemory.fakeAI((p: string) => (p.startsWith("You read photos") ? reading.doc : p.startsWith("You read text messages") ? reading.text : null));
   const port = await freePort(), url = "http://127.0.0.1:" + port, H = await build("memory", { ai, appUrl: url,
+    // A stand-in for the model reading a prior-year return.
+    prior: () => ({ tax_year: 2025, is_return: true, note: "A 2025 return", items: [{ form: "1099INT", payer: "First Farmers Bank", why: "Interest on Schedule B" }, { form: "1098", payer: "", why: "Mortgage interest" }] }), signup: { open: true },
     // A stand-in for the mail service's Domains API: one domain, whose records are "found" once DNS.found is set.
     postmarkAccount: (async (u: unknown, init: RequestInit = {}) => { const p = new URL(String(u)).pathname, ok = (v: unknown, st = 200) => new Response(JSON.stringify(v), { status: st, headers: { "content-type": "application/json" } }); if (p === "/domains" && init.method === "POST") DNS.name = JSON.parse(String(init.body)).Name; if (init.method === "DELETE") return ok({});
       return ok({ ID: 7, Name: DNS.name, DKIMVerified: DNS.found, DKIMPendingHost: "pm._domainkey." + DNS.name, DKIMPendingTextValue: "k=rsa; p=MIGf", ReturnPathDomain: "pm-bounces." + DNS.name, ReturnPathDomainCNAMEValue: "pm.mtasv.net", ReturnPathDomainVerified: DNS.found }); }) as unknown as typeof fetch, dnsTxt: async () => (DNS.found ? [["v=DMARC1; p=none;"]] : []),

@@ -17,7 +17,7 @@ export function loadEngine(stateText: string, now = new Date()): Engine {
 }
 
 /** What this installation has connected. Until the answer is in, nothing optional is shown. */
-export function useFeatures(): Features { const [f, setF] = useState<Features>({ ask: false, billing: false, domain: false, voice: false, storage: [] }); useEffect(() => { let on = true; api.features().then((x) => { if (on) setF(x); }, () => undefined); return () => { on = false; }; }, []); return f; }
+export function useFeatures(): Features { const [f, setF] = useState<Features>({ prior: false, signup: false, ask: false, billing: false, domain: false, voice: false, storage: [] }); useEffect(() => { let on = true; api.features().then((x) => { if (on) setF(x); }, () => undefined); return () => { on = false; }; }, []); return f; }
 
 export interface Firm {
   T: Engine; me: Me;

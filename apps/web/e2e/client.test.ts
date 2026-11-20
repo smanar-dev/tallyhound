@@ -91,3 +91,26 @@ scene("a PDF opens inside the app as pictures of its pages, drawn by the server"
   for (let i = 0; i < 2; i++) { await pages.nth(i).scrollIntoViewIfNeeded(); await page.waitForFunction((n) => { const im = document.querySelectorAll(".pdfpages img.docimg")[n] as HTMLImageElement; return im && im.complete && im.naturalWidth === 1500; }, i); }
   assert.equal(await pages.first().getAttribute("alt"), "Page 1 as it arrived"); assert.equal(await page.locator("iframe, embed, object").count(), 0, "the file itself is never put in the page");
 });
+
+scene("counsel-gated features: off until an owner switches them on; then staff build a checklist from last year's return and record consent the firm holds", async (W) => {
+  const { firmId } = await busyFirm(W), page = await W.signIn("pat1@firm1.test"); let T: Engine = await W.state(firmId); const sam = T.S.clients.find((c: { first: string }) => c.first === "Sam"), e = T.engOf(sam.id);
+  await page.goto(W.url + "/clients/" + e.id); await page.getByRole("heading", { name: "Sam Lee" }).first().waitFor(); assert.equal(await page.getByText("Build from last year's return").count(), 0);
+  await page.goto(W.url + "/clients/" + e.id + "?tab=details"); await page.getByRole("heading", { name: "OK to text" }).waitFor(); assert.equal(await page.getByText("Record consent you already hold").count(), 0);
+  // The owner switches both on, with the caution in front of them.
+  await page.goto(W.url + "/settings?tab=security"); await page.getByRole("heading", { name: "Two things to ask your counsel about first" }).waitFor(); await page.getByText(/Section 7216/).waitFor();
+  await page.locator("label", { hasText: "Staff may record consent to texts" }).locator(".toggle").click(); await page.getByText("Saved.", { exact: true }).waitFor(); await page.locator("label", { hasText: "build a checklist from a client" }).locator(".toggle").click();
+  for (let i = 0; i < 100 && (await W.state(firmId)).S.firm.priorReturn !== true; i++) await new Promise((r) => setTimeout(r, 50)); T = await W.state(firmId); assert.equal(T.S.firm.staffConsent, true); assert.equal(T.S.firm.priorReturn, true);
+  // Last year's return: read, proposed, and only what is ticked is added.
+  await page.goto(W.url + "/clients/" + e.id); const before = T.itemsOf(e.id).length;
+  await page.locator('label:has-text("Build from last year") input[type="file"]').setInputFiles({ name: "2025 return.pdf", mimeType: "application/pdf", buffer: pdfPagesWith([["Form 1040 2025"], ["Schedule B"]]) });
+  const box = page.getByRole("dialog"); await box.getByRole("heading", { name: "From last year's return" }).waitFor(); assert.match(text(await box.textContent()), /Read 2 pages of a 2025 return\. The return was not kept\./); assert.equal(await box.getByRole("checkbox").count(), 2);
+  await box.getByRole("checkbox").nth(1).uncheck(); await box.getByRole("button", { name: "Add 1 to the checklist" }).click(); await page.getByText(/^1 document added to the checklist/).waitFor();
+  T = await W.state(firmId); assert.ok(T.itemsOf(e.id).some((i: { form: string; payer: string }) => i.form === "1099INT" && i.payer === "First Farmers Bank")); assert.ok(T.itemsOf(e.id).length <= before + 1);
+  // Consent the firm holds on paper.
+  await page.goto(W.url + "/clients/" + e.id + "?tab=details"); await page.getByRole("heading", { name: "Record consent you already hold" }).waitFor(); assert.equal(await page.getByRole("button", { name: "Record that Sam agreed" }).isDisabled(), true, "it must say where the agreement is");
+  await page.getByLabel("Where the agreement is").fill("Engagement letter signed January 12"); await page.getByRole("button", { name: "Record that Sam agreed" }).click(); await page.getByText(/^Recorded\. Sam gets the text that confirms it/).waitFor();
+  T = await W.state(firmId); const c = T.client(sam.id); assert.equal(c.textConsent, "given"); assert.match(c.consentLog.at(-1).what, /recorded by Pat Owner: Engagement letter signed January 12/);
+});
+scene("the sign-in page offers a free trial when firms can sign themselves up", async (W) => {
+  const b = await (await import("playwright")).chromium.launch(), page = await b.newPage(); try { await page.goto(W.url + "/signin"); const link = page.getByRole("link", { name: "Start a 14-day free trial" }); await link.waitFor(); await link.click(); await page.getByRole("heading", { name: "Start your free trial" }).waitFor(); assert.equal(await page.getByLabel("Firm name").count(), 1); } finally { await b.close(); }
+});
