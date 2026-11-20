@@ -29,6 +29,8 @@ export interface ServerDeps {
   appUrl: string; secureCookies: boolean; webDir: string; prepare?: PrepareOpts;
   /** The client's own pages. Present whenever there is a queue to put uploads on. */
   clientPages?: Omit<PublicDeps, "app" | "auth" | "log">;
+  /** Gives one firm its turn on the timer now, after a staff action that may have made something due. */
+  nudge?: (firmId: string) => void;
   /** Reads a prior-year return and proposes a checklist (T-46). Absent when no model is connected. */
   prior?: ReadPrior;
   /** Whether recorded reminder calls can be placed at all (T-50). */
@@ -140,7 +142,7 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
     try { const results = await d.app.staff(u.firmId, u.id, (T: Engine) => {
         // T-83: while a firm is paused or its trial has ended, staff can read, change settings and delete, and nothing else.
         const a = T.access(); if (!a.ok && a.state !== "checking") for (const c of calls) if (!WHILE_OFF.includes(str(c.fn))) throw new Error(a.reason);
-        return calls.map((c) => run(T, str(c.fn), c.args as unknown[])); }); return await done(many ? { ok: true, results } : { ok: true, result: results[0] }); }
+        return calls.map((c) => run(T, str(c.fn), c.args as unknown[])); }); if (d.nudge) d.nudge(u.firmId); return await done(many ? { ok: true, results } : { ok: true, result: results[0] }); }
     catch (err) { say("act_failed", u.firmId, calls.length === 1 ? str(calls[0]!.fn) : "batch", (err as Error).message); return reply.code(400).send(await done({ error: "refused", message: (err as Error).message }, 400)); }
   });
   f.get("/api/actions", { preHandler: full }, async () => Object.fromEntries(Object.entries(ACTIONS).map(([k, v]) => [k, v.role])));

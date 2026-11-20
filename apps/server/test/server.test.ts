@@ -262,6 +262,18 @@ for (const kind of KINDS) {
     await H.close();
   });
 
+  test(name("after a staff action, whatever has come due for that firm is sent within a moment, not at the next five-minute pass"), async () => {
+    const H = await build(kind, { nudge: true }), { firmId, ownerId } = await H.newFirm();
+    await H.app.staff(firmId, ownerId, (T: Engine) => { T.S.firm.hound.mode = "autopilot"; T.importRows(T.parseCSV("First,Last,Email\nSam,Lee,sam@x.example")); const e = T.S.engs[0]; e.confirmed = true; T.start(e.id); });
+    // Three days on, a reminder is due. Nothing has ticked the firm, so nothing has gone yet.
+    H.advance(3 * 86400); const again = await H.signInAs("pat1@firm1.test"), before = H.email.sent.length;
+    await again.post("/api/act", { fn: "alertsRead", args: [] }); for (let i = 0; i < 100 && H.email.sent.length === before; i++) await new Promise((r) => setTimeout(r, 20));
+    assert.equal(H.email.sent.length, before + 1, "the reminder went without waiting for the timer"); assert.equal((H.email.sent.at(-1) as { to: string }).to, "sam@x.example");
+    // Several actions close together are one turn, and nothing goes twice.
+    for (let i = 0; i < 5; i++) await again.post("/api/act", { fn: "alertsRead", args: [] }); await new Promise((r) => setTimeout(r, 80)); assert.equal(H.email.sent.length, before + 1);
+    await H.close();
+  });
+
   test(name("the timer visits every firm, and one firm failing does not stop the rest"), async () => {
     const H = await build(kind); const a = await H.newFirm(1), b = await H.newFirm(2); const seen: string[] = [], real = H.app.withFirm;
     H.app.withFirm = async (id: string, fn: never) => { seen.push(id); if (id === a.firmId) throw new Error("boom"); return real(id, fn); };

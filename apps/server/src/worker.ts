@@ -33,8 +33,15 @@ export function createWorker({ app, auth, clock, log, inbox, notify, mailer, ops
     finally { running = false; }
     return status;
   }
+  // A staff action may have made something due right now (pressing Start, approving a draft). Rather than leave it for the next
+  // five-minute pass, that one firm gets its turn within a second. Several actions close together share one turn.
+  const soonFor = new Map<string, NodeJS.Timeout>();
+  function soon(firmId: string, afterMs = 400): void {
+    if (soonFor.has(firmId)) return;
+    const t = setTimeout(() => { soonFor.delete(firmId); void app.tick(firmId).catch((err: Error) => { if (log) log("tick_failed", firmId, err.message); }); }, afterMs); t.unref(); soonFor.set(firmId, t);
+  }
   return {
-    status, pass,
+    status, pass, soon,
     start(everyMs = 5 * 60000) { if (timer) return; void pass(); timer = setInterval(() => void pass(), everyMs); timer.unref(); },
     stop() { if (timer) clearInterval(timer); if (quick) clearInterval(quick); timer = quick = null; },
     /** The queue is looked at far more often than the firms are ticked: a retry is due within the minute, not within five. */

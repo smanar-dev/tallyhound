@@ -8,7 +8,7 @@ import { Page } from "./Shell";
 import { Modal } from "../components/Modal";
 import { Avatar, Chip, Icon } from "../components/ui";
 import type { Row } from "../lib/select";
-import { fmtDay, fname, plural, when } from "../lib/fmt";
+import { fmtDay, fname, plural, senderState, when } from "../lib/fmt";
 
 type Person = { id: string; name: string; email: string; role: "owner" | "staff" | "read_only"; twoStep: boolean; left?: boolean };
 const ROLE: Record<string, [string, string]> = { owner: ["Owner", "Everything, including settings, people and deleting documents"], staff: ["Staff", "Clients, checklists, messages, documents and handing off files"], read_only: ["Read-only", "Can look at clients and progress, and change nothing"] };
@@ -121,7 +121,7 @@ function HoursTab() {
 
 // Texting: the firm's details for the carriers, where the approval stands, and the note to send clients before the first message.
 function TextingTab() {
-  const { T, act, toast } = useFirm(), f = T.S.firm, r = f.reg || {}, st: string = f.senderStatus || "none", checking = f.verified === false;
+  const { T, act, toast } = useFirm(), f = T.S.firm, r = f.reg || {}, st: string = { approved: "approved", filed: "submitted", todo: "none" }[senderState(f)], checking = f.verified === false;
   const [v, setV] = useState({ legalName: r.legalName || "", ein: r.ein || "", soleProp: !!r.soleProp, street: r.street || "", city: r.city || "", state: r.state || "", zip: r.zip || "", contact: r.contact || "", ownerMobile: r.ownerMobile || "", website: r.website || "" }), [why, setWhy] = useState(""), [note, setNote] = useState<{ subject: string; email: string } | null>(null), [copied, setCopied] = useState(false);
   useEffect(() => { api.get<{ subject: string; email: string }>("/api/headsup").then(setNote, () => setNote(null)); }, [st]);
   const set = (k: keyof typeof v) => (ev: { target: { value: string } }) => setV({ ...v, [k]: ev.target.value }), day = (d: Date) => new Date(d).toLocaleDateString("en-US", { month: "long", day: "numeric" });

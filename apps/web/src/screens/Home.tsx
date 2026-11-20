@@ -1,10 +1,10 @@
 // Home: one screen that tells a preparer what to do next (docs/UX.md rule 2). Ported from the demo's home().
 import { Link, useNavigate } from "react-router-dom";
 import { useState, type ReactNode } from "react";
-import { useFirm } from "../lib/firm";
+import { useFeatures, useFirm } from "../lib/firm";
 import { Page } from "./Shell";
 import { activity, countBy, needReason, needsYou, openTasks, readyToStart, type Event, type Need, type Row } from "../lib/select";
-import { cname, DOW, fmtDay, fname, iname, MON, plural, rel, STAT, when } from "../lib/fmt";
+import { cname, DOW, fmtDay, fname, iname, MON, plural, rel, senderState, STAT, when } from "../lib/fmt";
 import { Avatar, DocChip, Empty, Icon, Ring } from "../components/ui";
 
 const SEGS: [string, string][] = [["complete", "var(--good)"], ["in_progress", "#2358D1"], ["awaiting_consent", "#8FB0F0"], ["stuck", "var(--accent)"], ["not_started", "#C9CED8"], ["paused", "#9AA3B2"], ["opted_out", "var(--bad)"]];
@@ -62,17 +62,17 @@ function StartCard() {
 
 // What a firm connects once. Collecting by email works before any of it is finished.
 function SetupCard() {
-  const { T, can } = useFirm(), f = T.S.firm, [copied, setCopied] = useState(false);
+  const { T, can } = useFirm(), feat = useFeatures(), f = T.S.firm, [copied, setCopied] = useState(false);
   if (!can()) return null;
-  const st = f.senderStatus, filesOk = !!(f.delivery && f.delivery.provider && f.delivery.provider !== "Download");
+  const st = senderState(f), filesOk = !!(f.delivery && f.delivery.provider && f.delivery.provider !== "Download");
   if (st === "approved" && filesOk && f.verified !== false && f.headsUpAt) return null;
   const RowLine = ({ ok, title, children, action }: { ok: boolean; title: string; children: ReactNode; action?: ReactNode }) => <div className="li" style={{ alignItems: "flex-start" }}><span className={"chip " + (ok ? "good" : "warn")} style={{ marginTop: 2 }}>{ok ? "Ready" : "To do"}</span><div className="grow"><b>{title}</b><div className="small muted">{children}</div></div>{action}</div>;
   return <div className="card"><div className="hd"><h2>Connect once</h2><span className="sp" /><span className="small faint">You can collect by email before any of this is finished</span></div><div className="list">
     {f.verified === false ? <RowLine ok={false} title="Firm check">Before anything is sent to a client, Tallyhound confirms you are a tax or accounting firm. This usually takes one business day and you can set everything else up now.</RowLine> : null}
     <RowLine ok title="Email" action={f.email ? <button className="btn sm" onClick={() => navigator.clipboard.writeText(f.email).then(() => setCopied(true), () => undefined)}>{copied ? "Copied" : "Copy address"}</button> : null}>Requests go out in your firm's name and clients reply to <span className="mono">{f.email}</span>. Nothing to set up, and Tallyhound never connects to your own mailbox.</RowLine>
-    <RowLine ok={st === "approved"} title="Text number" action={st === "none" && can("owner") ? <Link className="btn sm" to="/settings?tab=texting">Set up</Link> : null}>{st === "approved" ? "Approved by the carriers. Clients can text photos." : st === "submitted" ? "With the carriers" + (f.senderSubmittedAt ? " since " + fmtDay(f.senderSubmittedAt) : "") + ". Approval usually takes one to three weeks. Until then Tallyhound collects by email and the upload page." : "Carriers must approve a business text number, which takes one to three weeks. It needs your firm's legal name, tax ID and address, not a plan. Until it clears, Tallyhound collects by email and each client's upload page, which uses their phone camera."}</RowLine>
+    <RowLine ok={st === "approved"} title="Text number" action={st === "todo" && can("owner") ? <Link className="btn sm" to="/settings?tab=texting">Set up</Link> : null}>{st === "approved" ? "Approved by the carriers. Clients can text photos." : st === "filed" ? "With the carriers" + (f.senderSubmittedAt ? " since " + fmtDay(f.senderSubmittedAt) : "") + ". Approval usually takes one to three weeks. Until then Tallyhound collects by email and the upload page." : "Carriers must approve a business text number, which takes one to three weeks. It needs your firm's legal name, tax ID and address, not a plan. Until it clears, Tallyhound collects by email and each client's upload page, which uses their phone camera."}</RowLine>
     <RowLine ok={!!f.headsUpAt} title="Tell your clients first" action={!f.headsUpAt && can("owner") ? <Link className="btn sm" to="/settings?tab=texting">See the note</Link> : null}>{f.headsUpAt ? "Marked as sent " + fmtDay(f.headsUpAt) + ". Clients know to expect messages from Tallyhound in your name." : "People are told to distrust messages that ask for tax documents. A short note from your own email, sent before the first request, fixes that."}</RowLine>
-    <RowLine ok={filesOk} title="Where finished files go" action={!filesOk && can("owner") ? <Link className="btn sm" to="/settings?tab=files">Connect</Link> : null}>{filesOk ? f.delivery.provider + ", folder " + f.delivery.folder + ". Tallyhound deletes its own copy " + (T.retain().afterDelivery ? T.retain().afterDelivery + " days after delivery." : "right after delivery.") : "Right now finished files download as a zip. Connect your firm's storage and they are filed for you, then deleted from Tallyhound on a schedule."}</RowLine>
+    <RowLine ok={filesOk} title="Where finished files go" action={!filesOk && can("owner") && feat.storage.length ? <Link className="btn sm" to="/settings?tab=files">Connect</Link> : null}>{filesOk ? f.delivery.provider + ", folder " + f.delivery.folder + ". Tallyhound deletes its own copy " + (T.retain().afterDelivery ? T.retain().afterDelivery + " days after delivery." : "right after delivery.") : (feat.storage.length ? "Right now finished files download as a zip. Connect your firm's storage and they are filed for you, then deleted from Tallyhound on a schedule." : "Finished files download as a zip from each client's page.")}</RowLine>
   </div></div>;
 }
 
