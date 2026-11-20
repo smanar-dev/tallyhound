@@ -186,3 +186,21 @@ test("email out: the unsubscribe address becomes the two headers mail programs l
   assert.deepEqual(sent.Headers.slice(1), [{ Name: "List-Unsubscribe", Value: "<https://go.tallyhound.test/e/x-abc>" }, { Name: "List-Unsubscribe-Post", Value: "List-Unsubscribe=One-Click" }]);
   await pm.send({ from: "docs@test.example", to: "jo@x.example", subject: "s", body: "b" }); assert.equal(sent.Headers.length, 1);
 });
+
+test("T-118: a text from an unknown number is kept with the number it came from; once it is a client's second contact, documents from it are filed and STOP from it is not acted on", async () => {
+  const x = await setup(model()); const SPOUSE = "+16155550188";
+  await x.app.inboundSms({ to: FIRM_NO, from: SPOUSE, body: "", media: [{ bytes: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]), contentType: "image/jpeg" }], providerId: "s1" });
+  let T = x.state(); assert.equal(T.S.tray.length, 1); assert.equal(T.S.tray[0].from, "(615) 555-0188"); assert.equal(T.S.docs.filter((d) => d.engId).length, 0);
+  await x.app.staff("f1", "u1", (E) => { assert.equal(E.addContact(E.S.clients[0].id, "mobile", SPOUSE), null); E.giveConsent(E.S.clients[0].id, "page"); });
+  const texts = x.sms.sent.length, r = await x.app.inboundSms({ to: FIRM_NO, from: SPOUSE, body: "", media: [{ bytes: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 4, 5, 6]), contentType: "image/jpeg" }], providerId: "s2" });
+  assert.deepEqual(r.docs, ["accepted"]); assert.equal(r.client, x.state().S.clients[0].id);
+  assert.ok(x.sms.sent.length > texts, "the thank-you goes out"); assert.ok(x.sms.sent.every((m) => m.to !== "6155550188" && !String(m.to).includes("5550188")), "and never to the second number");
+  const stop = await x.app.inboundSms({ to: FIRM_NO, from: SPOUSE, body: "STOP", providerId: "s3" }); T = x.state();
+  assert.equal(stop.intent, "unknown"); assert.equal(T.S.clients[0].textConsent, "given", "the client's own consent stands"); assert.match(T.S.tray.at(-1).from, /second contact/); assert.equal(T.S.tray.at(-1).text, "STOP");
+  // The client's own number still stops texts, as always.
+  await x.app.inboundSms({ to: FIRM_NO, from: JO, body: "STOP", providerId: "s4" }); assert.equal(x.state().S.clients[0].textConsent, "withdrawn");
+  // An email from a second address is matched too, when the sender can be confirmed, and not when it cannot.
+  await x.app.staff("f1", "u1", (E) => { E.addContact(E.S.clients[0].id, "email", "partner@home.example"); });
+  const a = await x.app.inboundEmail({ to: "docs@test.example", from: "Partner <PARTNER@home.example>", body: "Here it is.", attachments: [{ bytes: Buffer.from("pdf"), contentType: "application/pdf" }], providerId: "e1" }); assert.equal(a.client, x.state().S.clients[0].id);
+  const n = x.state().S.tray.length, b = await x.app.inboundEmail({ to: "docs@test.example", from: "partner@home.example", body: "Again.", trusted: false, attachments: [{ bytes: Buffer.from("pdf2"), contentType: "application/pdf" }], providerId: "e2" }); assert.ok(!b.client); assert.ok(x.state().S.tray.length > n, "it waits for a person");
+});

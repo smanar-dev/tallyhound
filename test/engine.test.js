@@ -279,3 +279,15 @@ test("T-81: a plan that ends locks the firm like an ended trial, says why, and c
   // A trial that simply runs out still says so in its own words.
   const B = firm(); B.T.S.firm.billing = { state: "trial", plan: null, trialEnds: new Date(B.T.S.now.getTime() - 1000) }; assert.match(B.T.access().reason, /free trial has ended/);
 });
+test("T-118: a client's second contact is remembered for matching and is never sent to", () => {
+  const { T, c, e } = firm(); T.setUser("u1");
+  assert.match(T.addContact(c.id, "mobile", "12345"), /not a 10-digit/); assert.match(T.addContact(c.id, "email", "not an address"), /not an email/); assert.match(T.addContact(c.id, "fax", "x"), /mobile number or an email/); assert.match(T.addContact(c.id, "mobile", c.mobile), /already Jo's own number/);
+  assert.equal(T.addContact(c.id, "mobile", "+1 (615) 555-0188"), null); assert.equal(T.addContact(c.id, "mobile", "6155550188"), null, "the same one twice is one"); assert.equal(T.addContact(c.id, "email", "Partner@Home.Example"), null);
+  assert.deepEqual(c.also.map((x) => [x.kind, x.value]), [["mobile", "6155550188"], ["email", "partner@home.example"]]); assert.ok(T.S.audit.some((a) => a.action === "client.contact"));
+  // Everything Tallyhound sends still goes to the client's own number and address.
+  e.confirmed = true; T.start(e.id); T.giveConsent(c.id, "page"); T.setNow(new Date(T.S.now.getTime() + 20 * T.DAY)); T.tick();
+  const out = T.S.msgs.filter((m) => m.dir === "out"); assert.ok(out.length > 0); assert.ok(!JSON.stringify(out).includes("6155550188")); assert.ok(!JSON.stringify(out).includes("partner@home.example"));
+  assert.equal(T.removeContact(c.id, "6155550188"), true); assert.equal(T.removeContact(c.id, "6155550188"), false); assert.equal(c.also.length, 1);
+  // A text from nobody we know is kept with the number it really came from.
+  T.inboundText(null, "who is this", null, "(615) 555-0142"); assert.equal(T.S.tray.at(-1).from, "(615) 555-0142");
+});

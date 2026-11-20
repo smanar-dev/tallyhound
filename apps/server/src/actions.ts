@@ -59,13 +59,18 @@ export const ACTIONS: Record<string, Rule> = {
     (d.versions = d.versions || []).push({ v: d.versions.length + 1, by: T.S.user.name, form: d.form, year: d.year, payer: d.payer }); T.audit("document.correct", d.form); return null; } },
   decideTask: staff(3), deliver: staff(1), closeEng: staff(1),
   // Unknown senders: a person says whose it is, and it is then checked exactly as if that client had sent it (the demo's assign).
-  assignUnknown: { role: "staff", n: 2, run: (T, [yid, cid]) => {
+  // A client's second contact (T-118): matched on the way in, never sent to. The engine checks the number or address.
+  addContact: { role: "staff", n: 3, run: (T, [cid, kind, value]) => T.addContact(String(cid || ""), String(kind || ""), String(value ?? "").slice(0, 254)) },
+  removeContact: staff(2),
+  assignUnknown: { role: "staff", n: 3, run: (T, [yid, cid, remember]) => {
     const S = T.S, y = S.tray.find((x: { id: string }) => x.id === yid), c = T.client(cid), e = c && T.engOf(c.id); if (!y) return { ok: false, why: "That message has already been dealt with" }; if (!c || !e) return { ok: false, why: "Choose a client" };
     if (!y.docId && !y.spec && (y.why === "Could not be processed" || y.why === "Blocked by the virus scan")) return { ok: false, why: "There is nothing in this notice to assign" };
     S.tray.splice(S.tray.indexOf(y), 1); let doc = null;
     if (y.docId) { doc = S.docs.find((d: { id: string }) => d.id === y.docId); if (doc) { doc.clientId = c.id; doc.engId = e.id; T.check(doc); T.decide(doc, e, c); } }
-    else if (y.spec) doc = T.inboundDoc(c.id, y.spec, y.channel || "text"); else if (y.text) T.inboundText(c.id, y.text);
-    T.audit("unknown.assigned", c.last); return { ok: true, first: c.first, state: doc ? doc.state : null }; } },
+    else if (y.spec) doc = T.inboundDoc(c.id, y.spec, y.channel || "text"); else if (y.text && !/^\s*(stop|stopall|unsubscribe|cancel|end|quit|start|unstop|yes|alto|parar|cancelar)\s*[.!]?\s*$/i.test(String(y.text))) T.inboundText(c.id, y.text);   // filing a stray STOP or START to a client must not change that client's consent
+    // "Remember this sender": only a real number or address, taken from what arrived and never from the browser.
+    let remembered = false; if (remember === true && y.from && !/second contact/.test(String(y.from))) { const from = String(y.from), kind = y.channel === "email" || from.includes("@") ? "email" : "mobile"; remembered = T.addContact(c.id, kind, kind === "email" ? (/<([^>]+)>/.exec(from)?.[1] || from) : from) === null && (c.also || []).length > 0; }
+    T.audit("unknown.assigned", c.last); return { ok: true, first: c.first, state: doc ? doc.state : null, remembered }; } },
   // Discarding forgets the message. A file that came with it is marked discarded so it is deleted on the short schedule.
   discardUnknown: { role: "staff", n: 1, run: (T, [yid]) => { const S = T.S, y = S.tray.find((x: { id: string }) => x.id === yid); if (!y) return false; S.tray = S.tray.filter((x: { id: string }) => x.id !== yid); const d = y.docId && S.docs.find((x: { id: string }) => x.id === y.docId); if (d && !d.engId) d.state = "discarded"; T.audit("unknown.discarded", ""); return true; } },
   // alerts: read marks, exactly as the demo's bell sets them

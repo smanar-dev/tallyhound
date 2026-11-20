@@ -36,6 +36,9 @@ function addr(v) { const s = String(v || ""), m = /<([^>]+)>/.exec(s); return (m
 // A household can share one phone or one email address (spouses who file apart, a parent sending for a college student).
 // With several clients on the same contact, a text is taken to be from whoever we wrote to last, and a document goes to the
 // person whose first name is printed on it. If the name does not settle it, the one whose checklist is waiting for that form.
+// A client's second contacts (T-118): matched on the way in, never sent to.
+const also = (c, kind, value) => (c.also || []).some((x) => x.kind === kind && x.value === value);
+const CONSENT_WORD = /^\s*(stop|stopall|unsubscribe|cancel|end|quit|start|unstop|yes|help|info|alto|parar|cancelar|ayuda)\s*[.!]?\s*$/i;
 function pick(T, list) {
   if (list.length < 2) return list[0] || null;
   const last = (c) => { const e = T.engOf(c.id); let t = 0; if (e) for (const m of T.S.msgs) if (m.engId === e.id && m.dir === "out" && +new Date(m.at) > t) t = +new Date(m.at); return t; };
@@ -219,16 +222,21 @@ function createApp({ store, sms, email, ai, clock, log, files }) {
       const firmId = await store.firmIdByNumber(digits(to)); if (!firmId) { say("unknown_number", to); return { handled: false }; }
       return withFirm(firmId, async (T) => {
         if (seen(T, providerId)) return { handled: true, duplicate: true };
-        const cands = T.S.clients.filter((x) => x.mobile && digits(x.mobile) === digits(from).slice(-10)), c = pick(T, cands), e = c && T.engOf(c.id), out = { handled: true, client: c && c.id, docs: [], intent: null };
-        const text = String(body || "").trim();
+        const ten = digits(from).slice(-10), shown = ten.length === 10 ? "(" + ten.slice(0, 3) + ") " + ten.slice(3, 6) + "-" + ten.slice(6) : String(from || "");
+        const own = T.S.clients.filter((x) => x.mobile && digits(x.mobile) === ten), second = own.length ? [] : T.S.clients.filter((x) => also(x, "mobile", ten));
+        const cands = own.length ? own : second, c = pick(T, cands), e = c && T.engOf(c.id), out = { handled: true, client: c && c.id, docs: [], intent: null };
+        let text = String(body || "").trim();
+        // A second contact (T-118) can send documents and ordinary messages for the client. It cannot change the client's consent:
+        // STOP, START or HELP from a number we never text is shown to a person, not acted on.
+        if (second.length && CONSENT_WORD.test(text)) { T.inboundText(null, text, null, shown + ", " + c.first + " " + c.last + "'s second contact"); out.intent = "unknown"; text = ""; }
         // No access (paused, trial ended) or a trial that has used its document checks: store the files, call no model.
         // inboundText still handles STOP and HELP, and sends the "contact the firm directly" reply at most once a week.
-        if (!T.canRead()) { await hold(T, firmId, c, media, "text"); if (text || !T.access().ok) out.intent = T.inboundText(c ? c.id : null, text || "[photo]", null); out.held = true; return out; }
+        if (!T.canRead()) { await hold(T, firmId, c, media, "text"); if (text || !T.access().ok) out.intent = T.inboundText(c ? c.id : null, text || "[photo]", null, shown); out.held = true; return out; }
         const { specs, bad } = await readAll(T, c, firmId, media);
         if (specs.length > 1 && c && cands.length < 2) { const res = T.inboundBundle(c.id, specs, "text"); res.docs.forEach((d, i) => { filed(d, specs[i]); out.docs.push(d.state); }); }
-        else for (const spec of specs) { const oc = ownerOf(T, cands, spec, c); if (oc && oc !== c) { spec.recipient = "self"; out.routed = (out.routed || []).concat(oc.id); } const d = T.inboundDoc(oc ? oc.id : null, spec, "text"); if (d) { filed(d, spec); out.docs.push(d.state); } }
+        else for (const spec of specs) { const oc = ownerOf(T, cands, spec, c); if (oc && oc !== c) { spec.recipient = "self"; out.routed = (out.routed || []).concat(oc.id); } if (!oc) spec.from = shown; const d = T.inboundDoc(oc ? oc.id : null, spec, "text"); if (d) { filed(d, spec); out.docs.push(d.state); } }
         if (bad && !specs.length && c) { T.inboundUnusable(c.id, bad, "text"); out.unusable = bad; }
-        if (text) { const r = e ? await ask(prompts.readText(T, e, text), { tier: "quick" }) : null; out.intent = T.inboundText(c ? c.id : null, text, r); }
+        if (text) { const r = e ? await ask(prompts.readText(T, e, text), { tier: "quick" }) : null; out.intent = T.inboundText(c ? c.id : null, text, r, shown); }
         return out;
       });
     },
@@ -244,7 +252,7 @@ function createApp({ store, sms, email, ai, clock, log, files }) {
         const staffAddr = [T.S.firm.email].concat(T.S.users.map((u) => u.email)).filter(Boolean).map((x) => String(x).toLowerCase());
         let byStaff = null;
         if (forwarded && forwarded.from && trusted !== false && staffAddr.includes(from)) { byStaff = from; from = addr(forwarded.from); body = forwarded.body != null ? forwarded.body : body; }
-        const cands = T.S.clients.filter((x) => x.email && x.email.toLowerCase() === from), known = pick(T, cands), c = trusted === false ? null : known;
+        const mine = T.S.clients.filter((x) => x.email && x.email.toLowerCase() === from), cands = mine.length ? mine : T.S.clients.filter((x) => also(x, "email", from)), known = pick(T, cands), c = trusted === false ? null : known;
         if (!c) {
           // Unknown or unconfirmed sender. Attachments are kept and read so a person can file them (a spouse writing from another address is common),
           // but nothing is sent back and nothing reaches a client's file until someone assigns it. A daily cap stops a stranger running up the bill.

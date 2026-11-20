@@ -675,10 +675,10 @@
   // A key for the unsubscribe link. It never changes, so a link in an old email keeps working.
   function emailKey(c) { if (!c.ekey) c.ekey = linkKey(); return c.ekey; }
   function unsubscribeLink(c) { return S.firm.linkBase && c ? S.firm.linkBase + "/e/" + (S.firm.slug ? S.firm.slug + "-" : "") + emailKey(c) : ""; }
-  function inboundText(cid, text, ai) {
+  function inboundText(cid, text, ai, from) {
     const c = cid ? client(cid) : null, e = c ? engOf(c.id) : null;
     text = scrubIn(text, e);
-    if (!e) { S.tray.push({ id: id("y"), text, from: "(615) 555-0199", at: new Date(S.now), channel: "text" }); return "unknown"; }
+    if (!e) { S.tray.push({ id: id("y"), text, from: from || "(615) 555-0199", at: new Date(S.now), channel: "text" }); return "unknown"; }   // the placeholder is the demo's; the pipeline always gives the real sender
     let k = ai && KLABEL[ai.intent] ? ai.intent : intent(text);
     if (OPTOUT.test(text)) k = "stop";
     meter("segIn", segs(text)); if (ai && ai.intent) meter("textRead");
@@ -758,6 +758,18 @@
   }
   function formsIn(text, e) { return FORMWORDS.filter((f) => f[1].test(text)).map((f) => f[0]).map((f) => itemsOf(e.id).find((i) => i.form === f && ["expected", "requested", "partial"].includes(i.state))).filter(Boolean); }
   /* Several documents in one text or one upload: checked one by one, answered once. */
+  /* T-118: a second contact for a client, such as a spouse's mobile or another email address, remembered when staff file a
+     message from it. Messages that arrive from it are then matched to the client. Nothing is ever sent to it: sending uses
+     c.mobile and c.email only, and consent belongs to the client's own number. */
+  function addContact(cid, kind, value) {
+    const c = client(cid); if (!c) return "Unknown client"; if (!may()) return "Not allowed";
+    const v = kind === "mobile" ? String(value || "").replace(/\D/g, "").replace(/^1(\d{10})$/, "$1") : kind === "email" ? String(value || "").trim().toLowerCase() : "";
+    if (kind === "mobile" ? !/^[2-9]\d{9}$/.test(v) : !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(v) || v.length > 254) return kind === "mobile" ? "That is not a 10-digit mobile number" : kind === "email" ? "That is not an email address" : "A second contact is a mobile number or an email address";
+    if ((kind === "mobile" ? c.mobile : String(c.email || "").toLowerCase()) === v) return "That is already " + c.first + "'s own " + (kind === "mobile" ? "number" : "address");
+    c.also = c.also || []; if (c.also.some((x) => x.kind === kind && x.value === v)) return null; if (c.also.length >= 4) return "A client can have up to 4 second contacts";
+    c.also.push({ kind, value: v, at: new Date(S.now), by: S.user.name }); audit("client.contact", c.last + ": a second " + (kind === "mobile" ? "number" : "address") + " remembered"); return null;
+  }
+  function removeContact(cid, value) { const c = client(cid); if (!c || !may()) return false; const n = (c.also || []).length; c.also = (c.also || []).filter((x) => x.value !== String(value || "").toLowerCase()); if (c.also.length === n) return false; audit("client.contact", c.last + ": a second contact removed"); return true; }
   function inboundBundle(cid, specs, channel) { return inboundEmail(cid, "", specs, null, channel === "portal" ? "portal" : "text"); }
   function inboundUnusable(cid, why, channel) {
     const c = client(cid), e = engOf(cid); if (!c || !e) return null;
@@ -1404,7 +1416,7 @@
     if (e.status === "complete" && open) { e.status = "in_progress"; e.completedAt = null; e.step = 0; if (!e.next) e.next = nextAllowed(S.now); timeline(e, "Reopened: a document is outstanding again"); }
     else if (["in_progress", "stuck"].includes(e.status) && !open && any) { if (checkComplete(e)) send(e, "M13", {}); }
   }
-  window.TH = { planEnded, setLine, isLandline, RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
+  window.TH = { addContact, removeContact, planEnded, setLine, isLandline, RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
     dump, load, blank, setNow, setUser, linkFor, linkLive, LINK_DAYS, consentFromPage, declineTexts, stopEmail, unsubscribeLink, CONSENT_WORDING,
     get S() { return S; }, FORMS, TPL, TPL_USE, QUESTIONS, STUCK, DAY, HOUR, MIN,
     client, eng, engOf, itemsOf, openItems, progress, fill, outputCheck, channelFor, allowed, nextAllowed, live, nextItem,
