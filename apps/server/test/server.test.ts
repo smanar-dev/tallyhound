@@ -56,6 +56,17 @@ for (const kind of KINDS) {
     await H.close();
   });
 
+  test(name("T-145: staff cannot record a client's consent to texts unless an owner has switched that on, and only an owner can switch it"), async () => {
+    const H = await build(kind), { firmId } = await H.newFirm(), owner = await H.signInAs("pat1@firm1.test"); await owner.post("/api/users", { name: "Alex Staff", email: "alex@firm1.test", role: "staff" }); const alex = await H.signInAs("alex@firm1.test");
+    await owner.post("/api/act", { fn: "addClient", args: [{ first: "Jo", last: "Day", email: "jo@x.example", mobile: "6155550111" }] });
+    const eng = async () => { const T = createEngine(); T.load(await H.store.readState(firmId)); return T; }, jo = (await eng()).S.clients[0].id;
+    assert.match((await alex.post("/api/act", { fn: "recordConsent", args: [jo, "Signed letter"] })).json.result, /owner has not switched on/); assert.notEqual((await eng()).client(jo).textConsent, "given");
+    assert.equal((await alex.post("/api/act", { fn: "setStaffConsent", args: [true] })).status, 403);
+    assert.equal((await owner.post("/api/act", { fn: "setStaffConsent", args: [true] })).status, 200); assert.equal((await alex.post("/api/act", { fn: "recordConsent", args: [jo, "Signed <b>letter</b>"] })).json.result, null);
+    const T = await eng(); assert.equal(T.client(jo).textConsent, "given"); assert.match(T.client(jo).consentLog.at(-1).what, /recorded by Alex Staff: Signed bletter\/b/); assert.ok(T.S.audit.some((a: { action: string }) => a.action === "settings.consent"));
+    await H.close();
+  });
+
   test(name("a staff action sent twice with the same key runs once and answers the same; a different key runs again"), async () => {
     const H = await build(kind), { firmId } = await H.newFirm(), b = await H.signInAs("pat1@firm1.test"), add = { fn: "addClient", args: [{ first: "Jo", last: "Day", email: "jo@x.example" }] }, k = { "idempotency-key": "k".repeat(24) };
     const n = async () => { const T = createEngine(); T.load(await H.store.readState(firmId)); return T.S.clients.length; };

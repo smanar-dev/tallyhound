@@ -995,14 +995,19 @@
   }
   function closeEng(eid) { const e = eng(eid); e.status = "closed"; e.closedAt = new Date(S.now); e.purgeAfter = new Date(S.now.getTime() + S.firm.retention * DAY); e.next = null; timeline(e, "Closed. Documents purge after " + S.firm.retention + " days.", S.user.name); }
   function purge(eid, by) { const e = eng(eid), who = by || S.user.name; S.docs.filter((d) => d.engId === eid).forEach((d) => { forget(d); d.state = "purged"; d.image = null; d.pages = null; d.read = null; d.payer = ""; d.recipientName = ""; d.elements = []; d.versions = []; d.reasons = ["Deleted under the retention rule."]; d.findings = []; }); S.msgs.filter((m) => m.engId === eid).forEach((m) => { m.body = "(deleted)"; m.aiNote = null; m.understood = null; }); e.memory = []; e.purged = new Date(S.now); timeline(e, "Documents and message text deleted", who); audit("purge", client(e.clientId).last, who); }
-  const STATE_TZ = { ET: "CT DE FL GA IN KY MA MD ME MI NC NH NJ NY OH PA RI SC VA VT WV DC", CT: "AL AR IA IL KS LA MN MO MS ND NE OK SD TN TX WI", MT: "AZ CO ID MT NM UT WY", PT: "CA NV OR WA", AKT: "AK", HT: "HI" };
-  const ZONES = { ET: 1, CT: 0, MT: -1, PT: -2, AKT: -3, HT: -4 }, ZNAME = { ET: "Eastern", CT: "Central", MT: "Mountain", PT: "Pacific", AKT: "Alaska", HT: "Hawaii" };
+  const STATE_TZ = { ET: "CT DE FL GA IN KY MA MD ME MI NC NH NJ NY OH PA RI SC VA VT WV DC", CT: "AL AR IA IL KS LA MN MO MS ND NE OK SD TN TX WI", MT: "CO ID MT NM UT WY", AZ: "AZ", PT: "CA NV OR WA", AKT: "AK", HT: "HI" };
+  const ZONES = { ET: 1, CT: 0, MT: -1, AZ: -1, PT: -2, AKT: -3, HT: -4 }, ZNAME = { ET: "Eastern", CT: "Central", MT: "Mountain", AZ: "Arizona", PT: "Pacific", AKT: "Alaska", HT: "Hawaii" };
+  /* Arizona and Hawaii keep standard time all year. While the rest of the country is on daylight time (second Sunday of March to
+     the first Sunday of November) they sit one more hour behind it. */
+  const NO_DST = { AZ: 1, HT: 1 };
+  function usDst(d) { const y = d.getFullYear(), sunday = (m, n) => 1 + ((7 - new Date(y, m, 1).getDay()) % 7) + (n - 1) * 7; return d >= new Date(y, 2, sunday(2, 2), 2) && d < new Date(y, 10, sunday(10, 1), 2); }
+  const zoneAt = (z, d) => ZONES[z] - (NO_DST[z] && usDst(d) ? 1 : 0);
   function zoneOf(v) { const t = String(v || "").trim().toUpperCase(); if (!t) return null; if (ZONES[t] !== undefined) return t; const byName = Object.keys(ZNAME).find((k) => t.startsWith(ZNAME[k].toUpperCase())); if (byName) return byName; return Object.keys(STATE_TZ).find((k) => STATE_TZ[k].split(" ").includes(t)) || null; }
   const firmZone = () => zoneOf(S.firm.tz) || "CT";
-  const tzOff = (c) => (c && c.tz && ZONES[c.tz] !== undefined ? ZONES[c.tz] - ZONES[firmZone()] : 0);
+  const tzOff = (c, d) => (c && c.tz && ZONES[c.tz] !== undefined ? zoneAt(c.tz, d || S.now) - zoneAt(firmZone(), d || S.now) : 0);
   /* Sending hours are judged on the client's own clock. The engine clock is the firm's. */
-  function allowedC(d, c) { return allowed(new Date(d.getTime() + tzOff(c) * HOUR)); }
-  function nextAllowedC(d, c) { const o = tzOff(c) * HOUR; return new Date(nextAllowed(new Date(d.getTime() + o)).getTime() - o); }
+  function allowedC(d, c) { return allowed(new Date(d.getTime() + tzOff(c, d) * HOUR)); }
+  function nextAllowedC(d, c) { const o = tzOff(c, d) * HOUR; return new Date(nextAllowed(new Date(d.getTime() + o)).getTime() - o); }
   /* Reads real exports: quoted fields, commas inside quotes, semicolons or tabs, a byte order mark, blank lines, one Name column. */
   function parseCSV(text) {
     const src = String(text || "").replace(/^﻿/, "").replace(/\r\n?/g, "\n"), firstLine = src.split("\n")[0] || "";
@@ -1380,7 +1385,7 @@
 
   /* The one file an action touched, found from its first argument (file, client, item or task id). */
   function touched(a) { if (typeof a !== "string") return null; let e = S.engs.find((x) => x.id === a || x.clientId === a); if (e) return e; const it = S.items.find((x) => x.id === a) || S.tasks.find((x) => x.id === a); return it && it.engId ? S.engs.find((x) => x.id === it.engId) || null : null; }
-  function zoneFix(e) { if (!e.next) return; const c = client(e.clientId); if (c && tzOff(c) && !allowedC(e.next, c)) e.next = nextAllowedC(e.next, c); }
+  function zoneFix(e) { if (!e.next) return; const c = client(e.clientId); if (c && tzOff(c, e.next) && !allowedC(e.next, c)) e.next = nextAllowedC(e.next, c); }
   function setZone(cid, z) { const c = client(cid); if (!c) return; c.tz = zoneOf(z); audit("client.zone", c.last + ": " + (c.tz ? ZNAME[c.tz] : "firm time")); const e = engOf(cid); if (e) zoneFix(e); }
   /* Keeps status and checklist in step after any staff or client action. */
   function settle(e) {

@@ -38,7 +38,7 @@ Every document must pass three checks, and `T.verdict(doc)` is the only place th
 - `Dockerfile` one image for the web service and the timer
 
 ## Known gaps in the engine (each has a ticket)
-- Time: the engine reads hours off its own clock, which must be the firm's wall time. `pipeline.wallTime` converts when `firm.iana` is set. Set it for every production firm. Each client can have a US zone (`T.setZone`); sending hours are judged on the client's clock. Offsets are fixed hour differences, so Arizona and Hawaii are an hour off during daylight saving (T-47).
+- Time: the engine reads hours off its own clock, which must be the firm's wall time. `pipeline.wallTime` converts when `firm.iana` is set. Set it for every production firm. Each client can have a US zone (`T.setZone`); sending hours are judged on the client's clock. Arizona and Hawaii keep standard time all year and the engine allows for it. Other offsets are fixed hour differences (T-47).
 - Never build HTML from a client name, payer, message or model output without escaping it. `tools/` has the injection sweep the demo passes; the web app needs the same test (T-52).
 - Tax year 2026 is fixed in `newEng`. T-27.
 - Spanish wording has not had native review. Keep Spanish off for pilots. T-31.

@@ -9,7 +9,11 @@ const staff = (n: number): Rule => ({ role: "staff", n }), owner = (n: number): 
 
 export const ACTIONS: Record<string, Rule> = {
   // client list
-  addClient: staff(1), setZone: staff(2), setFact: staff(3), recordConsent: staff(2),
+  addClient: staff(1), setZone: staff(2), setFact: staff(3),
+  // T-145: staff may record consent the firm already holds (a signed letter, an intake form) only once an owner has switched that on.
+  // It is off for every new firm. The switch is not on any screen until counsel has approved its use; an owner's request reaches it here.
+  recordConsent: { role: "staff", n: 2, run: (T, [cid, how]) => (T.S.firm.staffConsent === true ? T.recordConsent(cid, String(how ?? "").replace(/[<>]/g, "").trim().slice(0, 200)) : "An owner has not switched on recording consent for clients. The client can agree on their own page.") },
+  setStaffConsent: { role: "owner", n: 1, run: (T, [on]) => { T.S.firm.staffConsent = on === true; T.audit("settings.consent", on === true ? "Staff may record consent the firm already holds" : "Staff may no longer record consent"); return null; } },
   // The file is parsed again here, by the engine, from the text. The browser may say how to use each column and nothing else:
   // a column the engine marked sensitive (SSN, date of birth, fees) stays unread whatever the browser sends.
   importCsv: { role: "staff", n: 2, run: (T, [text, map]) => {

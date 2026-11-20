@@ -6,7 +6,7 @@ import type { AuthStore, User } from "./authstore.ts";
 
 export class FirmError extends Error { status: number; constructor(message: string, status = 400) { super(message); this.status = status; } }
 const ROLES: Role[] = ["owner", "staff", "read_only"];
-const ZONE_OF: Record<string, string> = { "America/New_York": "Eastern", "America/Chicago": "Central", "America/Denver": "Mountain", "America/Phoenix": "Mountain", "America/Los_Angeles": "Pacific", "America/Anchorage": "Alaska", "Pacific/Honolulu": "Hawaii" };
+const ZONE_OF: Record<string, string> = { "America/New_York": "Eastern", "America/Chicago": "Central", "America/Denver": "Mountain", "America/Phoenix": "Arizona", "America/Los_Angeles": "Pacific", "America/Anchorage": "Alaska", "Pacific/Honolulu": "Hawaii" };
 const email = (v: string) => { const e = String(v || "").trim().toLowerCase(); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) throw new FirmError("That is not an email address: " + v); return e; };
 const clean = (v: string) => String(v || "").replace(/[<>]/g, "").replace(/\s+/g, " ").trim().slice(0, 80);
 const newId = (p: string) => p + randomBytes(8).toString("hex");

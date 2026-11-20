@@ -243,3 +243,19 @@ test("unsubscribe link: one per client, the same for ever, and only for a firm w
   const { T, c } = firm(); assert.equal(T.unsubscribeLink(c), ""); T.S.firm.linkBase = "go.tallyhound.test"; T.S.firm.slug = "testcpas";
   const a = T.unsubscribeLink(c); assert.match(a, /^go\.tallyhound\.test\/e\/testcpas-[a-z]{28}$/); T.setNow(new Date(T.S.now.getTime() + 400 * T.DAY)); assert.equal(T.unsubscribeLink(c), a);
 });
+test("T-47: Arizona and Hawaii keep standard time, so in summer their clients are an hour further behind the firm", () => {
+  const { T, c } = firm(); T.S.firm.tz = "CT"; const at = (mo, d, h, mi) => new Date(2027, mo, d, h, mi || 0);   // Tuesdays, no holiday
+  assert.equal(T.zoneOf("AZ"), "AZ"); assert.equal(T.zoneOf("Arizona"), "AZ"); assert.equal(T.zoneOf("CO"), "MT"); assert.equal(T.zoneOf("HI"), "HT");
+  T.setZone(c.id, "AZ");
+  // January: Phoenix is on Mountain time, one hour behind Central. 8 am there is 9 am at the firm.
+  assert.equal(T.allowedC(at(0, 26, 8, 30), c), false); assert.equal(T.allowedC(at(0, 26, 9), c), true);
+  // July: the firm moved its clock forward and Phoenix did not. 8 am there is 10 am at the firm: nothing goes before that.
+  assert.equal(T.allowedC(at(6, 13, 9, 30), c), false); assert.equal(T.allowedC(at(6, 13, 10), c), true);
+  // The change happens at 2 am on the second Sunday of March and the first Sunday of November.
+  assert.equal(T.allowedC(at(2, 12, 9), c), true, "Friday before the change"); assert.equal(T.allowedC(at(2, 15, 9), c), false, "Monday after"); assert.equal(T.allowedC(at(10, 8, 9), c), true, "Monday after it ends");
+  T.setZone(c.id, "HT"); assert.equal(T.allowedC(at(0, 26, 11, 30), c), false); assert.equal(T.allowedC(at(0, 26, 12), c), true); assert.equal(T.allowedC(at(6, 13, 12, 30), c), false); assert.equal(T.allowedC(at(6, 13, 13), c), true);
+  // A Mountain client next door in Colorado moves with the firm: always one hour behind.
+  T.setZone(c.id, "CO"); assert.equal(T.allowedC(at(6, 13, 9), c), true); assert.equal(T.allowedC(at(6, 13, 8, 30), c), false);
+  // And a firm in Phoenix with a client in Chicago: one hour ahead in winter, two in summer.
+  T.S.firm.tz = "AZ"; T.setZone(c.id, "CT"); assert.equal(T.allowedC(at(0, 26, 7), c), true); assert.equal(T.allowedC(at(0, 26, 6, 30), c), false); assert.equal(T.allowedC(at(6, 13, 6), c), true); assert.equal(T.allowedC(at(6, 13, 5, 30), c), false);
+});
