@@ -71,3 +71,12 @@ scene("details: a changed mobile number turns texts off until the client agrees 
   const go = dlg.getByRole("button", { name: "Delete for good" }); assert.equal(await go.isDisabled(), true); await dlg.getByLabel(/last name/).fill("Smith"); assert.equal(await go.isDisabled(), true); await dlg.getByLabel(/last name/).fill("day"); await go.click(); await page.getByText("Documents deleted.").waitFor();
   T = await W.state(firmId); assert.ok(T.S.docs.filter((d: { engId: string }) => d.engId === jo.id).every((d: { state: string; fileKey?: string }) => d.state === "purged" || !d.fileKey));
 });
+
+scene("See it as the client: the last message and the client's page as it reads now, without their link", async (W) => {
+  const { firmId } = await busyFirm(W), page = await W.signIn("pat1@firm1.test"), T: Engine = await W.state(firmId), c = T.S.clients.find((x: { first: string }) => x.first === "Jo"), e = T.engOf(c.id);
+  await page.goto(W.url + "/clients/" + e.id); await page.getByRole("button", { name: "More actions" }).click(); await page.getByRole("button", { name: "See it as the client" }).click();
+  const box = page.getByRole("dialog"); await box.getByRole("heading", { name: "What Jo sees" }).waitFor();
+  const last = T.S.msgs.filter((m: { engId: string; dir: string }) => m.engId === e.id && m.dir === "out").at(-1); assert.ok(text(await box.textContent()).includes(text(last.body).slice(0, 40)));
+  const open = T.openItems(e.id); if (open.length) { assert.match(text(await box.locator(".phone").textContent()), /We're waiting for ?your /); assert.match(text(await box.locator(".phone").textContent()), /We never show documents here\./); }
+  assert.ok(!(await box.innerHTML()).includes(c.key), "the private link is not on the page"); await box.getByRole("button", { name: "Done" }).click(); assert.equal(await page.getByRole("dialog").count(), 0);
+});

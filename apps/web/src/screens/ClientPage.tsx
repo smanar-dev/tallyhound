@@ -231,9 +231,27 @@ function Details({ T, c }: Ctx) {
   </div>;
 }
 
+// What this client sees, so staff can answer "what did you send me?" without guessing: the last thing Tallyhound sent them, and
+// their page as it reads right now. Worked out here from the same state; the client's private link is never shown to staff.
+function AsClient({ T, e, c, onClose }: Ctx & { onClose: () => void }) {
+  const s = T.S, done = ["complete", "closed"].includes(e.status), open: Row[] = done ? [] : T.openItems(e.id), it: Row | null = done ? null : T.nextItem(e) || open[0] || null;
+  const last: Row | undefined = s.msgs.filter((m: Row) => m.engId === e.id && m.dir === "out" && ["sent", "delivered", "unconfirmed"].includes(m.status)).slice(-1)[0], asking = !!(e.checkin && e.checkin.sentAt && !e.checkin.doneAt);
+  return <Modal title={"What " + c.first + " sees"} onClose={onClose} footer={<button className="btn pri" onClick={onClose}>Done</button>}>
+    <div className="col" style={{ gap: 14 }}>
+      <div><h4>The last message from you</h4>{last ? <><div className="bub out" style={{ maxWidth: "100%", marginTop: 6 }}>{last.body}</div><div className="small faint" style={{ marginTop: 4 }}>{last.channel === "text" ? "Text" : "Email"}, {rel(T, last.at)}</div></> : <p className="small muted">Nothing has been sent to {c.first} yet.</p>}</div>
+      <div><h4>Their page, when they open the link</h4>
+        <div className="phone"><div className="phone-firm">{s.firm.name}</div>
+          {done || (!it && !open.length) ? <b>{s.firm.name} already has everything. Thank you.</b>
+            : asking ? <><b>A few quick questions</b><div className="small muted">So we only ask for what you have. {c.first} sees the check-in first, then the page for sending documents.</div></>
+            : <><div className="small muted">We're waiting for</div><b>{it ? "your " + (it.custom || iname(T, it)) + (it.payer ? " from " + it.payer : "") : "your documents"}</b>{open.length > 1 ? <div className="small muted">and {open.length - 1} other document{open.length - 1 === 1 ? "" : "s"}.</div> : null}<div className="phone-btn">Take a photo</div><div className="phone-btn">Choose files</div></>}
+          <div className="small muted">We never show documents here.</div></div>
+        <p className="small muted" style={{ marginTop: 8 }}>The page never lists what {c.first} already sent, and never shows a document. Only {c.first} has the link.</p></div>
+    </div></Modal>;
+}
+
 export function ClientPage() {
   const { T, can, act, toast, reload } = useFirm(), { id } = useParams(), [params, setParams] = useSearchParams(), e = id ? T.eng(id) : null, c = e ? T.client(e.clientId) : null;
-  const [handOff, setHandOff] = useState<{ folder: string; files: string[]; missing: string[] } | null>(null), [purge, setPurge] = useState(false), [typed, setTyped] = useState("");
+  const [handOff, setHandOff] = useState<{ folder: string; files: string[]; missing: string[] } | null>(null), [purge, setPurge] = useState(false), [typed, setTyped] = useState(""), [asClient, setAsClient] = useState(false);
   if (!e || !c) return <Page title="Client"><div className="card"><Empty><b>That client is not on your list.</b><br />They may have been removed, or the address is wrong.<br /><Link className="btn" style={{ marginTop: 12 }} to="/clients">Back to Clients</Link></Empty></div></Page>;
   const s = T.S, p = T.progress(e.id), u = s.users.find((x: Row) => x.id === c.preparer), docs = s.docs.filter((d: Row) => d.engId === e.id).length, msgs = s.msgs.filter((m: Row) => m.engId === e.id && m.status !== "discarded").length, rc = T.recommend(e.id).add.length;
   const TABS: [string, string, (string | number | null)?][] = [["checklist", "Checklist", p.done + "/" + p.total], ["suggested", "Suggested", rc ? rc + " to add" : null], ["documents", "Documents", docs], ["conversation", "Conversation", msgs], ["activity", "Activity"], ["details", "Details"]];
@@ -256,6 +274,7 @@ export function ClientPage() {
         <div className="row small" style={{ marginTop: 8, gap: 14 }}>{c.mobile ? <span className="row" style={{ gap: 5 }}><Icon name="phone" small />{phone(c.mobile)} <Chip tone={consent[1]}>{consent[0]}</Chip>{c.mobileBad ? <Chip tone="bad">Wrong number?</Chip> : null}{T.isLandline(c) ? <Chip tone="bad">Landline: cannot get texts</Chip> : null}</span> : null}{c.email ? <span className="row" style={{ gap: 5 }}><Icon name="mail" small />{c.email}{c.emailOk === false ? <Chip tone="bad">Bouncing</Chip> : null}</span> : null}</div></div>
       <div className="row">{can() ? <><button className="btn" onClick={() => setParams({ tab: "conversation" })}><Icon name="msg" small />Message</button>{e.status === "paused" ? <button className="btn" onClick={() => void act("resume", e.id).then(() => toast("Resumed."), () => {})}><Icon name="play" small />Resume</button> : null}{e.status !== "not_started" ? <button className="btn" onClick={doHandOff}><Icon name="deliver" small />Hand off files</button> : null}
         <Menu label="More actions">{(close) => <>
+          <button onClick={() => { close(); setAsClient(true); }}><Icon name="phone" small />See it as the client</button>
           {e.status === "complete" ? <button onClick={() => { close(); void act("closeEng", e.id).then(() => toast("Closed. Tallyhound's copies are deleted after " + s.firm.retention + " days."), () => {}); }}><Icon name="lock" small />Close the file</button> : null}
           {!["complete", "closed", "paused", "not_started"].includes(e.status) ? <button onClick={() => { close(); void act("pause", e.id).then(() => toast("Paused. No automated messages until you resume."), () => {}); }}><Icon name="pause" small />Pause collecting</button> : null}
           {can("owner") ? <button className="bad" onClick={() => { close(); setTyped(""); setPurge(true); }}><Icon name="trash" small />Delete this client's documents</button> : null}
@@ -277,6 +296,7 @@ export function ClientPage() {
       <p className="small muted">{handOff.folder}</p>
       <div className="list card" style={{ boxShadow: "none" }}>{handOff.files.length ? handOff.files.map((f) => <div className="li" key={f}><Icon name="file" small /><span className="mono" style={{ overflowWrap: "anywhere" }}>{f}</span></div>) : <div className="li muted">No accepted documents yet.</div>}</div>
       {handOff.missing.length ? <div className="note"><Icon name="alert" small /><span>Still missing: {handOff.missing.join(", ")}</span></div> : null}</Modal> : null}
+    {asClient ? <AsClient T={T} e={e} c={c} onClose={() => setAsClient(false)} /> : null}
     {purge ? <Modal title={"Delete " + c.first + "'s documents?"} onClose={() => setPurge(false)} footer={<><button className="btn" onClick={() => setPurge(false)}>Cancel</button><button className="btn bad" disabled={typed.trim().toLowerCase() !== String(c.last).toLowerCase()} onClick={() => { setPurge(false); void act("purge", e.id).then(() => toast("Documents deleted."), () => {}); }}>Delete for good</button></>}>
       <p>Files and what was read from them are deleted, and message text is cleared. A record that this was done stays in the audit trail. <b>This cannot be undone.</b></p>
       <label className="f">Type the client's last name to confirm<input type="text" value={typed} onChange={(ev) => setTyped(ev.target.value)} autoComplete="off" /></label></Modal> : null}

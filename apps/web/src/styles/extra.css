@@ -59,3 +59,6 @@ table.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 
 .rhythm li:before{content:"";width:14px;height:14px;border-radius:50%;background:var(--ink);position:absolute;top:-9px}
 .pdfpages{display:flex;flex-direction:column;align-items:center;gap:18px;width:100%}
 .pagenote{font-size:13px;opacity:.85;text-align:center}
+.phone{border:1px solid var(--line);border-radius:18px;background:var(--cream);padding:16px;max-width:300px;display:flex;flex-direction:column;gap:8px;margin-top:6px}
+.phone-firm{font-weight:700;font-size:13px}
+.phone-btn{border:1px solid var(--ink);border-radius:10px;padding:9px 12px;text-align:center;font-weight:700;background:#fff}
