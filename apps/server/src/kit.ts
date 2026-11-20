@@ -11,6 +11,7 @@ export interface KitStore {
   inner?: any;
   create(id: string, json: string, where: { number?: string; inbox?: string; name?: string }): Promise<void>;
   firmIdByNumber(n: string): Promise<string | null>;
+  setNumber(id: string, number: string | null): Promise<void>;
   firmIdByInbox(a: string): Promise<string | null>;
   lock(id: string, fn: (json: string | null) => Promise<string>): Promise<void>;
   readState(id: string): Promise<string | null>;
@@ -40,7 +41,7 @@ export interface App {
 
 export const { createEngine } = require("../../../packages/engine") as { createEngine(): Engine };
 export const { wallTime } = require("../../../packages/core/pipeline.js") as { wallTime(date: Date, iana: string): Date };
-export const kitRegistration = require("../../../packages/core/registration.js") as { firmPage(firm: { name: string; phone?: string }, opt?: { number?: string; address?: string }): string };
+export const kitRegistration = require("../../../packages/core/registration.js") as { firmPage(firm: { name: string; phone?: string }, opt?: { number?: string; address?: string }): string; brand(firm: unknown, reg: unknown): unknown; campaign(firm: unknown, reg: unknown): unknown; headsUp(firm: { name: string }, opt?: { number?: string; address?: string }): { subject: string; email: string; letter: string; website: string; voicemail: string } };
 export const { createApp } = require("../../../packages/core/pipeline.js") as {
   createApp(deps: { store: KitStore; sms: Sender; email: Sender; ai: unknown; clock?: () => Date; log?: (event: string, ...ids: unknown[]) => void; files?: unknown }): App;
 };

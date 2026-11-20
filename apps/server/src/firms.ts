@@ -1,7 +1,7 @@
 // Creating a firm and managing its staff accounts. A staff member exists in two places that must agree: the sign-in table
 // (who may sign in) and the firm's own workspace (whose name goes on actions and the audit trail). Both use the same id.
 import { randomBytes } from "node:crypto";
-import type { App, Engine, Role } from "./kit.ts";
+import { kitRegistration, type App, type Engine, type Role } from "./kit.ts";
 import type { AuthStore, User } from "./authstore.ts";
 
 export class FirmError extends Error { status: number; constructor(message: string, status = 400) { super(message); this.status = status; } }
@@ -18,7 +18,7 @@ export interface NewFirm { name: string; sender?: string; phone?: string; inbox:
 const LETTERS = "abcdefghijkmnpqrstuvwxyz";
 export const slugOf = (name: string) => name.toLowerCase().replace(/&/g, " and ").replace(/\b(cpas?|llc|llp|pllc|pc|inc|and|the|co|company|associates|group)\b/g, " ").replace(/[^a-z]/g, "").slice(0, 24) || "firm";
 
-export function createFirms({ app, auth, linkHost }: { app: App; auth: AuthStore; linkHost?: string }) {
+export function createFirms({ app, auth, linkHost, store }: { app: App; auth: AuthStore; linkHost?: string; store?: { firmIdByNumber(n: string): Promise<string | null>; setNumber(id: string, n: string | null): Promise<void> } }) {
   async function owners(firmId: string) { return (await auth.usersOfFirm(firmId)).filter((u) => u.role === "owner" && !u.leftAt); }
   return {
     // T-05. New firms start unchecked (T-116): nothing sends and nothing is read until the firm check is passed and setVerified is called.
@@ -41,6 +41,20 @@ export function createFirms({ app, auth, linkHost }: { app: App; auth: AuthStore
     async setVerified(firmId: string, on: boolean, by: string): Promise<void> {
       await app.withFirm(firmId, (T: Engine) => { T.setVerified(on); });
       await auth.audit(firmId, "tallyhound", on ? "firm.checked" : "firm.suspended", clean(by));
+    },
+    // The carriers approved the firm's text number. Done by a person at Tallyhound, who files the registration by hand (T-134).
+    // The number is recorded where arriving texts are matched to a firm, then in the firm's own state.
+    async senderApproved(firmId: string, number: string, by: string): Promise<void> {
+      const ten = String(number || "").replace(/\D/g, "").replace(/^1(\d{10})$/, "$1"); if (!/^[2-9]\d{9}$/.test(ten)) throw new FirmError("Give the approved number as 10 digits");
+      if (!store) throw new FirmError("This service cannot record a number");
+      const taken = await store.firmIdByNumber(ten); if (taken && taken !== firmId) throw new FirmError("That number already belongs to another firm");
+      await store.setNumber(firmId, ten);
+      await app.withFirm(firmId, (T: Engine) => { T.S.firm.smsNumber = ten; T.S.firm.senderStatus = "approved"; T.S.firm.senderApprovedAt = new Date(T.S.now); T.audit("sender.status", "Text number approved by the carriers", "Tallyhound"); });
+      await auth.audit(firmId, "tallyhound", "sender.approved", clean(by));
+    },
+    /** What is filed with the carriers for a firm, from the details its owner entered. Throws with the reason when they are not complete. */
+    async registration(firmId: string): Promise<{ brand: unknown; campaign: unknown }> {
+      return (await app.withFirm(firmId, (T: Engine) => { const f = T.S.firm; if (!f.reg) throw new FirmError("The firm's owner has not entered its legal details yet"); const firm = { name: f.name, email: f.email, phone: f.phone }; return { brand: kitRegistration.brand(firm, f.reg), campaign: kitRegistration.campaign(firm, f.reg) }; })) as { brand: unknown; campaign: unknown };
     },
     async addUser(firmId: string, by: User, o: { email: string; name: string; role: Role }): Promise<string> {
       if (by.role !== "owner") throw new FirmError("Only an owner can add people", 403);

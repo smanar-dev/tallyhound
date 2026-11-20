@@ -1,5 +1,6 @@
 // The web service. Sign-in, the firm's state for the web app, and one endpoint per kind of staff action.
 // It holds no product rules: every action runs the engine through the pipeline (app.staff), which loads, decides, saves and sends.
+import { kitRegistration } from "./kit.ts";
 import { BillingError, type Billing } from "./billing.ts";
 import { GOOGLE, StorageError, type Storage } from "./storage.ts";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
@@ -180,6 +181,13 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
     entries["manifest.csv"] = strToU8(r.manifest + "\n");
     const zip = Buffer.from(zipSync(entries, { level: 0 })), safe = r.folder.split("/").slice(-2).reverse().join(" ").replace(/[^A-Za-z0-9 ,._-]/g, "").trim() || "files";
     return reply.header("content-disposition", 'attachment; filename="' + safe + '.zip"').header("x-tallyhound-files", String(lines.length)).header("x-tallyhound-missing", String(r.missing.length)).type("application/zip").send(zip);
+  });
+
+  // The note a firm sends its own clients before Tallyhound's first message, worded for this firm. Read only.
+  f.get("/api/headsup", { preHandler: full }, async (req, reply) => {
+    const json = await d.readState(req.who!.user.firmId); if (!json) return reply.code(404).send({ error: "no_firm", message: "This firm's workspace could not be found." });
+    const T = createEngine(); T.load(json); const fm = T.S.firm, n = String(fm.smsNumber || "");
+    return kitRegistration.headsUp({ name: fm.name }, { number: fm.senderStatus === "approved" && n.length === 10 ? "(" + n.slice(0, 3) + ") " + n.slice(3, 6) + "-" + n.slice(6) : undefined, address: fm.email || undefined });
   });
 
   // ---- card billing (owner only). Paying and managing cards happen on Stripe's own pages; these hand the browser their address. ----

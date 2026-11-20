@@ -124,7 +124,9 @@ for (const kind of KINDS) {
     assert.equal((await staff.post("/api/act", two)).status, 403, "one owner-only call refuses the whole request"); assert.equal((await owner.get("/api/state")).json.state.clients.length, 2, "and nothing in it ran");
     const ok = await owner.post("/api/act", two); assert.equal(ok.status, 200); assert.equal(ok.json.results.length, 2); assert.equal((await owner.get("/api/state")).json.state.clients.length, 3);
     assert.equal((await owner.post("/api/act", { calls: [] })).status, 400); assert.equal((await owner.post("/api/act", { calls: [{ fn: "blank" }] })).status, 404);
-    for (const fn of ["portalNone", "clientAnswers", "setVerified", "advance", "reset", "blank", "load", "giveConsent", "registerSender", "constructor", "__proto__", "S"]) assert.equal((await owner.post("/api/act", { fn, args: [true] })).status, 404, fn + " is not reachable");
+    for (const fn of ["portalNone", "clientAnswers", "setVerified", "advance", "reset", "blank", "load", "giveConsent", "constructor", "__proto__", "S"]) assert.equal((await owner.post("/api/act", { fn, args: [true] })).status, 404, fn + " is not reachable");
+    // Filing the firm's details for a text number is the owner's; it can never mark the number as approved.
+    assert.equal((await owner.post("/api/act", { fn: "registerSender", args: [{ legalName: "X" }] })).status, 200); const TS = createEngine(); TS.load(await H.store.readState((await owner.get("/api/me")).json.firmId)); assert.equal((await owner.post("/api/act", { fn: "registerSender", args: [{ legalName: "Test CPAs LLC", ein: "12-3456789", street: "1 Main Street", city: "Nashville", state: "TN", zip: "37201", contact: "Pat Owner", senderStatus: "approved" }] })).json.result, null); assert.notEqual(TS.S.firm.senderStatus, "nonsense");
     // The engine's own audit trail names the person who acted.
     const T = createEngine(); T.load(await H.store.readState(firmId)); assert.ok(T.S.audit.some((a: { actor: string }) => a.actor === "Alex Staff"));
     await H.close();

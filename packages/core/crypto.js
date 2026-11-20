@@ -37,7 +37,7 @@ function encryptedStore(inner, keyring) {
   const unpack = (key, firmId, v) => (v == null ? null : zlib.gunzipSync(open(key, Buffer.from(v, "base64"), "state:" + firmId)).toString("utf8"));
   return {
     inner,
-    firmIdByNumber: (n) => inner.firmIdByNumber(n), firmIdByInbox: (a) => inner.firmIdByInbox(a),
+    firmIdByNumber: (n) => inner.firmIdByNumber(n), setNumber: (id, n) => inner.setNumber(id, n), firmIdByInbox: (a) => inner.firmIdByInbox(a),
     async create(id, json, where) { const key = await keyFor(id, true); return inner.create(id, pack(key, id, json), where); },
     async lock(id, fn) { const key = await keyFor(id, false); return inner.lock(id, async (v) => pack(key, id, await fn(unpack(key, id, v)))); },
     async readState(id) { const key = await keyFor(id, false); return unpack(key, id, await inner.readState(id)); },

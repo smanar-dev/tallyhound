@@ -22,7 +22,18 @@ function FirmTab() {
       <label className="f">Office phone<input type="tel" value={v.phone} onChange={set("phone")} maxLength={20} /></label><label className="f">Tax year for new clients<select value={v.taxYear} onChange={set("taxYear")}>{[2025, 2026, 2027].map((y) => <option key={y}>{y}</option>)}</select></label>
       <label className="f" style={{ gridColumn: "1/-1" }}>Your Tallyhound address (clients reply here; it cannot be changed)<input type="text" value={f.email || ""} readOnly disabled /></label></div>
     <div><button className="btn pri" onClick={() => void act("saveFirm", { ...v, taxYear: +v.taxYear }).then(() => toast("Saved."), () => {})}>Save</button></div>
-    <div className="note info"><Icon name="eye" small /><span>Clients see: “{T.fill("M5", c0, e0, { item: { form: "W2", payer: "Acme Logistics" } })}”</span></div></div>;
+    <div className="note info"><Icon name="eye" small /><span>Clients see: “{T.fill("M5", c0, e0, { item: { form: "W2", payer: "Acme Logistics" } })}”</span></div>
+    <NextSeason /></div>;
+}
+// One step starts the next tax year for everyone who is finished. It cannot be undone, so it says exactly what it will do first.
+function NextSeason() {
+  const { T, act, toast } = useFirm(), s = T.S, cur: number = s.firm.taxYear || 2026, next = cur + 1, [ask, setAsk] = useState(false);
+  const done = s.engs.filter((e: Row) => e.year < next && ["complete", "closed"].includes(e.status)).length, open = s.engs.filter((e: Row) => e.year < next && !["complete", "closed"].includes(e.status)).length;
+  const go = async () => { setAsk(false); try { const r = (await act("rollSeason", next)) as { rolled?: number; left?: number } | string; if (typeof r === "string") return toast(r + "."); toast("Tax year " + next + " started: " + plural(r.rolled || 0, "client") + " carried forward" + (r.left ? ", " + r.left + " still on " + cur : "") + "."); } catch { /* said */ } };
+  return <div className="col" style={{ gap: 8, borderTop: "1px solid var(--line2)", paddingTop: 14 }}><h3>Start the {next} season</h3>
+    <p className="small muted">Each finished client gets a new checklist for {next}, built from what they sent for {cur}: the same documents are expected again, and anything they said they do not have is not asked for. Their {cur} file becomes a short summary on their page. Nothing is sent until you start collecting.</p>
+    <div className="row"><button className="btn" disabled={!done} onClick={() => setAsk(true)}>Start the {next} season</button><span className="small muted">{done ? plural(done, "client") + " finished and ready" : "No client is finished with " + cur + " yet"}{open ? ". " + open + " still being collected stay on " + cur : ""}.</span></div>
+    {ask ? <Modal title={"Start the " + next + " season?"} onClose={() => setAsk(false)} footer={<><button className="btn" onClick={() => setAsk(false)}>Cancel</button><button className="btn pri" onClick={go}>Start {next}</button></>}><p>{plural(done, "client")} will move to tax year {next}. Their {cur} documents and messages are replaced by a summary: which documents came in, and when. {open ? open + " still being collected stay as they are. " : ""}This cannot be undone.</p></Modal> : null}</div>;
 }
 
 function PeopleTab() {
@@ -106,6 +117,36 @@ function HoursTab() {
     <h4 style={{ marginTop: 8 }}>The rhythm when a client goes quiet</h4>
     <ol className="rhythm">{days.map((d, i) => <li key={d}><b>Day {d}</b><span>{["First request", "Reminder", "Reminder", "Reminder", "Final note"][i]}</span></li>)}</ol>
     <p className="small muted">Never on Sundays or federal holidays. At most one automated message a day, unless the client replied in the last {f.liveMin} minutes. After the final note Tallyhound asks you to call, if that is switched on under The Hound, Rules it follows.</p></div>;
+}
+
+// Texting: the firm's details for the carriers, where the approval stands, and the note to send clients before the first message.
+function TextingTab() {
+  const { T, act, toast } = useFirm(), f = T.S.firm, r = f.reg || {}, st: string = f.senderStatus || "none", checking = f.verified === false;
+  const [v, setV] = useState({ legalName: r.legalName || "", ein: r.ein || "", soleProp: !!r.soleProp, street: r.street || "", city: r.city || "", state: r.state || "", zip: r.zip || "", contact: r.contact || "", ownerMobile: r.ownerMobile || "", website: r.website || "" }), [why, setWhy] = useState(""), [note, setNote] = useState<{ subject: string; email: string } | null>(null), [copied, setCopied] = useState(false);
+  useEffect(() => { api.get<{ subject: string; email: string }>("/api/headsup").then(setNote, () => setNote(null)); }, [st]);
+  const set = (k: keyof typeof v) => (ev: { target: { value: string } }) => setV({ ...v, [k]: ev.target.value }), day = (d: Date) => new Date(d).toLocaleDateString("en-US", { month: "long", day: "numeric" });
+  const file = async () => { setWhy(""); try { const x = await act("registerSender", v); if (x) return setWhy(String(x) + "."); toast(st === "none" ? "Sent. Tallyhound files it with the carriers." : "Saved."); } catch { /* said */ } };
+  const sub = f.senderSubmittedAt ? new Date(f.senderSubmittedAt) : null, num = String(f.smsNumber || "");
+  return <div className="col" style={{ gap: 16 }}>
+    <div className="card pad col"><h2>Your text number</h2>
+      {st === "approved" ? <div className="note good" role="status"><Icon name="check" small /><span>Approved by the carriers{num.length === 10 ? ". Your clients text (" + num.slice(0, 3) + ") " + num.slice(3, 6) + "-" + num.slice(6) : ""}.</span></div>
+        : st === "submitted" ? <div className="note info"><Icon name="clock" small /><span>With the carriers{sub ? " since " + day(sub) + ". Approval usually comes between " + day(new Date(+sub + 7 * 86400000)) + " and " + day(new Date(+sub + 21 * 86400000)) : ""}. Until then Tallyhound collects by email and each client's own page.</span></div>
+        : <p className="small muted">Phone carriers must approve any business that texts. It takes one to three weeks and needs your firm's legal details, not a plan. Until it clears, Tallyhound collects by email and each client's own page, which uses their phone camera.</p>}
+      {checking ? <div className="note"><Icon name="alert" small /><span>{T.FIRMCHECK}</span></div> : null}
+      {why ? <div className="note bad" role="alert">{why}</div> : null}
+      <div className="grid g2"><label className="f">Legal name, exactly as on your IRS letter<input type="text" value={v.legalName} maxLength={120} onChange={set("legalName")} /></label>
+        <label className="f">Employer identification number (EIN)<input type="text" inputMode="numeric" value={v.ein} maxLength={12} disabled={v.soleProp} onChange={set("ein")} /></label></div>
+      <label className="row"><span className="toggle"><input type="checkbox" checked={v.soleProp} onChange={(ev) => setV({ ...v, soleProp: ev.target.checked, ein: ev.target.checked ? "" : v.ein })} /><span /></span>We have no EIN (sole proprietor). Never enter a Social Security number here</label>
+      {v.soleProp ? <label className="f">Owner's own mobile number, for the carriers' code<input type="tel" value={v.ownerMobile} maxLength={20} onChange={set("ownerMobile")} /></label> : null}
+      <label className="f">Street address (not a PO box)<input type="text" value={v.street} maxLength={120} onChange={set("street")} /></label>
+      <div className="grid g3"><label className="f">City<input type="text" value={v.city} maxLength={60} onChange={set("city")} /></label><label className="f">State<input type="text" value={v.state} maxLength={2} onChange={set("state")} /></label><label className="f">ZIP<input type="text" inputMode="numeric" value={v.zip} maxLength={5} onChange={set("zip")} /></label></div>
+      <div className="grid g2"><label className="f">Someone the carriers can reach<input type="text" value={v.contact} maxLength={80} onChange={set("contact")} /></label><label className="f">Website, if you have one<input type="text" value={v.website} maxLength={120} onChange={set("website")} /></label></div>
+      <div><button className="btn pri" disabled={checking} onClick={file}>{st === "none" ? "Send for approval" : "Save changes"}</button></div></div>
+    <div className="card pad col"><h3>Tell your clients first</h3><p className="small muted">People are told to distrust messages that ask for tax documents. Send this from your own usual email before Tallyhound's first request, so the first message is expected.</p>
+      {note ? <><div className="small"><b>Subject:</b> {note.subject}</div><pre className="plantext">{note.email}</pre>
+        <div className="row"><button className="btn" onClick={() => navigator.clipboard.writeText(note.subject + "\n\n" + note.email).then(() => setCopied(true), () => undefined)}>{copied ? "Copied" : "Copy the note"}</button>
+          {f.headsUpAt ? <><Chip tone="good">Marked as sent {day(f.headsUpAt)}</Chip><button className="btn sm ghost" onClick={() => void act("markHeadsUp", false).then(() => toast("Marked as not sent yet."), () => {})}>Not sent after all</button></> : <button className="btn pri" onClick={() => void act("markHeadsUp", true).then(() => toast("Marked as sent."), () => {})}>I have sent it</button>}</div></> : <p className="small muted" role="status">Loading the wording…</p>}</div>
+  </div>;
 }
 
 // Where finished files go: the firm's own Google Drive, or a zip a preparer downloads. Connecting is a visit to Google and back;
@@ -193,12 +234,12 @@ function SecurityTab() {
   </div>;
 }
 
-const TABS: [string, string][] = [["firm", "Your firm"], ["people", "People"], ["checklists", "Checklists"], ["wording", "Message wording"], ["hours", "Sending hours"], ["files", "Finished files"], ["plan", "Your plan"], ["security", "Security and data"]];
+const TABS: [string, string][] = [["firm", "Your firm"], ["people", "People"], ["checklists", "Checklists"], ["wording", "Message wording"], ["hours", "Sending hours"], ["texting", "Text number"], ["files", "Finished files"], ["plan", "Your plan"], ["security", "Security and data"]];
 export function Settings() {
   const { can } = useFirm(), [params, setParams] = useSearchParams(), tab = TABS.some((t) => t[0] === params.get("tab")) ? params.get("tab")! : "firm";
   if (!can("owner")) return <Page title="Settings"><div className="card pad"><p>Settings are for owners. Ask an owner at your firm if something here needs changing.</p></div></Page>;
   return <Page title="Settings">
     <div className="tabs" role="tablist">{TABS.map((t) => <button key={t[0]} role="tab" aria-selected={tab === t[0]} className={tab === t[0] ? "on" : ""} onClick={() => setParams(t[0] === "firm" ? {} : { tab: t[0] })}>{t[1]}</button>)}</div>
-    {tab === "firm" ? <FirmTab /> : tab === "people" ? <PeopleTab /> : tab === "checklists" ? <ChecklistsTab /> : tab === "wording" ? <WordingTab /> : tab === "hours" ? <HoursTab /> : tab === "files" ? <FilesTab /> : tab === "plan" ? <PlanTab /> : <SecurityTab />}
+    {tab === "firm" ? <FirmTab /> : tab === "people" ? <PeopleTab /> : tab === "checklists" ? <ChecklistsTab /> : tab === "wording" ? <WordingTab /> : tab === "hours" ? <HoursTab /> : tab === "texting" ? <TextingTab /> : tab === "files" ? <FilesTab /> : tab === "plan" ? <PlanTab /> : <SecurityTab />}
   </Page>;
 }

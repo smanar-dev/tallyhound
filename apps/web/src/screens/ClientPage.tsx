@@ -228,7 +228,15 @@ function Details({ T, c }: Ctx) {
     <div className="card"><div className="hd"><h3>OK to text</h3><span className="sp" /><span className="small muted">The record of when {c.first} agreed or opted out</span></div>
       {(c.consentLog || []).length ? <div className="list">{c.consentLog.map((l: Row, i: number) => <div className="li" key={i}><span className={"ico " + (/Withdrawn|Reset/.test(l.what) ? "says_none" : "received")}><Icon name={/Withdrawn|Reset/.test(l.what) ? "x" : "check"} small /></span><div className="grow">{l.what}<div className="small faint">{when(T, l.at)} · {l.channel}</div></div></div>)}</div>
         : <div className="bd small muted">{c.first} has not agreed to texts. Email is used under your existing relationship with the client.</div>}</div>
+    <Earlier T={T} c={c} />
   </div>;
+}
+// Earlier tax years: a summary of each, kept when a new season starts. Which documents came in and when; never the documents themselves.
+function Earlier({ T, c }: { T: Engine; c: Row }) {
+  const H: Row[] = T.history(c.id); if (!H.length) return null;
+  return <div className="card"><div className="hd"><h3>Earlier years</h3><span className="sp" /><span className="small muted">A summary only. The documents are in your own storage</span></div><div className="list">{H.map((a) => { const got = a.items.filter((i: Row) => i.state === "received"), none = a.items.filter((i: Row) => ["waived", "says_none"].includes(i.state));
+    return <div className="li" key={a.year} style={{ alignItems: "flex-start" }}><span className="chip plain">{a.year}</span><div className="grow"><b>{got.length} of {a.items.length} documents received</b>{a.completedAt ? <span className="small muted"> · finished {dshort(a.completedAt)}</span> : null}
+      <div className="small muted">{got.map((i: Row) => (i.custom || fname(T, i.form)) + (i.payer ? " from " + i.payer : "")).join(", ") || "Nothing received"}</div>{none.length ? <div className="small faint">Not needed or did not have: {none.map((i: Row) => i.custom || fname(T, i.form)).join(", ")}</div> : null}</div></div>; })}</div></div>;
 }
 
 // What this client sees, so staff can answer "what did you send me?" without guessing: the last thing Tallyhound sent them, and

@@ -136,3 +136,26 @@ scene("Your plan with card billing: a trial firm chooses a plan and is sent to t
   assert.deepEqual(left, ["https://checkout.stripe.com/c/pay/x_1"]); assert.equal((await W.state(firmId)).billing().state, "trial", "nothing started yet");
   await page.goto(W.url + "/settings?tab=plan&paid=1"); await page.getByRole("status").getByText(/starts as soon as the payment is confirmed/).waitFor();
 });
+
+scene("Text number: an owner sends the firm's details for approval, sees where it stands, and marks the note to clients as sent", async (W) => {
+  const { firmId } = await W.firms.create({ name: "Test CPAs 1", inbox: "one@docs.tallyhound.test", iana: "America/Chicago", ownerName: "Pat Owner", ownerEmail: "pat1@firm1.test", verified: true }), page = await W.signIn("pat1@firm1.test"); await page.goto(W.url + "/settings?tab=texting"); await page.getByRole("heading", { name: "Your text number" }).waitFor();
+  await page.getByLabel(/Legal name/).fill("Test CPAs One LLC"); await page.getByRole("button", { name: "Send for approval" }).click(); await page.getByRole("alert").getByText(/9-digit EIN/).waitFor(); assert.equal((await W.state(firmId)).S.firm.senderStatus, "none");
+  await page.getByLabel(/EIN/).first().fill("12-3456789"); await page.getByLabel(/Street address/).fill("100 Main Street"); await page.getByLabel("City").fill("Nashville"); await page.getByLabel("State").fill("tn"); await page.getByLabel("ZIP").fill("37201"); await page.getByLabel(/carriers can reach/).fill("Pat Owner");
+  await page.getByRole("button", { name: "Send for approval" }).click(); await page.getByText(/^With the carriers since /).waitFor();
+  let T: Engine = await W.state(firmId); assert.equal(T.S.firm.senderStatus, "submitted"); assert.equal(T.S.firm.reg.ein, "123456789"); assert.equal(T.S.firm.reg.state, "TN");
+  // Tallyhound files it by hand from exactly these details, and records the approval.
+  const filed = (await W.firms.registration(firmId)) as { brand: { legalName: string; ein: string }; campaign: { sampleMessages: string[] } }; assert.equal(filed.brand.legalName, "Test CPAs One LLC"); assert.ok(filed.campaign.sampleMessages.length >= 3);
+  await W.firms.senderApproved(firmId, "(615) 555-0142", "Jordan"); await page.reload(); await page.getByText(/Approved by the carriers\. Your clients text \(615\) 555-0142\./).waitFor(); assert.equal(await W.store.firmIdByNumber("6155550142"), firmId);
+  await page.getByText(/How we are collecting your tax documents this year/).waitFor(); await page.getByRole("button", { name: "I have sent it" }).click(); await page.getByText(/^Marked as sent /).waitFor(); T = await W.state(firmId); assert.ok(T.S.firm.headsUpAt);
+});
+
+scene("Next season: an owner starts the next tax year; finished clients carry forward with last year summarised, the rest stay", async (W) => {
+  const { firmId, ownerId } = await busyFirm(W); await W.app.staff(firmId, ownerId, (T: Engine) => { const jo = T.S.engs[0]; T.itemsOf(jo.id).forEach((i: { state: string; id: string }) => { if (i.state !== "received") T.setItem(i.id, "waived", "Not needed this year"); }); });
+  let T: Engine = await W.state(firmId); const jo = T.S.clients[0], year: number = T.S.firm.taxYear; assert.equal(T.engOf(jo.id).status, "complete");
+  const page = await W.signIn("pat1@firm1.test"); await page.goto(W.url + "/settings"); await page.getByRole("button", { name: "Start the " + (year + 1) + " season" }).click();
+  const box = page.getByRole("dialog"); assert.match(text(await box.textContent()), /1 client will move to tax year/); assert.match(text(await box.textContent()), /This cannot be undone/); await box.getByRole("button", { name: "Start " + (year + 1) }).click(); await page.getByText(new RegExp("^Tax year " + (year + 1) + " started: 1 client carried forward")).waitFor();
+  T = await W.state(firmId); assert.equal(T.S.firm.taxYear, year + 1); assert.equal(T.engOf(jo.id).year, year + 1); assert.equal(T.engOf(jo.id).status, "not_started"); assert.equal(T.engOf(T.S.clients[1].id).year, year, "still being collected: stays"); assert.equal(T.history(jo.id).length, 1);
+  await page.goto(W.url + "/clients/" + T.engOf(jo.id).id + "?tab=details"); await page.getByRole("heading", { name: "Earlier years" }).waitFor(); assert.match(text(await page.locator(".card", { hasText: "Earlier years" }).textContent()), new RegExp(year + " ?\\d+ of \\d+ documents received"));
+  // Staff cannot do this.
+  await page.request.post(W.url + "/api/users", { data: { name: "Alex Staff", email: "alex@firm1.test", role: "staff" }, headers: { "x-tallyhound": "1" } }); const alex = await W.signIn("alex@firm1.test"); assert.equal((await alex.request.post(W.url + "/api/act", { data: { fn: "rollSeason", args: [year + 2] }, headers: { "x-tallyhound": "1" } })).status(), 403);
+});

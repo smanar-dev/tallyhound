@@ -6,6 +6,8 @@ function memoryStore() {
     files, firms, keys,
     async create(id, json, { number, inbox }) { firms.set(id, json); if (number) byNumber.set(number, id); if (inbox) byInbox.set(inbox, id); },
     async firmIdByNumber(v) { return byNumber.get(v) || null; },
+    // A firm's text number is known only once the carriers approve it, which is after the firm was created.
+    async setNumber(id, number) { for (const [k, v] of byNumber) if (v === id) byNumber.delete(k); if (number) byNumber.set(number, id); },
     async firmIdByInbox(a) { return byInbox.get(a) || null; },
     async putFile(firmId, bytes, contentType) { const key = firmId + "/" + ++n; files.set(key, { bytes, contentType }); return key; },
     async getFile(firmId, key) { return String(key).startsWith(firmId + "/") ? files.get(key) || null : null; },   // a firm can only read its own files

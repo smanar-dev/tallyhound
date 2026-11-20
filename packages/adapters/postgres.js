@@ -16,6 +16,7 @@ function postgresStore(pool, bucket) {
         await c.query("insert into firm_state (firm_id, sealed, bytes) values ($1, $2, $3)", [id, sealed, sealed.length]); await c.query("commit"); }
       catch (err) { await c.query("rollback"); throw err; } finally { c.release(); }
     },
+    async setNumber(id, number) { await pool.query("update firms set sms_number = $2 where id = $1", [id, number || null]); },
     async firmIdByNumber(v) { const r = v ? await one("select id from firms where sms_number = $1 and status = 'active'", [v]) : null; return r ? r.id : null; },
     async firmIdByInbox(a) { const r = a ? await one("select id from firms where inbox = $1 and status = 'active'", [String(a).toLowerCase()]) : null; return r ? r.id : null; },
     // One firm at a time, across every server: the row lock is held for the whole of fn. Keep fn short (no sending inside it).

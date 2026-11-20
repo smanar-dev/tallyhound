@@ -1,6 +1,6 @@
 // What a signed-in staff member may ask the engine to do, by name. Every entry is an engine function the demo's screens call.
 // Anything not listed here cannot be reached from a browser: the demo's clock controls (advance, jumpToNext, reset), the
-// client's own actions (giveConsent, checkinDone, portalNone, clientAnswers), and Tallyhound's internal switches (setVerified, registerSender).
+// client's own actions (giveConsent, checkinDone, portalNone, clientAnswers), and Tallyhound's internal switch (setVerified). An owner may file the firm's details for a text number (registerSender); only Tallyhound can record that the carriers approved it.
 //   role: who may call it, as the demo's can() decides.   n: how many arguments are passed through; extra ones are dropped.
 import type { Engine, Role } from "./kit.ts";
 
@@ -93,6 +93,13 @@ export const ACTIONS: Record<string, Rule> = {
   // the emergency stop is lifted by an owner
   resumeAll: { role: "owner", n: 0, run: (T) => { T.S.firm.stopped = false; T.audit("emergency.resume", "Messages resumed"); return true; } },
   // The firm's own details. The Tallyhound address is not editable: mail to it is how the firm is found.
+  // Starts the next tax year for every client whose file is finished: last year's file becomes a summary and this year's checklist
+  // starts from what they sent before (T-73). Clients still being collected stay on the old year. One year forward at a time.
+  rollSeason: { role: "owner", n: 1, run: (T, [year]) => { const r = T.rollSeason(+(year as number)); return r.error ? r.error : r; } },
+  // The firm's legal details for the carriers, who must approve a business text number. The engine checks them. An employer
+  // identification number is a business's, never a person's: a sole proprietor ticks "none" and no personal number is taken.
+  registerSender: { role: "owner", n: 1, run: (T, [v]) => { const x = (v && typeof v === "object" ? v : {}) as Record<string, unknown>, t = (k: string, max: number) => String(x[k] ?? "").replace(/[<>]/g, "").replace(/\s+/g, " ").trim().slice(0, max);
+    return T.registerSender({ legalName: t("legalName", 120), ein: x.soleProp === true ? "" : t("ein", 12), soleProp: x.soleProp === true, street: t("street", 120), city: t("city", 60), state: t("state", 2), zip: t("zip", 5), contact: t("contact", 80), ownerMobile: t("ownerMobile", 20), website: t("website", 120) }); } },
   // Where finished files go. The folder, whether filing happens by itself, and when. Which storage is connected is not set here:
   // that changes only when an owner signs in to it (apps/server/src/storage.ts), so the state can never claim a connection that does not exist.
   setDelivery: { role: "owner", n: 1, run: (T, [v]) => {
