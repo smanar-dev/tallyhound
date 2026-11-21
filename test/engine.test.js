@@ -620,3 +620,47 @@ test("TH-BRK-7: an item nobody has dealt with after a working day barks once mor
 test("TH-BRK: an item dealt with before its bark goes sends no email", () => {
   const { T, e } = started(); const t = T.addTask({ kind: "says_none", reason: "Client says none", engId: e.id, itemId: item(T, e, "1098").id }); T.setUser("u2"); T.decideTask(t.id, "reask"); T.advance(6 * T.MIN); assert.deepEqual(T.barkDue(), []);
 });
+
+// ---- Smarter every season (docs/REBRAND.md, TH-MEM) ----
+// Maria's 2026: the W-2 came on the first ask, the 1099-INT after three, and the 1098 was not needed because she sold the home.
+function season2026(opt) {
+  const x = started(opt); const { T, c, e } = x; T.setUser("u2"); T.addItem(e.id, "1099INT", "First Farmers Bank");
+  T.inboundDoc(c.id, { form: "W2", year: 2026, payer: "Acme Logistics" }, "text");
+  T.setItem(item(T, e, "1098").id, "waived", "Sold the home in June", "sold_home");
+  T.advance(12 * T.DAY); T.inboundDoc(c.id, { form: "1099INT", year: 2026, payer: "First Farmers Bank" }, "email"); assert.equal(e.status, "complete"); return x;
+}
+test("TH-MEM-1: a finished file writes one outcome record per item, and nothing in it is an amount, an identifier, a message or an image", () => {
+  const { T, c } = season2026(); const M = T.memoryOf(c.id); assert.equal(M.length, 3);
+  const by = (f) => M.find((r) => r.form === f);
+  assert.deepEqual([by("W2").outcome, by("W2").payer, by("W2").asks, by("W2").channel, by("W2").ownerRole], ["received", "Acme Logistics", 1, "text", "primary"]);
+  assert.equal(by("1099INT").outcome, "received"); assert.ok(by("1099INT").asks >= 3); assert.ok(by("1099INT").days >= 5); assert.equal(by("1099INT").channel, "email");
+  assert.deepEqual([by("1098").outcome, by("1098").waiveReason], ["waived", "sold_home"]);
+  for (const r of M) assert.deepEqual(Object.keys(r).sort(), ["asks", "at", "channel", "clientId", "custom", "days", "form", "outcome", "ownerRole", "payer", "waiveReason", "year"]);
+  assert.ok(!/\$|\d{3}-\d{2}-\d{4}|photo|Sold the home in June/.test(JSON.stringify(M)), "something personal is in the memory");
+  // Written once, not once per timer pass.
+  T.advance(3 * T.DAY); assert.equal(T.memoryOf(c.id).length, 3);
+});
+test("TH-MEM-2 to 5: next season starts from this one: what came in is asked again with its payer, the slow one first; what was not needed is left off for a person to confirm", () => {
+  const { T, c } = season2026(); T.setUser("u1"); const r = T.rollSeason(2027); assert.equal(r.rolled, 1); const e = T.engOf(c.id), its = T.itemsOf(e.id);
+  assert.deepEqual(its.map((i) => [i.form, i.payer, i.source, i.carryNote]).sort(), [["1099INT", "First Farmers Bank", "last_season", "Slow last year"], ["W2", "Acme Logistics", "last_season", "From 2026"]]);
+  assert.ok(!its.some((i) => i.form === "1098"), "the 1098 was put back without anyone confirming");
+  assert.deepEqual(e.lastSeason.removed, [{ form: "1098", payer: "Regions Mortgage", custom: null, reason: "sold_home", lasting: true }]); assert.ok(!e.lastSeason.confirmedAt);
+  // The slow one is asked for first.
+  e.confirmed = true; T.start(e.id); T.advance(T.HOUR); assert.match(last(T, e).body, /interest/i);
+  // A person keeps one, or confirms the rest.
+  T.setUser("u2"); assert.equal(T.keepRemoved(e.id, 0), null); assert.ok(T.itemsOf(e.id).some((i) => i.form === "1098" && i.carryNote === "Kept from 2026")); assert.equal(e.lastSeason.removed.length, 0);
+  assert.equal(T.confirmRemoved(e.id), null); assert.ok(e.lastSeason.confirmedAt);
+});
+test("TH-MEM-6, 8, 9: an owner can clear one client's memory or turn it off for the firm; a purge removes it; with it off the old carry-forward is used", () => {
+  let x = season2026(); x.T.setUser("u2"); assert.match(x.T.clearMemory(x.c.id), /Only an owner/); x.T.setUser("u1"); assert.equal(x.T.clearMemory(x.c.id), null); assert.equal(x.T.memoryOf(x.c.id).length, 0); assert.ok(x.T.S.audit.some((a) => a.action === "memory.cleared"));
+  x = season2026(); x.T.setUser("u1"); x.T.closeEng(x.e.id); x.T.purge(x.e.id); assert.equal((x.T.S.memory || []).filter((r) => r.clientId === x.c.id).length, 0, "the purge left the memory behind");
+  // Off from the start: nothing is written, and the roll forward works as it did before memory existed.
+  x = started(); x.T.setUser("u1"); assert.equal(x.T.setMemory(false), null); x.T.setUser("u2"); x.T.inboundDoc(x.c.id, { form: "W2", year: 2026, payer: "Acme Logistics" }, "text"); x.T.setItem(item(x.T, x.e, "1098").id, "waived", "", "sold_home"); x.T.advance(x.T.HOUR);
+  assert.equal((x.T.S.memory || []).length, 0); x.T.setUser("u1"); x.T.rollSeason(2027); const e = x.T.engOf(x.c.id); assert.deepEqual(x.T.itemsOf(e.id).map((i) => i.source), ["prior_year"]); assert.ok(!e.lastSeason.removed);
+  // Turned off later: what exists is hidden and not used, and goes when the client is purged.
+  x = season2026(); x.T.setUser("u1"); x.T.setMemory(false); assert.equal(x.T.memoryOf(x.c.id).length, 0); x.T.rollSeason(2027); assert.deepEqual(x.T.itemsOf(x.T.engOf(x.c.id).id).map((i) => i.source).sort(), ["prior_year", "prior_year"]);
+});
+test("TH-MEM: a waive records its reason, and only the lasting reasons are lasting", () => {
+  const { T, e } = started(); T.setUser("u2"); const it = item(T, e, "1098"); T.setItem(it.id, "waived", "", "nonsense"); assert.equal(it.waiveReason, "other"); T.setItem(it.id, "expected"); assert.ok(!it.waiveReason);
+  assert.deepEqual(T.LASTING, ["sold_home", "account_closed", "no_longer_employed"]); assert.deepEqual(Object.keys(T.WAIVE_REASONS), ["sold_home", "account_closed", "no_longer_employed", "not_this_year", "combined_elsewhere", "other"]);
+});

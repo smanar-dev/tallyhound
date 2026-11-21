@@ -13,7 +13,7 @@ import { openTasks, type Row } from "../lib/select";
 import { cname, DOW, dshort, dt, DSTATE, fname, iname, ISTATE, phone, plural, rel, tm, when } from "../lib/fmt";
 import type { IconName } from "../lib/icons";
 
-const SRC: Record<string, string> = { prior_year: "From last year", question: "From a client answer", arrived: "Arrived unasked", staff: "Added by staff", template: "From template", recommended: "Suggested" };
+const SRC: Record<string, string> = { prior_year: "From last year", last_season: "From last season", reply: "From a client reply", question: "From a client answer", arrived: "Arrived unasked", staff: "Added by staff", template: "From template", recommended: "Suggested" };
 // The engine's log lines, shown in the product's vocabulary (docs/UX.md).
 const houndWords = (t: string) => String(t || "").replace(/\bquiet hours\b/gi, "sending hours").replace(/\bStuck\b/g, "Needs you").replace(/\bstuck\b/g, "waiting on you").replace(/\b[Oo]utreach\b/g, "collecting").replace(/\bhandoffs?\b/gi, "question for you").replace(/\bqueue\b/gi, "Coming up").replace(/\b[Rr]eview\b/g, "a person's check").replace(/\b[Dd]eliver(ed|y)?\b/g, "hand-off").replace(/\bapprovals?\b/gi, "your OK").replace(/\bengagements?\b/gi, "file");
 const cap = (t: string) => String(t || "").replace(/^[a-zà-ÿ]/, (ch) => ch.toUpperCase());
@@ -118,22 +118,22 @@ function PriorReturn({ T, e, c }: Ctx) {
       <div className="col" style={{ gap: 4 }}>{p.items.map((x, n) => <label key={n} className="row small ckrow"><input type="checkbox" checked={pick.has(n)} onChange={(ev) => { const s2 = new Set(pick); if (ev.target.checked) s2.add(n); else s2.delete(n); setPick(s2); }} /><span><b>{fname(T, x.form)}</b>{x.payer ? " from " + x.payer : ""}{x.why ? <span className="muted"> · {x.why}</span> : null}</span></label>)}</div></Modal> : null}</div>;
 }
 function Checklist({ T, e, c, openDoc }: Ctx & { openDoc: (id: string) => void }) {
-  const feat = useFeatures(), { can, act, toast } = useFirm(), s = T.S, items: Row[] = T.itemsOf(e.id), [form, setForm] = useState(Object.keys(T.FORMS).filter((k) => k !== "OTHER")[0]!), [payer, setPayer] = useState(""), [waive, setWaive] = useState<Row | null>(null), [note, setNote] = useState("");
+  const feat = useFeatures(), { can, act, toast } = useFirm(), s = T.S, items: Row[] = T.itemsOf(e.id), [form, setForm] = useState(Object.keys(T.FORMS).filter((k) => k !== "OTHER")[0]!), [payer, setPayer] = useState(""), [waive, setWaive] = useState<Row | null>(null), [note, setNote] = useState(""), [why, setWhy] = useState("not_this_year");
   const editable = can() && !["closed", "opted_out"].includes(e.status), docOf = (id: string) => s.docs.find((d: Row) => d.id === id);
   // T-66: removing a line or marking it not needed can be undone for ten seconds, which puts it back exactly as it was.
-  const set = (i: Row, state: string, why?: string, said?: string) => { const was: string = i.state; return act("setItem", i.id, state, why).then(() => { if (said) toast(said, ["removed", "waived"].includes(state) ? { label: "Undo", run: () => void act("setItem", i.id, was, "").then(() => toast("Put back."), () => {}) } : undefined); }, () => {}); };
+  const set = (i: Row, state: string, why?: string, said?: string, reason?: string) => { const was: string = i.state; return act("setItem", i.id, state, why, reason || "").then(() => { if (said) toast(said, ["removed", "waived"].includes(state) ? { label: "Undo", run: () => void act("setItem", i.id, was, "").then(() => toast("Put back."), () => {}) } : undefined); }, () => {}); };
   const checkin = async () => { try { const r = await act("sendCheckin", e.id); toast(r ? "Not sent: " + r + "." : "Check-in sent. The answers come back here as a proposed checklist."); } catch { /* said */ } };
   const icon = (st: string): IconName | null => st === "received" ? "check" : st === "requested" ? "send" : ["in_review", "says_none", "partial"].includes(st) ? "alert" : st === "waived" ? "minus" : null;
   const proposal = !!(e.checkin && e.checkin.doneAt && !e.checkin.reviewedAt);
   return <>
-    <CheckinCard key={"ck" + (e.checkin?.doneAt ? +e.checkin.doneAt : 0)} T={T} e={e} c={c} /><MentionCard T={T} e={e} c={c} />
+    <CheckinCard key={"ck" + (e.checkin?.doneAt ? +e.checkin.doneAt : 0)} T={T} e={e} c={c} /><MentionCard T={T} e={e} c={c} /><RemovedLastSeason T={T} e={e} c={c} />
     {e.confirmed || proposal ? null : <div className="note" style={{ marginBottom: 12 }}><Icon name="alert" small /><span className="grow">This checklist has not been confirmed. Go through it, then confirm so collecting can start.</span>{can() ? <button className="btn sm pri" onClick={() => void act("confirmChecklist", e.id).then(() => toast("Checklist confirmed."), () => {})}>Confirm checklist</button> : null}</div>}
     {editable && e.status === "not_started" && !(e.checkin && e.checkin.doneAt) ? <div className="row" style={{ marginBottom: 12 }}><span className="small muted">{e.checkin ? "No answer yet?" : "Not sure what " + c.first + " has this year? Ask with a 2-minute check-in."}</span><span className="sp" /><button className="btn sm" onClick={checkin}><Icon name="send" small />{e.checkin ? "Send the check-in again" : "Send a check-in"}</button></div> : null}
     <div className="card">
       {items.length ? <div className="list">{items.map((i) => { const d = i.docId ? docOf(i.docId) : null, ic = icon(i.state), rel0 = ["expected", "requested"].includes(i.state) ? T.releaseOf(i, e) : null;
         return <div className="li" key={i.id}><span className={"ico " + i.state}>{ic ? <Icon name={ic} /> : null}</span>
           <div className="grow"><b>{cap(iname(T, i))}</b>{i.payer ? <span className="muted"> from {i.payer}</span> : null}{i.isNew ? <> <span className="chip info plain">New this year</span></> : null}
-            <div className="small muted">{ISTATE[i.state]}{d ? " " + when(T, d.at) + " by " + (CHANNEL[d.channel] || d.channel) : ""} · {i.reason || SRC[i.source] || ""}{i.note ? " · " + i.note : ""}
+            <div className="small muted">{ISTATE[i.state]}{d ? " " + when(T, d.at) + " by " + (CHANNEL[d.channel] || d.channel) : ""} · {i.reason || SRC[i.source] || ""}{i.note ? " · " + i.note : ""}{i.carryNote ? <> <span className={"chip plain" + (i.carryNote === "Slow last year" ? " warn" : "")}>{i.carryNote}</span></> : null}{i.ownerHint ? <> <span className="chip plain">{i.ownerHint === "spouse" ? "Spouse has it" : i.ownerHint === "employer" ? "Employer has it" : i.ownerHint === "accountant" ? "Accountant has it" : "Someone else has it"}</span></> : null}
               {i.state === "partial" && i.missing ? <> · <b style={{ color: "var(--warn)" }}>Still needs {T.missText(i.missing, "en", i.form).fix}</b></> : null}
               {rel0 && rel0 > s.now ? <> · <span className="chip info plain">Issued after {dshort(rel0)}: no reminders before then</span></> : null}
               {i.laterUntil && i.laterUntil > s.now ? <> · <span className="chip plain">Client says later: back in touch {dshort(i.laterUntil)}</span></> : null}</div></div>
@@ -149,8 +149,10 @@ function Checklist({ T, e, c, openDoc }: Ctx & { openDoc: (id: string) => void }
         <button className="btn" onClick={() => void act("addItem", e.id, form, payer.trim()).then(() => { setPayer(""); toast("Added to the checklist."); }, () => {})}><Icon name="plus" small />Add to checklist</button></div> : null}
       {editable && s.firm.priorReturn === true && feat.prior ? <PriorReturn T={T} e={e} c={c} /> : null}
     </div>
-    {waive ? <Modal title="Not needed this year" onClose={() => setWaive(null)} footer={<><button className="btn" onClick={() => setWaive(null)}>Cancel</button><button className="btn pri" onClick={() => { const i = waive; setWaive(null); void set(i, "waived", note.trim() || "Not needed", "Marked not needed."); }}>Not needed this year</button></>}>
+    {waive ? <Modal title="Not needed this year" onClose={() => setWaive(null)} footer={<><button className="btn" onClick={() => setWaive(null)}>Cancel</button><button className="btn pri" onClick={() => { const i = waive; setWaive(null); void set(i, "waived", note.trim() || T.WAIVE_REASONS[why], "Marked not needed.", why); }}>Not needed this year</button></>}>
       <p className="small muted">{cap(iname(T, waive))}{waive.payer ? " from " + waive.payer : ""} comes off what {c.first} is asked for. You can restore it later.</p>
+      <label className="f">Why<select value={why} onChange={(ev) => setWhy(ev.target.value)}>{Object.keys(T.WAIVE_REASONS).map((k) => <option key={k} value={k}>{T.WAIVE_REASONS[k]}</option>)}</select></label>
+      {T.LASTING.includes(why) ? <p className="small muted">Next season Tallyhound will leave this off {c.first}'s checklist and show it to you as removed, to confirm.</p> : null}
       <label className="f">Reason, for the file<input type="text" placeholder="For example: account closed in 2025" value={note} onChange={(ev) => setNote(ev.target.value)} /></label></Modal> : null}
   </>;
 }
@@ -251,6 +253,7 @@ function Details({ T, c }: Ctx) {
     {s.firm.hound.voicemail === true && c.mobile ? <div className="card pad col"><h3>Reminder calls</h3><p className="small muted">{c.callOk ? c.first + " has said a recorded reminder call is fine. Tallyhound places at most one, after the final written reminder." : "Tallyhound does not call " + c.first + ". Switch this on only if " + c.first + " has told your firm calls are fine."}</p>
       {ro ? null : <label className="row"><span className="toggle"><input type="checkbox" checked={!!c.callOk} onChange={(ev) => void act("setCallOk", c.id, ev.target.checked, ev.target.checked ? "Recorded on the client's page" : "").then((r) => toast(r ? String(r) + "." : ev.target.checked ? "Recorded." : "Calls are off for " + c.first + "."), () => {})} /><span /></span>{c.first} has agreed to reminder calls</label>}</div> : null}
     {(c.also || []).length ? <div className="card"><div className="hd"><h3>Second contacts</h3><span className="sp" /><span className="small muted">Messages from these are filed to {c.first}. Tallyhound never writes to them</span></div><div className="list">{c.also.map((x: Row) => <div className="li" key={x.value}><span className="ico"><Icon name={x.kind === "mobile" ? "phone" : "mail"} small /></span><div className="grow"><b>{x.kind === "mobile" ? phone(x.value) : x.value}</b><div className="small muted">Remembered {dshort(new Date(x.at))} by {x.by}</div></div>{ro ? null : <button className="btn sm ghost" onClick={() => void act("removeContact", c.id, x.value).then(() => toast("Forgotten. Messages from it will wait for a person again."), () => {})}>Forget</button>}</div>)}</div></div> : null}
+    <LastSeason T={T} c={c} />
     <Earlier T={T} c={c} />
   </div>;
 }
@@ -262,6 +265,23 @@ function RecordConsent({ T, c }: { T: Engine; c: Row }) {
     {why ? <div className="note bad" role="alert">{why}</div> : null}
     <label className="f">Where the agreement is<input type="text" placeholder="Client letter signed January 12" value={how} maxLength={120} onChange={(ev) => setHow(ev.target.value)} /></label>
     <div><button className="btn" disabled={how.trim().length < 5} onClick={save}>Record that {c.first} agreed</button></div></div>;
+}
+
+// TH-MEM-4: what last season proposes leaving off this year, for a person to confirm. Nothing here was removed: it was never added.
+const WHY_OFF: Record<string, string> = { sold_home: "sold the home", account_closed: "account closed", no_longer_employed: "no longer employed there", not_this_year: "not needed last year", combined_elsewhere: "was on another document", other: "not needed last year", said_none: "the client said they did not have it" };
+function RemovedLastSeason({ T, e, c }: Ctx) {
+  const { can, act, toast } = useFirm(), L: Row[] = (e.lastSeason && e.lastSeason.removed) || [];
+  if (!L.length || !e.lastSeason || e.lastSeason.confirmedAt) return null;
+  return <div className="card" style={{ marginBottom: 12 }}><div className="hd"><h3>Removed last season</h3><span className="sp" /><span className="small muted">Left off {c.first}'s {e.year} checklist. Keep any that still apply</span></div>
+    <div className="list">{L.map((r, i) => <div className="li" key={i}><Icon name="minus" small /><div className="grow"><b>{cap(r.custom || fname(T, r.form))}</b>{r.payer ? <span className="muted"> from {r.payer}</span> : null}<div className="small muted">{cap(WHY_OFF[r.reason] || "not needed last year")}{r.lasting ? "" : ". This may apply again this year"}</div></div>{can() ? <button className="btn sm" onClick={() => void act("keepRemoved", e.id, i).then((x) => toast(x ? String(x) : "Kept. It is back on the checklist."), () => {})}>Keep</button> : null}</div>)}</div>
+    {can() ? <div className="bd"><button className="btn pri" onClick={() => void act("confirmRemoved", e.id).then((x) => toast(x ? String(x) : "Confirmed. They stay off this year."), () => {})}>Confirm all</button></div> : null}</div>;
+}
+// TH-MEM-6: what Tallyhound remembers from earlier seasons, one line per document. Outcomes only: no amounts, no messages, no images.
+function LastSeason({ T, c }: { T: Engine; c: Row }) {
+  const { me, act, toast } = useFirm(), M: Row[] = T.memoryOf(c.id); if (!M.length) return null;
+  const year = M[0].year, rows = M.filter((r) => r.year === year), out = (r: Row) => r.outcome === "received" ? "Received" + (r.channel ? " by " + (CHANNEL[r.channel] || r.channel) : "") : r.outcome === "waived" ? "Not needed: " + (WHY_OFF[r.waiveReason] || "not needed") : "Said they did not have it";
+  return <div className="card"><div className="hd"><h3>Last season ({year})</h3><span className="sp" /><span className="small muted">Next season's checklist starts from this</span>{me.role === "owner" ? <button className="btn sm ghost" onClick={() => void act("clearMemory", c.id).then((x) => toast(x ? String(x) : "Cleared. Next season starts " + c.first + " from the checklist alone."), () => {})}>Clear memory</button> : null}</div>
+    <div className="tbl"><table style={{ minWidth: 0 }}><thead><tr><th>Document</th><th>What happened</th><th className="num">Asks</th><th className="num">Days</th></tr></thead><tbody>{rows.map((r, i) => <tr key={i}><td><b>{cap(r.custom || fname(T, r.form))}</b>{r.payer ? <span className="muted"> from {r.payer}</span> : null}{r.ownerRole === "spouse" ? <span className="small muted"> · spouse</span> : null}</td><td>{out(r)}</td><td className="num">{r.asks || 0}{r.asks >= T.SLOW_ITEM_ASKS ? <span className="small muted"> slow</span> : null}</td><td className="num">{r.days == null ? "" : r.days}</td></tr>)}</tbody></table></div></div>;
 }
 
 // Earlier tax years: a summary of each, kept when a new season starts. Which documents came in and when; never the documents themselves.

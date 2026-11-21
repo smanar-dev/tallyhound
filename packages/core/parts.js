@@ -9,8 +9,8 @@
 // This file is the splitting and the joining. It knows nothing about storage or sealing (crypto.js does that).
 // Every element keeps its place in the firm-wide order: it is stored with a number, and joining sorts by it.
 
-const SLICED = ["clients", "engs", "items", "msgs", "docs", "tasks", "alerts", "hlog", "archive"];
-const idOf = (coll, x) => (coll === "archive" ? (x && x.clientId && x.year != null ? x.clientId + ":" + x.year : null) : x && typeof x.id === "string" ? x.id : null);
+const SLICED = ["clients", "engs", "items", "msgs", "docs", "tasks", "alerts", "hlog", "archive", "memory"];
+const idOf = (coll, x) => (coll === "archive" ? (x && x.clientId && x.year != null ? x.clientId + ":" + x.year : null) : coll === "memory" ? (x && x.clientId ? [x.clientId, x.year, x.form, x.payer || "", x.custom || ""].join(":") : null) : x && typeof x.id === "string" ? x.id : null);
 const partKey = (clientId) => "c:" + clientId;
 const digits = (s) => String(s || "").replace(/\D/g, "").slice(-10);
 
@@ -68,7 +68,7 @@ function split(whole, known, bounds) {
   const S = whole.state, rest = {}, loose = {}, slices = new Map(), found = new Map(), b = bounds || {};
   for (const k in S) if (!SLICED.includes(k) && k !== "audit") rest[k] = S[k];
   const clients = new Set((S.clients || []).map((c) => c.id)), engClient = new Map(); for (const e of S.engs || []) if (clients.has(e.clientId)) engClient.set(e.id, e.clientId);
-  const owner = (coll, x) => coll === "clients" ? x.id : coll === "engs" || coll === "archive" ? (clients.has(x.clientId) ? x.clientId : null) : (x.engId && engClient.get(x.engId)) || (x.clientId && clients.has(x.clientId) ? x.clientId : null) || null;
+  const owner = (coll, x) => coll === "clients" ? x.id : coll === "engs" || coll === "archive" || coll === "memory" ? (clients.has(x.clientId) ? x.clientId : null) : (x.engId && engClient.get(x.engId)) || (x.clientId && clients.has(x.clientId) ? x.clientId : null) || null;
   for (const coll of SLICED) {
     const arr = Array.isArray(S[coll]) ? S[coll] : []; if (!b[coll]) b[coll] = [0, -1];
     // A renumbering from scratch when the numbers have run out of room between two neighbours (only possible with every part loaded).

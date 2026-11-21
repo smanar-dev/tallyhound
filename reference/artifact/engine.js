@@ -653,13 +653,15 @@
   function checkComplete(e) {
     if (S.tasks.some((t) => t.status === "open" && t.engId === e.id && ["document", "says_none", "change_noted"].includes(t.kind))) return false;   // TH-CMP-6
     if (openItems(e.id).length === 0 && itemsOf(e.id).length && !["complete", "closed"].includes(e.status)) {
-      e.status = "complete"; e.stuck = null; e.next = null; e.completedAt = new Date(S.now); settleQuiet(e); timeline(e, "All fetched: every document in and verified"); return true;
+      e.status = "complete"; e.stuck = null; e.next = null; e.completedAt = new Date(S.now); settleQuiet(e); memoryWrite(e); timeline(e, "All fetched: every document in and verified"); return true;
     }
     return false;
   }
   function nextItem(e) {
     const ok = (i) => !(i.laterUntil && i.laterUntil > S.now) && !(releaseOf(i, e) && releaseOf(i, e) > S.now);
-    return itemsOf(e.id).find((i) => i.state === "partial" && ok(i)) || itemsOf(e.id).find((i) => (i.state === "requested" || i.state === "expected") && ok(i));
+    // TH-MEM-5: something already asked for stays first; otherwise what was slow last year is asked for before the rest.
+    const L = itemsOf(e.id), open = (i) => (i.state === "requested" || i.state === "expected") && ok(i);
+    return L.find((i) => i.state === "partial" && ok(i)) || L.find((i) => i.state === "requested" && ok(i)) || L.find((i) => open(i) && i.carryNote === "Slow last year") || L.find(open);
   }
   // Until when an item is held back: its form is not issued yet, or the client said when they will send it. null when it is not held.
   function heldUntil(i, e) { const a = [releaseOf(i, e), i.laterUntil].filter((x) => x && x > S.now).map((x) => +new Date(x)); return a.length ? new Date(Math.max.apply(null, a)) : null; }
@@ -1344,7 +1346,7 @@
   function recommend(eid) {
     const e = eng(eid), c = client(e.clientId), f = c.profile || {}, items = itemsOf(e.id), add = [];
     Object.keys(RULES).forEach((k) => { if (!f[k]) return; RULES[k].forEach((form) => { if (!items.some((i) => i.form === form) && !add.some((a) => a.form === form) && !(c.dismissed || []).includes(form)) add.push({ form, fact: k, reason: FACTS.find((x) => x[0] === k)[1] }); }); });
-    const backed = (i) => i.source === "prior_year" || i.source === "question" || i.source === "arrived" || Object.keys(RULES).some((k) => f[k] && RULES[k].includes(i.form));
+    const backed = (i) => i.source === "prior_year" || i.source === "last_season" || i.source === "question" || i.source === "arrived" || Object.keys(RULES).some((k) => f[k] && RULES[k].includes(i.form));
     return { add, unbacked: items.filter((i) => !backed(i) && i.state !== "waived") };
   }
   function addRecommended(eid, forms) {
@@ -1450,7 +1452,7 @@
       } else if (decision === "discard") { t.was = d.state; d.state = "discarded"; d.reasons.push("Discarded by " + S.user.name + ": " + ((p && p.reason) || "not needed")); timeline(e, "Document discarded", S.user.name); }
     }
     if (t.kind === "says_none" && it) {
-      if (decision === "waive") { it.state = "waived"; it.note = "Client does not have it"; timeline(e, "Waived " + FORMS[it.form].plain, S.user.name); if (e.stuck === "client_says_none") unstick(e); if (checkComplete(e)) finished(e); else if (!e.next) e.next = nextAllowed(S.now); }
+      if (decision === "waive") { it.state = "waived"; it.waiveReason = p && WAIVE_REASONS[p.waiveReason] ? p.waiveReason : "not_this_year"; it.note = "Client does not have it"; timeline(e, "Waived " + FORMS[it.form].plain, S.user.name); if (e.stuck === "client_says_none") unstick(e); if (checkComplete(e)) finished(e); else if (!e.next) e.next = nextAllowed(S.now); }
       else { it.state = "requested"; if (e.stuck === "client_says_none") unstick(e); sendSoon(e, "M5", { item: it }); if (!(e.queue && e.queue.length)) e.next = nextAllowed(new Date(S.now.getTime() + 2 * DAY)); }
     }
     if (t.kind === "call") { timeline(e, "Called by " + S.user.name + (p && p.note ? ": " + p.note : ""), S.user.name); if (p && p.note) remember(e, p.note, S.user.name); if (e.stuck === "no_reply") { unstick(e); e.step = 0; e.next = nextAllowed(new Date(S.now.getTime() + DAY)); } hlog(e, "decide", "Call logged; the Hound resumes tomorrow", p && p.note ? p.note : "", "Rules"); }
@@ -1490,8 +1492,9 @@
     if (!quiet) { S.tasks.filter((t) => t.engId === e.id && t.kind === "question" && t.status === "open").forEach((t) => { t.status = "decided"; t.decision = "reply"; t.by = S.user.name; }); if (e.stuck === "question_waiting" || e.stuck === "no_reply") { unstick(e); e.next = nextAllowed(new Date(S.now.getTime() + DAY)); } }
     return null;
   }
-  function setItem(iid, state, note) {
+  function setItem(iid, state, note, reason) {
     const it = S.items.find((x) => x.id === iid), e = eng(it.engId); it.state = state; if (note) it.note = note;
+    if (state === "waived") it.waiveReason = WAIVE_REASONS[reason] ? reason : "other"; else delete it.waiveReason;
     // A person has settled this item directly, so an "I don't have it" waiting in the review queue for the same item is answered too.
     if (state !== "says_none") S.tasks.forEach((t) => { if (t.status === "open" && t.kind === "says_none" && t.itemId === it.id) { t.status = "decided"; t.decision = "settled"; t.by = S.user.name; t.decidedAt = new Date(S.now); if (e.stuck === "client_says_none") unstick(e); } });
     timeline(e, (state === "waived" ? "Waived " : state === "removed" ? "Removed " : state === "received" ? "Marked received: " : "Restored ") + (it.custom || FORMS[it.form].plain) + (note ? ": " + note : ""), S.user.name); audit("item." + state, client(e.clientId).last);
@@ -1561,8 +1564,8 @@
     const r = retain(), held = S.docs.filter(hasContent), del = S.docs.filter((d) => !hasContent(d)), due = held.filter((d) => d.deliveredAt).map((d) => d.deliveredAt.getTime() + r.afterDelivery * DAY).sort((a, b) => a - b)[0];
     return { clients: S.clients.length, docsHeld: held.length, docsDeleted: del.length, undelivered: held.filter((d) => d.state === "accepted" && !d.deliveredAt).length, oldestDays: held.length ? Math.floor(Math.max(...held.map((d) => (S.now - d.at) / DAY))) : 0, nextDeletion: due ? new Date(due) : null, messages: S.msgs.length, unknown: S.tray.length, retain: Object.assign({}, r), afterClose: S.firm.retention };
   }
-  function closeEng(eid) { const e = eng(eid); settleQuiet(e); e.status = "closed"; e.closedAt = new Date(S.now); e.purgeAfter = new Date(S.now.getTime() + S.firm.retention * DAY); e.next = null; timeline(e, "Closed. Documents purge after " + S.firm.retention + " days.", S.user.name); }
-  function purge(eid, by) { const e = eng(eid), who = by || S.user.name; S.docs.filter((d) => d.engId === eid).forEach((d) => { forget(d); d.state = "purged"; d.image = null; d.pages = null; d.read = null; d.payer = ""; d.recipientName = ""; d.elements = []; d.versions = []; d.reasons = ["Deleted under the retention rule."]; d.findings = []; }); S.msgs.filter((m) => m.engId === eid).forEach((m) => { m.body = "(deleted)"; m.aiNote = null; m.understood = null; }); e.memory = []; e.purged = new Date(S.now); timeline(e, "Documents and message text deleted", who); audit("purge", client(e.clientId).last, who); }
+  function closeEng(eid) { const e = eng(eid); settleQuiet(e); memoryWrite(e); e.status = "closed"; e.closedAt = new Date(S.now); e.purgeAfter = new Date(S.now.getTime() + S.firm.retention * DAY); e.next = null; timeline(e, "Closed. Documents purge after " + S.firm.retention + " days.", S.user.name); }
+  function purge(eid, by) { const e = eng(eid), who = by || S.user.name; if (e && S.memory) S.memory = S.memory.filter((r) => r.clientId !== e.clientId); S.docs.filter((d) => d.engId === eid).forEach((d) => { forget(d); d.state = "purged"; d.image = null; d.pages = null; d.read = null; d.payer = ""; d.recipientName = ""; d.elements = []; d.versions = []; d.reasons = ["Deleted under the retention rule."]; d.findings = []; }); S.msgs.filter((m) => m.engId === eid).forEach((m) => { m.body = "(deleted)"; m.aiNote = null; m.understood = null; }); e.memory = []; e.purged = new Date(S.now); timeline(e, "Documents and message text deleted", who); audit("purge", client(e.clientId).last, who); }
   const STATE_TZ = { ET: "CT DE FL GA IN KY MA MD ME MI NC NH NJ NY OH PA RI SC VA VT WV DC", CT: "AL AR IA IL KS LA MN MO MS ND NE OK SD TN TX WI", MT: "CO ID MT NM UT WY", AZ: "AZ", PT: "CA NV OR WA", AKT: "AK", HT: "HI" };
   const ZONES = { ET: 1, CT: 0, MT: -1, AZ: -1, PT: -2, AKT: -3, HT: -4 }, ZNAME = { ET: "Eastern", CT: "Central", MT: "Mountain", AZ: "Arizona", PT: "Pacific", AKT: "Alaska", HT: "Hawaii" };
   /* Arizona and Hawaii keep standard time all year. While the rest of the country is on daylight time (second Sunday of March to
@@ -1725,7 +1728,7 @@
     const N = walk(o.state);
     ["clients", "engs", "items", "msgs", "docs", "tasks", "users"].forEach((k) => { if (!Array.isArray(N[k])) throw new Error("Not a Tallyhound workspace: " + k + " is missing"); });
     if (!N.firm || typeof N.firm !== "object" || !N.users.length) throw new Error("Not a Tallyhound workspace: firm is missing");
-    ["tray", "audit", "alerts", "hlog", "archive", "barks"].forEach((k) => { if (!Array.isArray(N[k])) N[k] = []; });
+    ["tray", "audit", "alerts", "hlog", "archive", "barks", "memory"].forEach((k) => { if (!Array.isArray(N[k])) N[k] = []; });
     if (!N.usage || typeof N.usage !== "object") N.usage = {};
     if (N.firm) N.firm.retain = Object.assign({}, RETAIN_DEFAULT, N.firm.retain);
     const HD = { mode: "copilot", aiLive: false, aiWrite: true, replyV2: "shadow", intensity: "steady", voice: "professional", tone: "warm", persona: "", emailAfter: 2, slaHours: 4, pauseDays: 3, callTask: true }; N.firm.hound = N.firm.hound || {}; Object.keys(HD).forEach((k) => { if (N.firm.hound[k] === undefined) N.firm.hound[k] = HD[k]; });
@@ -1736,7 +1739,7 @@
   }
   function blank(opt) {
     seed(); opt = opt || {};
-    ["clients", "engs", "items", "msgs", "docs", "tasks", "tray", "audit", "alerts", "hlog", "archive", "barks"].forEach((k) => { S[k] = []; }); S.usage = {};
+    ["clients", "engs", "items", "msgs", "docs", "tasks", "tray", "audit", "alerts", "hlog", "archive", "barks", "memory"].forEach((k) => { S[k] = []; }); S.usage = {};
     S.firm.delivery = { provider: "Download", folder: "Client Tax Docs", auto: "off" }; S.firm.verified = opt.verified === false ? false : true; S.firm.retain = Object.assign({}, RETAIN_DEFAULT);
     seq = 0; S.now = opt.now || new Date(); S.firm.createdAt = new Date(S.now); S.firm.taxYear = opt.taxYear || S.firm.taxYear || 2026;
     if (opt.plan && PLANS.some((p) => p[0] === opt.plan)) { S.firm.plan = opt.plan; S.firm.billing = { state: "active", plan: opt.plan, since: new Date(S.now) }; } else { S.firm.plan = "Trial"; S.firm.billing = { state: "trial", plan: null, trialEnds: new Date(S.now.getTime() + TRIAL_DAYS * DAY) }; }
@@ -1771,7 +1774,7 @@
   function checkinPrefill(eid) {
     const e = eng(eid), c = client(e.clientId), items = itemsOf(eid).filter(liveItem), facts = {};
     CHECKQ.forEach((q) => { facts[q[0]] = !!((c.profile || {})[q[0]]) || (RULES[q[0]] || []).some((f) => items.some((i) => i.form === f)); });
-    return { facts, w2: Math.max(1, items.filter((i) => i.form === "W2").length), last: items.filter((i) => i.form !== "PRIOR").map((i) => ({ form: i.form, payer: i.payer || "" })), returning: items.some((i) => i.source === "prior_year") };
+    return { facts, w2: Math.max(1, items.filter((i) => i.form === "W2").length), last: items.filter((i) => i.form !== "PRIOR").map((i) => ({ form: i.form, payer: i.payer || "" })), returning: items.some((i) => i.source === "prior_year" || i.source === "last_season") };
   }
   function sendCheckin(eid) {
     if (S.firm.verified === false) return FIRMCHECK;
@@ -1847,16 +1850,51 @@
   function setCustomEs(iid, text) { const it = S.items.find((x) => x.id === iid); if (!it || !it.custom) return false; it.customEs = cleanName(text) || null; return !!it.customEs; }
   const needsSpanish = () => S.items.filter((i) => i.custom && !i.customEs && liveItem(i) && (client((eng(i.engId) || {}).clientId) || {}).lang === "es");
   /* ---------- seasons: what Tallyhound learned about a client carries into the next year ---------- */
+  /* Smarter every season (TH-MEM, docs/REBRAND.md section 5). When a file finishes, Tallyhound writes one short outcome record per
+     item: which form, from which payer, whose it was, whether it came in, how many asks it took and how long. Next season's
+     checklist starts from that. It holds no amount, no identifier, no message and no image, and it goes when the client goes. */
+  const SLOW_ITEM_ASKS = 3;
+  function memoryWrite(e) {
+    if (S.firm.memoryOff || !e) return 0; const c = client(e.clientId); if (!c) return 0; S.memory = S.memory || []; let n = 0;
+    itemsOf(e.id).forEach((i) => {
+      const outcome = i.state === "received" ? "received" : i.state === "waived" ? "waived" : i.state === "says_none" ? "said_none" : null; if (!outcome || i.form === "PRIOR") return;
+      const d = i.docId ? S.docs.find((x) => x.id === i.docId) : null, firstAsk = S.msgs.filter((m) => m.engId === e.id && m.dir === "out" && m.itemId === i.id).map((m) => +new Date(m.at)).sort((x, y) => x - y)[0];
+      const row = { clientId: c.id, year: e.year, form: i.form, payer: i.payer || null, custom: i.custom || null, ownerRole: i.ownerHint === "spouse" ? "spouse" : c.entity ? "business" : "primary", outcome, waiveReason: outcome === "waived" ? (WAIVE_REASONS[i.waiveReason] ? i.waiveReason : "other") : null, asks: askedCount(e, i), days: d && firstAsk ? Math.max(0, Math.round((+new Date(d.at) - firstAsk) / DAY)) : null, channel: d ? d.channel || null : null, at: new Date(S.now) };
+      const k = S.memory.findIndex((r) => r.clientId === c.id && r.year === e.year && r.form === i.form && (r.payer || "") === (i.payer || "") && (r.custom || "") === (i.custom || ""));
+      if (k >= 0) S.memory[k] = row; else S.memory.push(row); n++;
+    });
+    return n;
+  }
+  const memoryOf = (cid) => (S.firm.memoryOff ? [] : (S.memory || []).filter((r) => r.clientId === cid).sort((a, b) => b.year - a.year || (b.asks || 0) - (a.asks || 0)));
+  function clearMemory(cid) { const c = client(cid); if (!c) return "Unknown client"; if (!may("owner")) return "Only an owner can clear a client's memory"; const n = (S.memory || []).filter((r) => r.clientId === cid).length; S.memory = (S.memory || []).filter((r) => r.clientId !== cid); audit("memory.cleared", c.first + " " + c.last + ": " + n + " records"); return null; }
+  function setMemory(on) { if (!may("owner")) return "Only an owner can change this"; if (!!S.firm.memoryOff === !on) return null; S.firm.memoryOff = !on; audit("firm.memory", on ? "Season memory on" : "Season memory off: nothing new is written and next season's proposal does not use it"); return null; }
+  /* What last season proposes for this one, waiting for a person: items left off because the client did not need them. Keep puts one
+     back on the checklist; confirming leaves them off. Nothing is removed by this: they were never added. */
+  function keepRemoved(eid, idx) {
+    const e = eng(eid), L = e && e.lastSeason && e.lastSeason.removed; if (!e || !L || !L[idx]) return "Nothing to keep"; if (!may()) return "Not allowed";
+    const r = L.splice(idx, 1)[0]; S.items.push({ id: id("i"), engId: e.id, form: r.form, payer: r.payer || null, custom: r.custom || null, state: "expected", source: "last_season", carryNote: "Kept from " + e.lastSeason.year });
+    timeline(e, "Kept from last season: " + (r.custom || FORMS[r.form].plain), S.user.name); return null;
+  }
+  function confirmRemoved(eid) { const e = eng(eid); if (!e || !e.lastSeason) return "Nothing to confirm"; if (!may()) return "Not allowed"; e.lastSeason.confirmedAt = new Date(S.now); e.lastSeason.confirmedBy = S.user.name; timeline(e, "Confirmed what was left off from last season: " + ((e.lastSeason.removed || []).length || "nothing"), S.user.name); return null; }
   function rollForward(cid, year) {
     const c = client(cid), old = engOf(cid); if (!c || !old) return "No file for this client";
     if (!["complete", "closed"].includes(old.status)) return "Still collecting for " + old.year;
     if (old.year >= year) return "Already on " + old.year;
     const its = itemsOf(old.id), keep = its.filter((i) => i.state === "received" && i.form !== "PRIOR"), none = its.filter((i) => ["waived", "says_none"].includes(i.state));
     const nm = (i) => (i.custom || FORMS[i.form].plain) + (i.payer ? " from " + i.payer : "");
+    memoryWrite(old); const mem = S.firm.memoryOff ? [] : (S.memory || []).filter((r) => r.clientId === cid && r.year === old.year);
     (S.archive = S.archive || []).push({ year: old.year, clientId: cid, status: old.status, startedAt: old.startedAt || null, completedAt: old.completedAt || null, items: its.map((i) => ({ form: i.form, payer: i.payer || null, custom: i.custom || null, state: i.state })), docs: S.docs.filter((d) => d.engId === old.id).map((d) => ({ form: d.form, payer: d.payer, state: d.state, at: d.at, channel: d.channel })), messages: S.msgs.filter((m) => m.engId === old.id).length, archivedAt: new Date(S.now) });
     const gone = (x) => x.engId !== old.id; S.items = S.items.filter(gone); S.docs = S.docs.filter(gone); S.msgs = S.msgs.filter(gone); S.tasks = S.tasks.filter(gone); S.alerts = S.alerts.filter(gone); S.hlog = S.hlog.filter(gone); S.engs = S.engs.filter((x) => x !== old);
     const e = newEng(cid); e.year = year; e.returning = true; e.memory = (old.memory || []).slice(-8); e.hours = (old.hours || []).slice(-12);
     e.lastSeason = { year: old.year, received: keep.length, none: none.map(nm), days: old.completedAt && old.startedAt ? Math.max(1, Math.round((old.completedAt - old.startedAt) / DAY)) : null };
+    if (mem.length) {
+      // TH-MEM-2 to 5: last season is the first source. What came in is asked for again, the slow ones first; what was not needed is
+      // left off and listed for a person to confirm, with the reason.
+      const got = mem.filter((r) => r.outcome === "received"), slow = (r) => (r.asks || 0) >= SLOW_ITEM_ASKS, es = (r) => { const was = keep.find((i) => i.form === r.form && (i.payer || "") === (r.payer || "") && (i.custom || "") === (r.custom || "")); return (was && was.customEs) || null; };
+      got.filter(slow).concat(got.filter((r) => !slow(r))).forEach((r) => S.items.push(Object.assign({ id: id("i"), engId: e.id, form: r.form, payer: r.payer || null, custom: r.custom || null, customEs: es(r), state: "expected", source: "last_season", carryNote: slow(r) ? "Slow last year" : "From " + old.year }, r.ownerRole === "spouse" ? { ownerHint: "spouse" } : {})));
+      e.lastSeason.removed = mem.filter((r) => r.outcome !== "received").map((r) => ({ form: r.form, payer: r.payer || null, custom: r.custom || null, reason: r.outcome === "said_none" ? "said_none" : r.waiveReason || "other", lasting: LASTING.includes(r.waiveReason) }));
+      e.lastSeason.fromMemory = true;
+    } else
     keep.forEach((i) => S.items.push({ id: id("i"), engId: e.id, form: i.form, payer: i.payer || null, custom: i.custom || null, customEs: i.customEs || null, state: "expected", source: "prior_year" }));
     timeline(e, "Started from " + old.year + ": " + keep.length + " documents expected again" + (none.length ? ", " + none.length + " not asked for because the client did not have them" : ""), "Tallyhound");
     return null;
@@ -1973,7 +2011,7 @@
     if (e.status === "complete" && open) { e.status = "in_progress"; e.completedAt = null; e.step = 0; if (!e.next) e.next = nextAllowed(S.now); timeline(e, "Reopened: a document is outstanding again"); }
     else if (["in_progress", "stuck"].includes(e.status) && !open && any) { if (checkComplete(e)) finished(e); }
   }
-  window.TH = { addTask, BARK_KINDS, BARK_BATCH_MIN, BARK_SETTLE_MIN, REVIEW_OVERDUE_HOURS, barkRoute, barkDue, barkHeld, barkRead, barkWords, setMyBarks, setBarkRules, setStaffHours, staffHours, V2, WAIVE_REASONS, LASTING, CHANGE_WORDS, LATER_MAX_DAYS, ALREADY_SENT_LOOKBACK_DAYS, replyV2, setSpouse, VOICES, VOICE_TPL, VOICE_FIXED, voiceFor, setVoice, setClientVoice, setSignOff, previewVoice, verified, CADENCE_PRESETS, gapsOf, cadenceFor, setIntensity, setClientIntensity, undiscard, setClosedDays, startMany, deletionEvidence, setCallOk, plans, quoteFor, areaZone, zoneFor, addContact, removeContact, planEnded, setLine, isLandline, RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
+  window.TH = { SLOW_ITEM_ASKS, memoryWrite, memoryOf, clearMemory, setMemory, keepRemoved, confirmRemoved, addTask, BARK_KINDS, BARK_BATCH_MIN, BARK_SETTLE_MIN, REVIEW_OVERDUE_HOURS, barkRoute, barkDue, barkHeld, barkRead, barkWords, setMyBarks, setBarkRules, setStaffHours, staffHours, V2, WAIVE_REASONS, LASTING, CHANGE_WORDS, LATER_MAX_DAYS, ALREADY_SENT_LOOKBACK_DAYS, replyV2, setSpouse, VOICES, VOICE_TPL, VOICE_FIXED, voiceFor, setVoice, setClientVoice, setSignOff, previewVoice, verified, CADENCE_PRESETS, gapsOf, cadenceFor, setIntensity, setClientIntensity, undiscard, setClosedDays, startMany, deletionEvidence, setCallOk, plans, quoteFor, areaZone, zoneFor, addContact, removeContact, planEnded, setLine, isLandline, RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
     dump, load, blank, setNow, setUser, linkFor, linkLive, LINK_DAYS, consentFromPage, declineTexts, stopEmail, unsubscribeLink, CONSENT_WORDING,
     get S() { return S; }, FORMS, TPL, TPL_USE, QUESTIONS, STUCK, DAY, HOUR, MIN,
     client, eng, engOf, itemsOf, openItems, progress, fill, outputCheck, channelFor, allowed, nextAllowed, live, nextItem,

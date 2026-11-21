@@ -10,7 +10,7 @@ test("rolling the season carries a finished client forward with what they actual
   assert.equal(x.e.status, "complete");
   const r = T.rollSeason(2027); assert.deepEqual([r.rolled, r.left, r.year], [1, 0, 2027]);
   const e = T.engOf(c.id); assert.equal(e.year, 2027); assert.equal(e.status, "not_started"); assert.equal(e.returning, true);
-  assert.deepEqual(T.itemsOf(e.id).map((i) => i.form + ":" + i.payer + ":" + i.source).sort(), ["1098:Regions Mortgage:prior_year", "W2:Acme Logistics:prior_year"]);
+  assert.deepEqual(T.itemsOf(e.id).map((i) => i.form + ":" + i.payer + ":" + i.source).sort(), ["1098:Regions Mortgage:last_season", "W2:Acme Logistics:last_season"]);
   assert.equal(e.lastSeason.received, 2); assert.match(e.lastSeason.none.join(), /interest statement/); assert.equal(c.textConsent, "given", "consent carries over");
   assert.equal(T.S.engs.length, 1); assert.equal(T.S.msgs.filter((m) => m.engId !== e.id).length, 0, "last season's messages leave the live workspace");
   assert.equal(T.history(c.id)[0].year, 2026); assert.equal(T.history(c.id)[0].items.length, 3);

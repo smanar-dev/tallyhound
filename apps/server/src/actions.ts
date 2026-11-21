@@ -23,7 +23,7 @@ export const ACTIONS: Record<string, Rule> = {
     if (Array.isArray(map) && map.length === p.head.length) p.map = p.map.map((was: string, i: number) => ((p.sensitive || [])[i] ? "" : FIELDS.includes(map[i]) ? map[i] : was));
     return T.importRows(p); } },
   // checklist
-  setItem: staff(3), addItem: staff(4), addRecommended: staff(2), dismissRec: staff(2), addFromPrior: { role: "staff", n: 2, run: (T, [eid, list]) => (T.S.firm.priorReturn === true ? T.addFromPrior(String(eid || ""), (Array.isArray(list) ? list : []).slice(0, 40).map((x) => { const o = (x && typeof x === "object" ? x : {}) as Record<string, unknown>; return { form: String(o.form || ""), payer: String(o.payer || "").replace(/[<>]/g, "").slice(0, 60), why: String(o.why || "").replace(/[<>]/g, "").slice(0, 140) }; })) : "An owner has not switched this on") }, setCustomEs: staff(2),
+  setItem: staff(4), addItem: staff(4), addRecommended: staff(2), dismissRec: staff(2), addFromPrior: { role: "staff", n: 2, run: (T, [eid, list]) => (T.S.firm.priorReturn === true ? T.addFromPrior(String(eid || ""), (Array.isArray(list) ? list : []).slice(0, 40).map((x) => { const o = (x && typeof x === "object" ? x : {}) as Record<string, unknown>; return { form: String(o.form || ""), payer: String(o.payer || "").replace(/[<>]/g, "").slice(0, 60), why: String(o.why || "").replace(/[<>]/g, "").slice(0, 140) }; })) : "An owner has not switched this on") }, setCustomEs: staff(2),
   saveTemplate: owner(1), removeTemplate: owner(1), applyTemplate: staff(3), sendCheckin: staff(1), applyCheckin: staff(2), skipQuestions: staff(2), customSuggest: staff(3),
   // Editing a client's details, as the demo's Details tab does it. A changed mobile number is a new number: any OK to text is reset
   // and a wrong-number flag is cleared (spec TH-CON-9). The language is not editable here while Spanish is off for pilots.
@@ -55,6 +55,11 @@ export const ACTIONS: Record<string, Rule> = {
   setStaffHours: { role: "owner", n: 2, run: (T, [a, b]) => T.setStaffHours(Number(a), Number(b)) },
   setMyBarks: { role: "staff", n: 1, run: (T, [p]) => T.setMyBarks(p && typeof p === "object" ? p : {}) },
   barkRead: { role: "staff", n: 1, run: (T, [id]) => T.barkRead(String(id || "all")) },
+  // Season memory (TH-MEM): the switch and clearing one client's are the owner's; settling what last season left off is staff work.
+  setMemory: { role: "owner", n: 1, run: (T, [on]) => T.setMemory(on === true) },
+  clearMemory: { role: "owner", n: 1, run: (T, [cid]) => T.clearMemory(String(cid || "")) },
+  keepRemoved: { role: "staff", n: 2, run: (T, [eid, i]) => T.keepRemoved(String(eid || ""), Number(i)) },
+  confirmRemoved: { role: "staff", n: 1, run: (T, [eid]) => T.confirmRemoved(String(eid || "")) },
   setSpouse: { role: "staff", n: 2, run: (T, [cid, other]) => T.setSpouse(String(cid || ""), other ? String(other) : "") },
   setClosedDays: { role: "owner", n: 1, run: (T, [list]) => T.setClosedDays((Array.isArray(list) ? list : []).slice(0, 100).map(String)) },
   // chase

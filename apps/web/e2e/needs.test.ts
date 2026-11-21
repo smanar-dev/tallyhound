@@ -127,6 +127,6 @@ scene("TH-BRK: ten items in five minutes are one bark; the bell shows it, the qu
   await page.goto(W.url + "/settings?tab=barks"); await page.getByRole("heading", { name: "Who hears the barks" }).waitFor(); await page.locator("label.toggle", { has: page.getByLabel("Owners also hear: A client question") }).click(); await page.getByText(/^Saved\. The hound barks/).waitFor();
   T = await W.state(firmId); assert.deepEqual(T.barkRoute({ kind: "question", engId: T.S.engs[1].id }).sort(), [alexId, ownerId].sort());
   // Staff cannot change the firm's rules, and choose their own kinds under My alerts.
-  assert.equal((await alex.request.post(W.url + "/api/act", { data: { fn: "setBarkRules", args: [{}] } })).status(), 403);
+  assert.equal((await alex.request.post(W.url + "/api/act", { data: { fn: "setBarkRules", args: [{}] } , headers: { "x-tallyhound": "1" } })).status(), 403);
   await alex.getByRole("button", { name: "My alerts" }).click(); await alex.getByRole("dialog").getByLabel("Client questions").click({ force: true, noWaitAfter: true }); await alex.getByText("Saved.", { exact: true }).first().waitFor(); T = await W.state(firmId); assert.deepEqual(T.barkRoute({ kind: "question", engId: T.S.engs[1].id }), [ownerId]);
 });

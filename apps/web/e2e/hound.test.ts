@@ -197,5 +197,19 @@ scene("TH-VOI, TH-PAC: an owner makes the hound theirs: voice with a live sample
   // Staff see the choices and cannot change the firm's.
   await page.goto(W.url + "/settings?tab=people"); await page.getByRole("button", { name: "Add a person" }).click(); const dlg = page.getByRole("dialog"); await dlg.getByLabel("Name").fill("Alex Staff"); await dlg.getByLabel("Work email").fill("alex@firm1.test"); await dlg.getByRole("button", { name: "Add", exact: true }).click(); await dlg.waitFor({ state: "detached" });
   const alex = await W.signIn("alex@firm1.test"); await alex.goto(W.url + "/hound?tab=rules"); await alex.getByRole("heading", { name: "Make the hound yours" }).waitFor(); assert.equal(await alex.locator("input[name=voice]").first().isDisabled(), true); assert.equal(await alex.locator("input[name=inten]").first().isDisabled(), true);
-  assert.equal((await alex.request.post(W.url + "/api/act", { data: { fn: "setVoice", args: ["warm"] } })).status(), 403);
+  assert.equal((await alex.request.post(W.url + "/api/act", { data: { fn: "setVoice", args: ["warm"] } , headers: { "x-tallyhound": "1" } })).status(), 403);
+});
+
+scene("TH-MEM: a season closes and the next one starts from it: \"From 2026\" on what came in, the sold-home 1098 under Removed last season, and a Last season panel", async (W) => {
+  const { firmId } = await busyFirm(W), page = await W.signIn("pat1@firm1.test"); let T: Engine = await W.state(firmId); const jo = T.S.clients[0], year: number = T.S.firm.taxYear;
+  // Not needed this year, with the reason. A lasting reason says what happens next season.
+  await page.goto(W.url + "/clients/" + T.engOf(jo.id).id); const row = page.locator(".li", { hasText: "Mortgage interest statement" }).first(); await row.getByRole("button", { name: /More|Actions|…|⋯/ }).or(row.locator("button").last()).first().click(); await page.getByRole("button", { name: "Not needed this year" }).first().click();
+  const dlg = page.getByRole("dialog", { name: "Not needed this year" }); await dlg.getByLabel("Why").selectOption("sold_home"); await dlg.getByText(/Next season Tallyhound will leave this off/).waitFor(); await dlg.getByRole("button", { name: "Not needed this year" }).click(); await page.getByText("Marked not needed.").waitFor();
+  T = await W.state(firmId); assert.equal(T.engOf(jo.id).status, "complete"); const M = T.memoryOf(jo.id); assert.equal(M.length, 2); assert.equal(M.find((r: { form: string }) => r.form === "1098").waiveReason, "sold_home");
+  await page.goto(W.url + "/settings"); await page.getByRole("button", { name: "Start the " + (year + 1) + " season" }).click(); await page.getByRole("dialog").getByRole("button", { name: "Start " + (year + 1) }).click(); await page.getByText(new RegExp("^Tax year " + (year + 1) + " started")).waitFor();
+  T = await W.state(firmId); const e = T.engOf(jo.id); await page.goto(W.url + "/clients/" + e.id); await page.locator(".chip", { hasText: "From " + year }).waitFor();
+  const off = page.locator(".card", { hasText: "Removed last season" }); assert.match(text(await off.textContent()), /Mortgage interest statement.*Sold the home/); assert.ok(!T.itemsOf(e.id).some((i: { form: string }) => i.form === "1098"));
+  await off.getByRole("button", { name: "Confirm all" }).click(); await page.getByText("Confirmed. They stay off this year.").waitFor(); await off.waitFor({ state: "detached" });
+  await page.goto(W.url + "/clients/" + e.id + "?tab=details"); const last = page.locator(".card", { hasText: "Last season (" + year + ")" }); assert.match(text(await last.textContent()), /W-2 wage statement from Acme Logistics.*Received by text/); assert.match(text(await last.textContent()), /Not needed: sold the home/);
+  await last.getByRole("button", { name: "Clear memory" }).click(); await page.getByText(/^Cleared\./).waitFor(); T = await W.state(firmId); assert.equal(T.memoryOf(jo.id).length, 0);
 });
