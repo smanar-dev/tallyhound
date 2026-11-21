@@ -6,7 +6,7 @@
 import net from "node:net";
 import sharp from "sharp";
 import { createRequire } from "node:module";
-import { kitPrepare, type PrepareOpts } from "./kit.ts";
+import { kitPagesToFile, kitPrepare, type PrepareOpts } from "./kit.ts";
 const require = createRequire(import.meta.url);
 
 export const LONG_SIDE = 2000, PDF_TEXT_PAGES = 5, PDF_TEXT_MAX = 20000, PDF_PAGE_WIDTH = 1500, PDF_MAX_PAGES = 90;   // the pipeline reads at most 90 pages of one file
@@ -52,6 +52,18 @@ export async function pdfPages(bytes: Buffer): Promise<Buffer[] | null> {
     }
     for (let i = out.length; i < total && i < PDF_MAX_PAGES * 10; i++) out.push(Buffer.alloc(0));
     return out;
+  } catch { return null; }
+}
+
+/** One form's own PDF out of a file that held several (TH-DOC-19): the pages `pagesToFile` gives it, copied unchanged into a new
+ *  file. Returns the same bytes when the document has every page, and null when the file cannot be opened or cut (the caller then
+ *  keeps the whole file). The original is never changed. */
+export async function pdfCut(bytes: Buffer, own: number[], others: number[][]): Promise<Buffer | null> {
+  try {
+    const { PDFDocument } = await import("pdf-lib"), src = await PDFDocument.load(new Uint8Array(bytes), { updateMetadata: false }), total = src.getPageCount();
+    const pages = kitPagesToFile(total, own, others); if (!pages.length) return null; if (pages.length === total) return bytes;
+    const out = await PDFDocument.create(); (await out.copyPages(src, pages.map((n) => n - 1))).forEach((p) => out.addPage(p));
+    return Buffer.from(await out.save());
   } catch { return null; }
 }
 

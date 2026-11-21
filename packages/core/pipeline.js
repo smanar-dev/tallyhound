@@ -53,7 +53,18 @@ function ownerOf(T, list, spec, fallback) {
 }
 // Files read per firm per day from senders nobody has confirmed. Enough for a busy spouse, too few to be worth abusing.
 const UNKNOWN_FILES_PER_DAY = 20;
-function createApp({ store, sms, email, ai, clock, log, files, voice }) {
+// Which pages of a file go into one document's own PDF, when several forms arrived as one file (TH-DOC-19). Its own pages, plus any
+// page nobody was given (a blank back, an instruction sheet, a page past the reading limit): such a page goes with the document
+// before it, or with the first document when it comes before them all. So every page of the original lands in exactly one file.
+function pagesToFile(total, own, others) {
+  const mine = new Set((own || []).map(Number).filter((n) => n >= 1 && n <= total)), claim = new Map();
+  (others || []).forEach((L, k) => (L || []).forEach((n) => { n = Number(n); if (n >= 1 && n <= total && !claim.has(n)) claim.set(n, k); })); mine.forEach((n) => claim.set(n, -1));
+  if (!mine.size) return []; const first = Math.min.apply(null, [...claim.keys()]); let cur = claim.get(first); const out = [];
+  for (let n = 1; n <= total; n++) { if (claim.has(n)) cur = claim.get(n); if (cur === -1) out.push(n); }
+  return out;
+}
+
+function createApp({ store, sms, email, ai, clock, log, files, voice, cut }) {
   const now = clock || (() => new Date());
   // T-106: the model reads before the firm is locked. An inbound event is first run against a throwaway copy of the firm with no lock held.
   // Nothing from that run is kept except what the model answered (by the exact prompt and pictures) and where each file was stored.
@@ -108,7 +119,10 @@ function createApp({ store, sms, email, ai, clock, log, files, voice }) {
     const fdone = [];
     for (const j of fjobs) {
       try {
-        if (j.act === "put") { const f = await store.getFile(firmId, j.key); if (!f) throw new Error("Our copy is missing"); fdone.push({ docId: j.docId, place: j.place, id: await files.put({ firmId, provider: j.provider, folder: j.folder, name: j.name, bytes: f.bytes, contentType: f.contentType }) }); }
+        if (j.act === "put") { const f = await store.getFile(firmId, j.key); if (!f) throw new Error("Our copy is missing");
+          // One form out of a file that held several is filed as a PDF of its own pages. If the file cannot be cut, the whole file is filed: nothing is lost.
+          let bytes = f.bytes; if (j.pages && cut && /pdf/.test(f.contentType || "")) { const part = await cut(f.bytes, j.pages.own, j.pages.others); if (part) bytes = part; else say("pdf_cut_failed", firmId, j.docId); }
+          fdone.push({ docId: j.docId, place: j.place, id: await files.put({ firmId, provider: j.provider, folder: j.folder, name: j.name, bytes, contentType: f.contentType }) }); }
         else { await files.move({ firmId, provider: j.provider, id: j.id, folder: j.folder, name: j.name }); fdone.push({ docId: j.docId, place: j.place, id: j.id }); }
       } catch (err) { fdone.push({ docId: j.docId, error: String(err && err.message || err) }); }
     }
@@ -149,6 +163,8 @@ function createApp({ store, sms, email, ai, clock, log, files, voice }) {
     T.S.purgeFiles = left;
   }
   // What needs to happen in the firm's storage. Nothing is done here: jobs are marked, saved, then carried out after the lock, like sends.
+  // A document that came in one file with others: its own pages and everyone else's, for pagesToFile. Null for a file of its own.
+  const sharedPages = (T, d) => (d.pagesOf && d.pagesOf.length ? { own: d.pagesOf, others: T.S.docs.filter((x) => x.id !== d.id && x.fileKey === d.fileKey && x.pagesOf && x.pagesOf.length).map((x) => x.pagesOf) } : null);
   function fileJobs(T) {
     const v = T.S.firm.delivery || {}; if (!files || !v.provider || v.provider === "Download" || v.auto !== "on") return [];
     const out = [], ext = (t) => (/pdf/.test(t || "") ? ".pdf" : /png/.test(t || "") ? ".png" : ".jpg"), stale = now().getTime() - CLAIM_STALE_MS;
@@ -158,7 +174,7 @@ function createApp({ store, sms, email, ai, clock, log, files, voice }) {
       const base = v.folder + "/" + e.year + "/" + (c.entity || c.last + ", " + c.first), final = d.state === "accepted" && d.deliveredAt, unused = ["rejected", "duplicate", "discarded"].includes(d.state);
       const want = final ? "final" : unused ? "unused" : "incoming", folder = want === "final" ? base : base + (want === "unused" ? "/_Not used" : "/_To check");
       if (m && m.id && m.place !== want) { m.busy = now().getTime(); d.hold = "storage"; out.push({ act: "move", docId: d.id, provider: v.provider, id: m.id, place: want, folder, name: want === "final" ? (T.filedName ? T.filedName(c, e, d).replace(/\.pdf$/, ext(d.contentType)) : T.fileName(c, e, d)) : m.name || d.id }); }
-      else if (!(m && m.id) && d.fileKey && (m || final)) { const name = want === "final" ? (T.filedName ? T.filedName(c, e, d).replace(/\.pdf$/, ext(d.contentType)) : T.fileName(c, e, d)) : "arrived " + new Date(d.at).toISOString().slice(0, 10) + " " + d.id + ext(d.contentType); d.master = Object.assign(m || { at: new Date(T.S.now) }, { busy: now().getTime(), name }); d.hold = "storage"; out.push({ act: "put", docId: d.id, provider: v.provider, key: d.fileKey, place: want, folder, name }); }
+      else if (!(m && m.id) && d.fileKey && (m || final)) { const name = want === "final" ? (T.filedName ? T.filedName(c, e, d).replace(/\.pdf$/, ext(d.contentType)) : T.fileName(c, e, d)) : "arrived " + new Date(d.at).toISOString().slice(0, 10) + " " + d.id + ext(d.contentType); d.master = Object.assign(m || { at: new Date(T.S.now) }, { busy: now().getTime(), name }); d.hold = "storage"; out.push({ act: "put", docId: d.id, provider: v.provider, key: d.fileKey, place: want, folder, name, pages: sharedPages(T, d) }); }
     }
     return out;
   }
@@ -350,4 +366,4 @@ function createApp({ store, sms, email, ai, clock, log, files, voice }) {
     async destroyFirm(firmId, userId) { await withFirm(firmId, async (T) => { const u = T.S.users.find((x) => x.id === userId); if (!u || u.role !== "owner") throw new Error("Only an owner can close the account"); return true; }); if (store.destroyFirm) await store.destroyFirm(firmId); return true; }
   };
 }
-module.exports = { wallTime, createApp, nameMatch, UNKNOWN_FILES_PER_DAY, MAX_PAGES };
+module.exports = { wallTime, createApp, pagesToFile, nameMatch, UNKNOWN_FILES_PER_DAY, MAX_PAGES };

@@ -34,7 +34,7 @@ The spec's recommendation was followed on each. Jordan can reverse any of them.
 | C4 | Ask the spouse | Only a spouse who is a linked client with their own OK (`setSpouse`), as before |
 | C5 | Spanish | The new panel and trace words exist in Spanish and are tested. Spanish stays off for pilots until a native review (T-31, `CLAUDE.md`) |
 | C6 | Blurry photo | Kept: asked again twice, then a person |
-| C7 | Cut-off detection now, splitting a PDF of several forms later | Missing-part detection is the existing "required parts" check. Splitting is not built |
+| C7 | Cut-off detection now, splitting a PDF of several forms later | Both built. Missing-part detection is the existing "required parts" check. A PDF of several forms was already read as separate documents (T-85, T-143); each is now also handed off and filed as a PDF of its own pages (`pagesToFile` in `packages/core/pipeline.js`, `pdfCut` in `apps/server/src/files.ts`). A page nobody claimed goes with the form before it, so no page is dropped. The copy Tallyhound holds stays whole. A file that cannot be cut is filed whole |
 | C8 | Forms it knows | The catalogue is unchanged |
 | C9 | Who hears "gone quiet" | The office manager when one is marked, otherwise the client's preparer |
 
@@ -46,4 +46,5 @@ The spec's recommendation was followed on each. Jordan can reverse any of them.
 - **A document in someone else's name.** The spec says the client is told nothing. The engine used to send "passed to your preparer"; it now sends nothing for that case and a person looks first.
 - **"After the 15th"** now holds the document until the 16th (it used to be the 15th).
 - **Template names.** The spec's M22b is `M35Y` here (M22 was taken).
-- **Not built:** splitting one PDF into several forms (C7, the spec marks it V1); a spoken-call integration for the call card (staff call from their own phone and log it).
+- **A document that comes off hold.** One document is asked for at a time (C1), so a document held until a date used to wait behind the reminders for another one and could be left unasked when the client went quiet. Now a document whose hold has ended is asked for next and the reminders start over from that ask (`released` in the engine). If the client has already gone quiet when the hold ends, nothing is sent by itself: the call card marks the document "not asked for yet" and Restart fetching asks for it first.
+- **Not built:** a spoken-call integration for the call card (staff call from their own phone and log it).

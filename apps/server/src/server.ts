@@ -19,7 +19,7 @@ import { SignInError, type SignIn } from "./signin.ts";
 import { FirmError, type Firms } from "./firms.ts";
 import { ACTIONS, allowed, run } from "./actions.ts";
 import { registerHooks, type HookDeps } from "./hooks.ts";
-import { pdfCount, pdfPage, ready } from "./files.ts";
+import { pdfCount, pdfCut, pdfPage, ready } from "./files.ts";
 import { registerPublic, type PublicDeps } from "./public.ts";
 import type { PrepareOpts } from "./kit.ts";
 import { planFor } from "./plan.ts";
@@ -225,7 +225,9 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
     const json = await d.readState(u.firmId), T0 = createEngine(); if (!json) return reply.code(404).send({ error: "no_firm", message: "This firm's workspace could not be found." }); T0.load(json);
     if (!T0.eng(eid)) return reply.code(404).send({ error: "no_client", message: "That client is not on your list." });
     // The bytes are read first, while Tallyhound certainly still holds them; then the hand-off is recorded.
-    const held: Record<string, Buffer> = {}; for (const x of T0.S.docs.filter((x: { engId: string; state: string; fileKey?: string }) => x.engId === eid && x.state === "accepted" && x.fileKey && T0.hasContent(x))) { const got = await d.getFile(u.firmId, x.fileKey); if (got) held[x.id] = got.bytes; }
+    const held: Record<string, Buffer> = {}; for (const x of T0.S.docs.filter((x: { engId: string; state: string; fileKey?: string }) => x.engId === eid && x.state === "accepted" && x.fileKey && T0.hasContent(x)) as { id: string; fileKey: string; pagesOf?: number[] }[]) { const got = await d.getFile(u.firmId, x.fileKey); if (!got) continue; held[x.id] = got.bytes;
+      // One form out of a file that held several goes into the zip as a PDF of its own pages (TH-DOC-19).
+      if (Array.isArray(x.pagesOf) && x.pagesOf.length && got.contentType === "application/pdf") { const part = await pdfCut(got.bytes, x.pagesOf, T0.S.docs.filter((o: { id: string; fileKey?: string; pagesOf?: number[] }) => o.id !== x.id && o.fileKey === x.fileKey && o.pagesOf && o.pagesOf.length).map((o: { pagesOf: number[] }) => o.pagesOf)); if (part) held[x.id] = part; } }
     const r = await d.app.staff(u.firmId, u.id, (T: Engine) => { const docs = T.S.docs.filter((x: { engId: string; state: string }) => x.engId === eid && x.state === "accepted" && T.hasContent(x)), out = T.deliver(eid); return { ids: docs.map((x: { id: string }) => x.id), files: out.files as string[], manifest: out.manifest as string, missing: out.missing as string[], folder: out.folder as string }; });
     const entries: Record<string, Uint8Array> = {}, lines: string[] = [];
     r.ids.forEach((id: string, i: number) => { const b = held[id]; if (!b) return; const ext = b[0] === 0xff && b[1] === 0xd8 ? ".jpg" : b.subarray(0, 4).toString("latin1") === "\x89PNG" ? ".png" : ".pdf", name = r.files[i]!.replace(/\.pdf$/i, "").replace(/[\\/:*?"<>|]/g, " ").trim() + ext; entries[name] = new Uint8Array(b); lines.push(name); });

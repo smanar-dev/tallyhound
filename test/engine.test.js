@@ -781,3 +781,22 @@ test("TH-LOG-1 to 4: the activity log lists every message, document and decision
   const other = T.S.clients.find((x) => x.id !== c.id); assert.ok(!T.activity(other.id).some((r) => all.some((a) => a.ref === r.ref && a.kind !== "decision")), "one client's log shows another's");
   assert.deepEqual(T.activity("nobody"), []);
 });
+
+test("a document that comes off hold while another is being chased is asked for next, and the reminders start over; a held document is never left unasked", () => {
+  const { T, c, e } = started(); const w2 = item(T, e, "W2"), mort = item(T, e, "1098"), asked = (i) => out(T, e).filter((m) => m.itemId === i.id);
+  T.setUser("u2"); const first = asked(w2).length ? w2 : mort, other = first === w2 ? mort : w2; assert.equal(asked(first).length, 1); assert.equal(asked(other).length, 0);
+  const d = new Date(+T.S.now + 4 * T.DAY), ymd = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  assert.equal(T.setHold(other.id, ymd), null); assert.equal(T.released(other, e), false);
+  T.advance(3 * T.DAY); assert.equal(asked(other).length, 0, "asked for while it was held");
+  T.advance(4 * T.DAY); assert.equal(asked(other).length, 1, "the hold ended and the document was not asked for"); assert.equal(asked(other)[0].tpl, "M4"); assert.equal(other.state, "requested"); assert.equal(T.released(other, e), false);
+  // The reminders run their full course again from that ask, so the client goes quiet later than they would have, never sooner.
+  const n = out(T, e).filter((m) => ["M5", "M6"].includes(m.tpl) && +m.at > +asked(other)[0].at).length; T.advance(30 * T.DAY);
+  assert.equal(e.status, "stuck"); assert.ok(out(T, e).filter((m) => ["M5", "M6"].includes(m.tpl) && +m.at > +asked(other)[0].at).length >= n + T.cadenceFor(e).gaps.length - 1);
+});
+test("a hold that ends after the client has gone quiet sends nothing by itself; Restart fetching asks for that document first", () => {
+  const { T, c, e } = started(); T.setUser("u2"); const w2 = item(T, e, "W2"), mort = item(T, e, "1098"), asked = (i) => out(T, e).filter((m) => m.itemId === i.id), other = asked(w2).length ? mort : w2;
+  const d = new Date(+T.S.now + 25 * T.DAY), ymd = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); T.setHold(other.id, ymd);
+  T.advance(22 * T.DAY); assert.equal(e.status, "stuck"); const sent = out(T, e).length; T.advance(8 * T.DAY); assert.equal(out(T, e).length, sent, "a message went to a client who has gone quiet");
+  assert.equal(T.released(other, e), true); const t = T.S.tasks.find((x) => x.kind === "gone_quiet" && x.engId === e.id && x.status === "open");
+  assert.equal(T.decideTask(t.id, "restart", null), null); T.advance(2 * T.DAY); assert.equal(asked(other).length, 1, "restarting did not ask for the document that came off hold"); assert.equal(out(T, e).filter((m) => +m.at > +d)[0].itemId, other.id);
+});

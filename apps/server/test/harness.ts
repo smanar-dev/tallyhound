@@ -24,6 +24,7 @@ import { createFirms } from "../src/firms.ts";
 import { buildServer } from "../src/server.ts";
 import { createWorker } from "../src/worker.ts";
 import { migrate } from "../src/runtime.ts";
+import { pdfCut } from "../src/files.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const KINDS: ("memory" | "postgres")[] = process.env.DATABASE_URL ? ["memory", "postgres"] : ["memory"];
@@ -43,7 +44,7 @@ export async function build(kind: "memory" | "postgres" = "memory", opt: { ai?: 
   } else { inner = kitMemory.memoryStore(); const m = memoryAuthStore(() => [...inner.firms.keys()]); auth = m; queue = memoryQueue(); auditRows = async () => m.auditRows; }
   const store = kitCrypto.encryptedStore(inner, keyring), sms = kitMemory.fakeSender(), email = kitMemory.fakeSender();
   const storage = opt.google ? createStorage({ store: pool ? postgresStorageStore(pool) : memoryStorageStore(), secrets: firmSecrets(store, keyring, kitCrypto), google: { clientId: "client-1", clientSecret: "shh" }, microsoft: { clientId: "ms-1", clientSecret: "ms-shh" }, dropbox: { clientId: "dbx-1", clientSecret: "dbx-shh" }, appUrl: APP, stateSecret: "test-secret", clock, fetch: opt.google }) : undefined;
-  const app = createApp({ store, sms, email, ai: opt.ai || null, clock, files: storage ? storage.files : undefined });
+  const app = createApp({ store, sms, email, ai: opt.ai || null, clock, files: storage ? storage.files : undefined, cut: pdfCut });
   // A stand-in for Twilio's media store: what it holds, what was asked of it, and a switch to make it fail.
   const media = new Map<string, Buffer>(), mediaCalls: string[] = []; let mediaDown = false;
   const twilio = kitTwilio.twilio({ accountSid: "AC1", authToken: TWILIO_TOKEN, messagingServiceSid: "MG1", fetchImpl: async (url: string, o: { method?: string } = {}) => {

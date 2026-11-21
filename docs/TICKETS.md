@@ -505,6 +505,8 @@ Source: the Website Feature Delta spec. `docs/DELTA.md` maps it onto this codeba
 62. T-166, barks (TH-BRK-12 to 14). The `cant_reach` item; each kind goes to the client's preparer, the office manager, the owners or named people (`setBarkRules`); `setDuty` marks the office manager under Settings, People.
 63. T-167, the call card (TH-CAL-1 to 6). Who to call, what is missing, what is in; "Log the call" with what happened, a note and a day to try again; a voicemail needs a day and the card comes back at 9 that morning; restart at a chosen pace.
 64. T-168, the activity log (TH-LOG-1 to 5). `activity(clientId, kind)`: every message, document and decision with who did it, newest first; filters and a download on the Activity tab.
+65. T-169, a PDF of several forms is handed off as one PDF per form (TH-DOC-19, decision C7). Reading them as separate documents was already there (T-85, T-143); what was missing was the files. `pagesToFile` decides which pages each document gets (its own, plus unclaimed pages that follow it); `pdfCut` copies those pages into a new PDF (`pdf-lib`) for the firm's storage and for the zip. Only run against made-up PDFs: real brokerage packets are part of T-130.
+66. T-170, a document that comes off hold is asked for next (`released`), ahead of reminders for another document, and the reminders start over. After a client has gone quiet nothing is sent by itself; the call card says "not asked for yet" and Restart fetching asks for it first.
 
 ## Everything still to be done (November 21)
 
@@ -519,7 +521,5 @@ Nothing in `docs/TICKETS.md` is unbuilt. What is left needs something code canno
 **Only possible in a pilot:** the reply evaluation on consented data with the spec's gates (the repository has a synthetic set of 85); five working days in shadow before switching reply understanding on; Manar and a pilot firm approving the client wording; one pilot firm running the spec's scenarios on its own sample clients.
 
 **Known limits, by choice:** a staff click and the five-minute timer still load the whole firm (about 0.8 s at 2,500 clients); `/api/state` sends the browser the whole workspace; the browser tests run on Chromium only, and nobody has tried a screen reader, a real phone, Safari or Firefox; the content book's staff-notification sentences are followed in meaning, not word for word, because emails leave out the client's surname and the document.
-
-**From the website spec, not built:** splitting one PDF that holds several forms (decision C7, V1). The website must show it as coming next.
 
 **Outside this repository:** the marketing website on Base44 (decision 10 in `docs/REBRAND.md`); the brand book's own list (logo exports, the hound pose pack, the slide and email templates, founder photos, the trademark search).

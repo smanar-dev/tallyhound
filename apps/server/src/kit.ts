@@ -41,9 +41,10 @@ export interface App {
 
 export const { createEngine } = require("../../../packages/engine") as { createEngine(): Engine };
 export const { wallTime } = require("../../../packages/core/pipeline.js") as { wallTime(date: Date, iana: string): Date };
+export const { pagesToFile: kitPagesToFile } = require("../../../packages/core/pipeline.js") as { pagesToFile(total: number, own: number[], others: number[][]): number[] };
 export const kitRegistration = require("../../../packages/core/registration.js") as { firmPage(firm: { name: string; phone?: string }, opt?: { number?: string; address?: string }): string; brand(firm: unknown, reg: unknown): unknown; campaign(firm: unknown, reg: unknown): unknown; headsUp(firm: { name: string }, opt?: { number?: string; address?: string }): { subject: string; email: string; letter: string; website: string; voicemail: string } };
 export const { createApp } = require("../../../packages/core/pipeline.js") as {
-  createApp(deps: { store: KitStore; sms: Sender; email: Sender; ai: unknown; clock?: () => Date; log?: (event: string, ...ids: unknown[]) => void; files?: unknown; voice?: unknown }): App;
+  createApp(deps: { store: KitStore; sms: Sender; email: Sender; ai: unknown; clock?: () => Date; log?: (event: string, ...ids: unknown[]) => void; files?: unknown; voice?: unknown; cut?: (bytes: Buffer, own: number[], others: number[][]) => Promise<Buffer | null> }): App;
 };
 export const kitAuth = require("../../../packages/core/auth.js") as {
   issueLink(secret: string, email: string, now: Date | number): string;

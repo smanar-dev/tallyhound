@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { build, KINDS, pdfPagesWith, type Harness } from "./harness.ts";
-import { prepareOpts } from "../src/files.ts";
+import { pdfCount, pdfCut, pdfText, prepareOpts } from "../src/files.ts";
 import { createEngine, kitMemory, type Engine, type PrepareOpts } from "../src/kit.ts";
 import { RETRY_AFTER_S } from "../src/queue.ts";
 import { strFromU8, unzipSync } from "fflate";
@@ -161,6 +161,26 @@ for (const kind of KINDS) {
     assert.equal((await H.server.inject({ method: "GET", url: "/api/documents/" + d.id + "/file", headers: { cookie: b.cookie() } })).statusCode, 404, "another firm's staff cannot open it");
     assert.equal((await H.server.inject({ method: "GET", url: "/api/documents/" + d.id + "/file" })).statusCode, 401);
     assert.ok((await H.state()).S.audit.some((x: { action: string }) => x.action === "doc.view"), "every view is in the firm's audit trail");
+    await H.close();
+  });
+
+  test(name("TH-DOC-19: two forms in one PDF are handed off as two PDFs, each with its own pages; a cover page and an instruction sheet go with the form beside them; our original stays whole"), async () => {
+    const one = { is_tax_document: true, tax_year: 2026, recipient_name: "JO DAY", legibility: 0.95, confidence: 0.97, missing_parts: [], note: "" };
+    const ai = kitMemory.fakeAI((p: string) => p.startsWith("The images are the pages") ? { documents: [{ ...one, pages: [2], form: "W2", payer: "Acme Logistics" }, { ...one, pages: [3], form: "1099INT", payer: "First Bank" }] }
+      : p.startsWith("You read emails") ? { intent: "sending", item_id: null, summary: "Sending documents", scope: "documents", sentiment: "calm" } : null);
+    const H = await build(kind, { ai, prepare: prepareOpts() }), { firmId, ownerId } = await H.newFirm();
+    await H.app.staff(firmId, ownerId, (T: Engine) => { T.S.firm.hound.mode = "autopilot"; T.importRows(T.parseCSV("First,Last,Email\nJo,Day,jo@x.example")); const e = T.S.engs[0]; T.itemsOf(e.id).find((i: { form: string }) => i.form === "W2").payer = "Acme Logistics"; e.confirmed = true; T.start(e.id); });
+    const pdf = pdfPagesWith([["Cover sheet from the scanner"], ["Form W-2 Wage and Tax Statement 2026"], ["Form 1099-INT Interest Income 2026"], ["Instructions for Recipient"]]);
+    await H.postmarkPost("/hooks/postmark/inbound", { MessageID: "pms", OriginalRecipient: INBOX, From: "Jo Day <jo@x.example>", Subject: "One scan", TextBody: "All in one file.", Headers: [{ Name: "Authentication-Results", Value: "mx; dmarc=pass" }], Attachments: [{ Name: "scan.pdf", ContentType: "application/pdf", Content: pdf.toString("base64") }] });
+    await H.inbox.drain(); const T = createEngine(); T.load(await H.store.readState(firmId)); const got = docs(T); assert.deepEqual(got.map((d: { state: string }) => d.state), ["accepted", "accepted"]);
+    const owner = await H.signInAs("pat1@firm1.test"), r = await H.server.inject({ method: "POST", url: "/api/clients/" + T.S.engs[0].id + "/files.zip", payload: "{}", headers: { "content-type": "application/json", cookie: owner.cookie(), "x-tallyhound": "1" } }); assert.equal(r.statusCode, 200);
+    const files = unzipSync(new Uint8Array(r.rawPayload)), pdfs = Object.keys(files).filter((n) => n.endsWith(".pdf")).sort(); assert.equal(pdfs.length, 2);
+    const w2 = Buffer.from(files[pdfs.find((n) => /W2/.test(n))!]!), int = Buffer.from(files[pdfs.find((n) => /1099/.test(n))!]!);
+    assert.equal(await pdfCount(w2), 2); assert.equal(await pdfCount(int), 2); const tw = await pdfText(w2), ti = await pdfText(int);
+    assert.match(tw, /Cover sheet/); assert.match(tw, /Form W-2/); assert.doesNotMatch(tw, /1099-INT|Instructions/); assert.match(ti, /1099-INT/); assert.match(ti, /Instructions for Recipient/); assert.doesNotMatch(ti, /Form W-2|Cover sheet/);
+    const kept = await H.store.getFile(firmId, got[0].fileKey); assert.ok(kept && kept.bytes.equals(pdf), "the copy Tallyhound holds is the file as it arrived"); assert.equal(got[0].fileKey, got[1].fileKey);
+    // A file that will not open is not cut: null, and the caller files the whole thing.
+    assert.equal(await pdfCut(Buffer.from("%PDF-1.4 not really"), [1], [[2]]), null); assert.ok((await pdfCut(pdf, [1, 2, 3, 4], []))!.equals(pdf), "a document with every page is the file itself");
     await H.close();
   });
 

@@ -13,7 +13,7 @@ import { createWatch, postgresOpsStore } from "./ops.ts";
 import { createFirms } from "./firms.ts";
 import { createInbox, postgresQueue } from "./queue.ts";
 import { handlers } from "./hooks.ts";
-import { prepareOpts } from "./files.ts";
+import { pdfCut, prepareOpts } from "./files.ts";
 import { s3Bucket } from "./bucket.ts";
 import { kmsKeyring } from "./keys.ts";
 import { createClosure } from "./closure.ts";
@@ -69,7 +69,7 @@ export function runtime() {
   const keysOf = (id: string, secret: string) => (env(id) ? { clientId: env(id)!, clientSecret: need(secret) } : undefined), sk = { google: keysOf("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"), microsoft: keysOf("MICROSOFT_CLIENT_ID", "MICROSOFT_CLIENT_SECRET"), dropbox: keysOf("DROPBOX_APP_KEY", "DROPBOX_APP_SECRET") };
   const storage = sk.google || sk.microsoft || sk.dropbox ? createStorage({ store: postgresStorageStore(pool), secrets: firmSecrets(store, keyring, kitCrypto), ...sk, appUrl, stateSecret: need("TH_LINK_SECRET"), clock, log }) : undefined;
   const voice = env("TWILIO_ACCOUNT_SID") && env("TH_VOICE") === "on" ? twilioVoice({ accountSid: env("TWILIO_ACCOUNT_SID")!, authToken: need("TWILIO_AUTH_TOKEN") }) : undefined;   // T-50: off unless TH_VOICE=on
-  const app = createApp({ store, sms, email, ai, clock, log, files: storage ? storage.files : undefined, voice });
+  const app = createApp({ store, sms, email, ai, clock, log, files: storage ? storage.files : undefined, voice, cut: pdfCut });
   if (production && !env("POSTMARK_TOKEN")) throw new Error("Set POSTMARK_TOKEN: without it nobody can be sent a sign-in link");
   const mailer: Mailer & StaffMailer = env("POSTMARK_TOKEN")
     ? { async signInLink(to, url) { await email.send({ from: need("TH_SIGNIN_FROM"), fromName: "Tallyhound", to, subject: "Your Tallyhound sign-in link", body: "Open this link to sign in to Tallyhound. It works once and expires in 15 minutes.\n\n" + url + "\n\nIf you did not ask for this, ignore this email." }); },
