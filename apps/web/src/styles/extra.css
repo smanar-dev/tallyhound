@@ -1,7 +1,7 @@
 /* Rules the demo did not need: fonts served from our own host, the sign-in pages, and a few classes that replace the demo's inline styles. */
 .auth{max-width:440px;margin:0 auto;padding:48px 20px;width:100%;display:flex;flex-direction:column;gap:16px;overflow-y:auto}
 .auth label{font-weight:600}
-.auth input{width:100%;font:inherit;padding:10px 12px;border:1px solid #C9C2B2;border-radius:10px;background:#fff;color:var(--ink)}
+.auth input{width:100%;font:inherit;padding:10px 12px;border:1px solid #CFC4AE;border-radius:10px;background:#fff;color:var(--ink)}
 .auth input.code{font:600 24px/1 var(--mono);letter-spacing:.3em;text-align:center}
 .auth .btn{justify-content:center;padding:10px 16px}
 .logo.dark{color:var(--ink);padding:0;margin:0}
@@ -17,7 +17,7 @@ a.nav,a.logo{text-decoration:none}
 .who .btn{color:inherit}
 a.pstep{text-decoration:none;color:inherit}
 a.btn{text-decoration:none}
-.who .me{flex:1;min-width:0;line-height:1.25;color:#fff;font-weight:600;font-size:13px}.who .me small{display:block;font-weight:500;color:#8C9AB0}
+.who .me{flex:1;min-width:0;line-height:1.25;color:#fff;font-weight:600;font-size:13px}.who .me small{display:block;font-weight:500;color:#9DB0A6}
 .bulkbar{position:sticky;bottom:12px;background:var(--ink);color:#fff;border-color:var(--ink)}
 .note.bad{background:var(--bad-bg);color:var(--bad)}
 .bub.draft{border-style:dashed;max-width:86%}
@@ -64,7 +64,7 @@ table.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 
 .phone-btn{border:1px solid var(--ink);border-radius:10px;padding:9px 12px;text-align:center;font-weight:700;background:#fff}
 .bar{height:8px;border-radius:99px;background:var(--line2);overflow:hidden}.bar i{display:block;height:100%;background:var(--ink)}.bar i.warn{background:#C98A00}.bar i.bad{background:#B3361B}
 tr.sel td{background:var(--tint)}
-.note.good{background:#E2F3EA;color:#0C5A39}
+.note.good{background:#EEF6F1;color:#0C5A39}
 .notesbtn{margin:0 14px 12px;align-self:flex-start;color:inherit;opacity:.8}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chipx{border:0;background:none;font:inherit;cursor:pointer;padding:0 2px;line-height:1;color:inherit;min-width:20px;min-height:20px}

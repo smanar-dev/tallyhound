@@ -1,4 +1,5 @@
 // Sign-in: an emailed link, then a six-digit code from an authenticator app. No passwords. One step on screen at a time.
+import { Logo } from "../components/brand";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { api, ApiError } from "../lib/api";
 
@@ -30,7 +31,7 @@ export function SignIn() {
   const codeField = (id: string, label: string) => <><label htmlFor={id}>{label}</label><input id={id} className="code" inputMode="numeric" autoComplete="one-time-code" maxLength={7} required autoFocus value={code} onChange={(e) => setCode(e.target.value)} /></>;
 
   return <main className="auth">
-    <p className="logo dark"><span className="mark" />tallyhound</p>
+    <p className="logo dark"><Logo size={36} /></p>
     {error ? <div className="banner bad" role="alert">{error}</div> : null}
     {step === "email" && <Card title="Sign in">
       <p className="muted">Enter your work email. We will send you a link. There is no password.</p>

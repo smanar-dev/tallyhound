@@ -7,7 +7,7 @@ import { activity, countBy, needReason, needsYou, openTasks, readyToStart, type 
 import { cname, DOW, fmtDay, fname, iname, MON, plural, rel, senderState, STAT, when } from "../lib/fmt";
 import { Avatar, DocChip, Empty, Icon, Ring } from "../components/ui";
 
-const SEGS: [string, string][] = [["complete", "var(--good)"], ["in_progress", "#2358D1"], ["awaiting_consent", "#8FB0F0"], ["stuck", "var(--accent)"], ["not_started", "#C9CED8"], ["paused", "#9AA3B2"], ["opted_out", "var(--bad)"]];
+const SEGS: [string, string][] = [["complete", "var(--good-fill)"], ["in_progress", "var(--ink2)"], ["awaiting_consent", "#8FB3A3"], ["stuck", "var(--accent)"], ["not_started", "#D9CFBB"], ["paused", "var(--deco)"], ["opted_out", "var(--bad)"]];
 const PIPE_TO: Record<string, string> = { clients: "/clients", checklist: "/clients?show=not_started", chasing: "/hound", check: "/needs-you", complete: "/clients?show=complete" };
 
 function NeedRow({ x }: { x: Need }) {

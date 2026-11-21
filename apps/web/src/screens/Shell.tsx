@@ -1,4 +1,5 @@
 // What every staff screen sits in: the menu, the bar with client search and alerts, and the banners (docs/UX.md rule 4: four things in the main menu).
+import { Logo } from "../components/brand";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useFirm } from "../lib/firm";
@@ -29,7 +30,7 @@ export function Side({ open, onClose }: { open: boolean; onClose: () => void }) 
   const signOut = () => api.post("/auth/signout").finally(() => window.location.replace("/signin"));
   return <>
     <aside className={"side" + (open ? " open" : "")}>
-      <Link className="logo" to="/" onClick={onClose}><span className="mark" />tallyhound</Link>
+      <Link className="logo" to="/" onClick={onClose} aria-label="Tallyhound, home"><Logo dark size={34} /></Link>
       <div className="firm"><b>{s.firm.name}</b><span>Tax year {s.firm.taxYear || 2026} · {s.engs.length} clients</span></div>
       <nav className="col" style={{ gap: 4 }} aria-label="Main">
         {item("/", "Home", "home")}{item("/clients", "Clients", "users")}{item("/needs-you", "Needs you", "review", waiting)}

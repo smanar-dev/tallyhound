@@ -18,7 +18,7 @@ export const cname = (c: { first: string; last: string }) => c.first + " " + c.l
 export const fname = (T: Engine, form: string): string => (T.FORMS[form] || T.FORMS.OTHER).plain;
 export const iname = (T: Engine, i: { custom?: string; form: string }) => i.custom || fname(T, i.form);
 // The demo's avatar colours: the same person always gets the same colour.
-const COLORS = ["#2358D1", "#127A4E", "#9A3FB8", "#C2371C", "#0E7490", "#7A4B00", "#4338CA", "#B4235A"];
+const COLORS = ["#1E4637", "#4F5F57", "#7A4700", "#33485F", "#2C5A47", "#8A4A1E", "#3A5A4C", "#5E6C64"];   // brand darks: Paper initials pass on every one
 const hash = (s: string) => { let x = 2166136261; for (const ch of String(s)) { x ^= ch.charCodeAt(0); x = Math.imul(x, 16777619); } return x >>> 0; };
 export const colorOf = (first: string, last: string) => COLORS[hash(first + last) % COLORS.length]!;
 // Status words, from docs/UX.md's vocabulary. Do not bring the old words back.

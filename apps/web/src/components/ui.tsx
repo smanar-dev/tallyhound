@@ -13,7 +13,7 @@ export const Empty = ({ children, small }: { children: ReactNode; small?: boolea
 export function Ring({ done, total, size, label }: { done: number; total: number; size: number; label: string }) {
   const r = 52, C = 2 * Math.PI * r, p = total ? done / total : 0;
   return <div className="ring" style={{ width: size, height: size }}>
-    <svg viewBox="0 0 120 120"><circle cx="60" cy="60" r={r} fill="none" stroke="#F1EDE3" strokeWidth="12" />{p > 0 ? <circle cx="60" cy="60" r={r} fill="none" stroke="#127A4E" strokeWidth="12" strokeLinecap="round" strokeDasharray={(C * p).toFixed(1) + " " + C.toFixed(1)} /> : null}</svg>
+    <svg viewBox="0 0 120 120"><circle cx="60" cy="60" r={r} fill="none" stroke="#E9E1D2" strokeWidth="12" />{p > 0 ? <circle cx="60" cy="60" r={r} fill="none" stroke="#1F8A55" strokeWidth="12" strokeLinecap="round" strokeDasharray={(C * p).toFixed(1) + " " + C.toFixed(1)} /> : null}</svg>
     <div><span><b style={{ fontSize: size > 100 ? 28 : 18 }}>{done}</b><br /><span className="small muted">{label}</span></span></div>
   </div>;
 }
