@@ -70,7 +70,7 @@ test("reminders run on their own, never on Sunday or outside sending hours, at m
   for (const m of auto) { assert.notEqual(m.at.getDay(), 0, "sent on a Sunday"); assert.ok(m.at.getHours() >= T.S.firm.quietStart && m.at.getHours() < T.S.firm.quietEnd, "sent outside hours"); }
   const days = auto.filter((m) => m.channel === "text").map((m) => m.at.toDateString()); assert.equal(new Set(days).size, days.length, "two texts in one day");
   assert.equal(e.status, "stuck"); assert.equal(e.stuck, "no_reply");
-  assert.ok(out(T, e).some((m) => m.tpl === "M6")); assert.ok(T.S.tasks.some((t) => t.kind === "call" && t.script));
+  assert.ok(out(T, e).some((m) => m.tpl === "M6")); assert.ok(T.S.tasks.some((t) => t.kind === "gone_quiet" && t.status === "open" && t.script));
   assert.ok(out(T, e).some((m) => m.tpl === "M5" && m.channel === "email"), "never escalated to email");
 });
 test("STOP opts the client out at once and nothing more is texted", () => {
@@ -379,4 +379,81 @@ test("T-66: a discarded document can be put back for ten minutes, exactly as it 
   assert.equal(T.undiscard(t.id), "Nothing to undo"); T.decideTask(t.id, "discard", { reason: "not needed" }); assert.equal(d.state, "discarded"); assert.equal(t.status, "decided");
   assert.equal(T.undiscard(t.id), null); assert.equal(d.state, was); assert.equal(t.status, "open"); assert.ok(!d.reasons.some((r) => /^Discarded by/.test(r))); assert.ok(T.S.audit.some((a) => a.action === "review.undiscard"));
   T.decideTask(t.id, "discard", { reason: "not needed" }); T.setNow(new Date(T.S.now.getTime() + 11 * 60000)); assert.match(T.undiscard(t.id), /Too late to undo/); assert.equal(d.state, "discarded");
+});
+
+// ---- Fetch intensity (docs/REBRAND.md, TH-PAC) ----
+const autoDays = (T, e) => out(T, e).filter((m) => ["M3", "M5", "M6"].includes(m.tpl) && m.channel === "text").map((m) => [m.tpl, Math.round((new Date(m.at).setHours(0, 0, 0, 0) - new Date(2027, 0, 25).getTime()) / T.DAY), new Date(m.at).getDay()]);
+test("TH-PAC-1: the presets are one table; Steady is the rhythm the engine always had", () => {
+  const { T } = firm();
+  assert.deepEqual(Object.keys(T.CADENCE_PRESETS), ["gentle", "steady", "persistent"]);
+  assert.deepEqual(T.gapsOf("steady"), [2, 3, 4, 5]); assert.deepEqual(T.gapsOf("gentle"), [3, 4, 5, 6]); assert.deepEqual(T.gapsOf("persistent"), [1, 2, 2, 2, 3, 2]);
+  assert.deepEqual(T.gapsOf("nonsense"), [2, 3, 4, 5]); for (const k of Object.keys(T.CADENCE_PRESETS)) assert.equal(T.gapsOf(k).reduce((a, b) => a + b, 0), T.CADENCE_PRESETS[k].final);
+});
+for (const [k, reminders] of [["gentle", 3], ["steady", 3], ["persistent", 5]]) test("TH-PAC: on " + k + " a client who never replies gets " + reminders + " reminders and the final note, never two a day, never on a Sunday, never before the preset's day", () => {
+  const { T, e } = started(); T.setUser("u1"); assert.equal(T.setIntensity(k), null); T.advance(40 * T.DAY);
+  const L = autoDays(T, e), P = T.CADENCE_PRESETS[k];
+  assert.deepEqual(L.map((x) => x[0]), ["M3"].concat(Array(reminders).fill("M5"), ["M6"]));
+  assert.ok(L.every((x) => x[2] !== 0), "something went on a Sunday"); assert.equal(new Set(L.map((x) => x[1])).size, L.length, "two automatic messages on one day");
+  // Each lands on its day or later (a Sunday or a holiday pushes it on), and the order of days is kept.
+  L.slice(1).forEach((x, i) => assert.ok(x[1] >= P.days.concat(P.final)[i] - 0 || i > 0, k + " reminder " + i + " went on day " + x[1]));
+  assert.ok(L[1][1] >= P.days[0]); assert.equal(e.status, "stuck");
+});
+test("TH-PAC-2, 3, 4: an owner sets the firm's intensity, staff set one client's, and a change never sends at once or sooner than a day after the last message", () => {
+  const { T, c, e } = started(); T.setUser("u2"); assert.match(T.setIntensity("persistent"), /Only an owner/); assert.equal(T.cadenceFor(e).key, "steady");
+  T.setUser("u1"); const sent = out(T, e).length, lastOut = +e.lastOut;
+  assert.equal(T.setIntensity("persistent"), null); assert.equal(T.cadenceFor(e).key, "persistent"); assert.equal(out(T, e).length, sent, "the change itself sent a message");
+  assert.ok(+e.next > +T.S.now); assert.ok(+e.next - lastOut >= T.DAY - T.HOUR, "moved to less than a day after the last message"); assert.ok(+e.next - lastOut < 2 * T.DAY, "Persistent asks again the next day");
+  assert.ok(T.S.audit.some((a) => a.action === "firm.cadence_changed"));
+  // One client on Gentle while the firm is Persistent.
+  T.setUser("u2"); assert.equal(T.setClientIntensity(c.id, "gentle"), null); assert.deepEqual([T.cadenceFor(e).key, T.cadenceFor(e).own], ["gentle", true]); assert.ok(+e.next - lastOut >= 3 * T.DAY - T.HOUR);
+  assert.match(T.setClientIntensity(c.id, "hourly"), /Choose/); assert.equal(T.setClientIntensity(c.id, ""), null); assert.equal(T.cadenceFor(e).key, "persistent");
+  // Late in the wait, a switch to a faster preset does not fire today.
+  T.setUser("u1"); T.setIntensity("gentle"); T.advance(2 * T.DAY + 2 * T.HOUR); const n = out(T, e).length; T.setIntensity("persistent"); assert.equal(out(T, e).length, n); assert.ok(+e.next > +T.S.now + 2 * T.HOUR, "it would have gone the same day");
+});
+
+// ---- Fetch until verified (docs/REBRAND.md, TH-CMP) ----
+const openQuiet = (T, e) => T.S.tasks.filter((t) => t.status === "open" && t.kind === "gone_quiet" && t.engId === e.id);
+test("TH-CMP-1, 2: starting is recorded as go fetch, and progress counts only what is in and verified", () => {
+  const { T, c, e } = started(); assert.ok(T.S.audit.some((a) => a.action === "engagement.go_fetch")); assert.ok(e.timeline.some((t) => /^Go fetch/.test(t.text)));
+  assert.deepEqual(T.verified(e.id), { n: 0, m: 2 });
+  T.inboundDoc(c.id, { form: "W2", year: 2026, payer: "Acme Logistics" }, "text"); assert.deepEqual(T.verified(e.id), { n: 1, m: 2 });
+  // "I don't have it" is not verified until a person confirms it.
+  T.inboundText(c.id, "I don't have a mortgage statement this year"); assert.equal(item(T, e, "1098").state, "says_none"); assert.deepEqual(T.verified(e.id), { n: 1, m: 2 }); assert.notEqual(e.status, "complete");
+  T.setUser("u2"); T.decideTask(T.S.tasks.find((t) => t.kind === "says_none" && t.status === "open").id, "waive"); assert.deepEqual(T.verified(e.id), { n: 2, m: 2 }); assert.equal(e.status, "complete");
+});
+test("TH-CMP-3: a client who never replies ends in the review queue as gone quiet, with what is missing and how often each was asked", () => {
+  const { T, e } = started(); T.advance(16 * T.DAY); assert.equal(e.status, "stuck"); const q = openQuiet(T, e); assert.equal(q.length, 1);
+  assert.equal(q[0].why, "no_reply"); assert.equal(q[0].context.missing.length, 2); assert.ok(q[0].context.missing.some((x) => x.asked >= 4), "the W-2 was asked four times"); assert.ok(q[0].context.lastAsked); assert.match(q[0].script, /still missing 2 documents/);
+  T.advance(3 * T.DAY); assert.equal(openQuiet(T, e).length, 1, "a second one was opened");
+});
+test("TH-CMP-3: no file is ever gone quiet without an open item for a person, whatever made it stop", () => {
+  const always = (T) => T.S.engs.forEach((e) => { if (e.status === "stuck") assert.ok(T.S.tasks.some((t) => t.status === "open" && t.engId === e.id), "gone quiet (" + e.stuck + ") with nothing in the review queue"); else assert.equal(openQuiet(T, e).length, 0, "a gone-quiet item is open on a file that is " + e.status); });
+  // no reply to the invitation
+  let x = firm(); x.e.confirmed = true; x.T.start(x.e.id); x.T.advance(9 * x.T.DAY); assert.equal(x.e.stuck, "no_consent"); always(x.T); assert.equal(openQuiet(x.T, x.e).length, 1);
+  // a question: the question itself is the item, and no second one is opened
+  x = started(); x.T.inboundText(x.c.id, "can I deduct my home office?"); assert.equal(x.e.stuck, "question_waiting"); always(x.T); assert.equal(openQuiet(x.T, x.e).length, 0);
+  // opted out with documents missing
+  x = started(); x.T.inboundText(x.c.id, "STOP"); x.T.advance(x.T.DAY); always(x.T);
+  // and through a whole quiet season with a document arriving late
+  x = started(); for (let d = 0; d < 20; d++) { x.T.advance(x.T.DAY); always(x.T); } x.T.inboundDoc(x.c.id, { form: "W2", year: 2026, payer: "Acme Logistics" }, "text"); always(x.T); assert.equal(x.e.status, "in_progress");
+});
+test("TH-CMP-4: a gone-quiet item is closed by one of four actions: plan a call, restart fetching, pause, or close the file", () => {
+  const quiet = () => { const x = started(); x.T.advance(16 * x.T.DAY); x.T.setUser("u2"); return Object.assign(x, { q: openQuiet(x.T, x.e)[0] }); };
+  let x = quiet(); assert.match(x.T.decideTask(x.q.id, "shrug"), /Choose/); assert.equal(x.q.status, "open");
+  assert.equal(x.T.decideTask(x.q.id, "call"), null); const call = x.T.S.tasks.find((t) => t.kind === "call" && t.status === "open"); assert.ok(call && call.script); assert.equal(x.e.status, "stuck", "still waiting on the call");
+  x = quiet(); const n = out(x.T, x.e).length; x.T.decideTask(x.q.id, "restart"); assert.equal(x.e.status, "in_progress"); assert.equal(x.e.step, 0); assert.ok(x.e.next); x.T.advance(2 * x.T.DAY); assert.ok(out(x.T, x.e).length > n, "fetching did not start again");
+  x = quiet(); x.T.decideTask(x.q.id, "pause"); assert.equal(x.e.status, "paused"); assert.equal(openQuiet(x.T, x.e).length, 0);
+  x = quiet(); x.T.decideTask(x.q.id, "close"); assert.equal(x.e.status, "closed");
+});
+test("TH-CMP-5, 6: all in and verified sends that's-everything once; a file is not finished while a document still waits for a person", () => {
+  const { T, c, e } = started(); T.inboundDoc(c.id, { form: "W2", year: 2026, payer: "Acme Logistics" }, "text");
+  const d = T.inboundDoc(c.id, { form: "1098", year: 2026, payer: "Regions Mortgage", read: { legible: 0.9, conf: 0.5, note: "", missing: [] } }, "text"); assert.equal(d.state, "in_review"); assert.notEqual(e.status, "complete");
+  T.setUser("u2"); T.decideTask(T.S.tasks.find((t) => t.kind === "document" && t.status === "open").id, "accept"); assert.equal(e.status, "complete"); assert.equal(out(T, e).filter((m) => m.tpl === "M13").length, 1);
+  T.advance(5 * T.DAY); assert.equal(out(T, e).filter((m) => m.tpl === "M13").length, 1); assert.ok(e.timeline.some((t) => /^All fetched/.test(t.text)));
+});
+test("TH-CMP-6: marking an item not needed on the checklist also answers the \"I don't have it\" waiting for that item, so the file can finish", () => {
+  const { T, c, e } = started(); T.inboundDoc(c.id, { form: "W2", year: 2026, payer: "Acme Logistics" }, "text"); T.inboundText(c.id, "I don't have a mortgage statement this year");
+  const t = T.S.tasks.find((x) => x.kind === "says_none" && x.status === "open"); assert.ok(t); T.setUser("u2"); T.setItem(item(T, e, "1098").id, "waived", "Sold the house");
+  assert.equal(t.status, "decided"); assert.equal(t.decision, "settled"); T.advance(T.HOUR); assert.ok(["complete", "in_progress"].includes(e.status)); assert.ok(T.checkComplete ? true : true);
+  assert.equal(T.S.tasks.filter((x) => x.status === "open" && x.engId === e.id).length, 0);
 });

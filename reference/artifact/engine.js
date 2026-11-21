@@ -415,8 +415,26 @@
   }
 
   /* ---------- status ---------- */
-  function setStuck(e, reason) { if (["complete", "closed", "paused"].includes(e.status)) return; e.status = "stuck"; e.stuck = reason; e.next = null; timeline(e, "Stuck: " + STUCK[reason][0]); }
-  function unstick(e) { if (e.status === "stuck") { e.status = "in_progress"; e.stuck = null; e.step = 0; } }
+  /* Fetch until verified (TH-CMP, docs/REBRAND.md section 5). A file that stops moving never just sits: it always has an item in
+     the review queue. Where the reason already put one there (a question, a document to look at, an "I don't have it"), that is
+     the item. Otherwise a "gone quiet" item is opened, saying what is still missing and how many times each was asked. */
+  const BACKED = { question_waiting: "question", review_waiting: "document", client_says_none: "says_none" };
+  const askedCount = (e, i) => S.msgs.filter((m) => m.engId === e.id && m.dir === "out" && m.itemId === i.id && !["discarded", "approval", "writing"].includes(m.status)).length;
+  function callScript(e, c) { const open = openItems(e.id); return "Hi " + c.first + ", it's " + ((S.users.find((u) => u.id === c.preparer) || {}).first || "your preparer") + " at " + S.firm.name + ". We're still missing " + open.length + " document" + (open.length === 1 ? "" : "s") + " for your return: " + open.map((i) => (i.custom || FORMS[i.form].plain) + (i.payer ? " from " + i.payer : "")).join(", ") + ". Is there anything making these hard to get? You can text photos to the same number we've been using."; }
+  function quietTask(e, reason) {
+    const mine = S.tasks.filter((t) => t.status === "open" && t.engId === e.id);
+    if (mine.some((t) => t.kind === "gone_quiet") || (BACKED[reason] && mine.some((t) => t.kind === BACKED[reason]))) return null;
+    const c = client(e.clientId);
+    return addTask({ kind: "gone_quiet", reason: STUCK[reason][0], why: reason, engId: e.id, script: c ? callScript(e, c) : "",
+      context: { missing: openItems(e.id).map((i) => ({ itemId: i.id, asked: askedCount(e, i) })), lastAsked: e.lastOut || null } });
+  }
+  // A gone-quiet item is only open while the file is not moving. Whatever got it moving again settles the item.
+  function settleQuiet(e) { S.tasks.forEach((t) => { if (t.status === "open" && t.kind === "gone_quiet" && t.engId === e.id) { t.status = "decided"; t.decision = "moving_again"; t.by = "Tallyhound"; t.decidedAt = new Date(S.now); } }); }
+  function setStuck(e, reason) { if (["complete", "closed", "paused"].includes(e.status)) return; e.status = "stuck"; e.stuck = reason; e.next = null; timeline(e, "Gone quiet: " + STUCK[reason][0]); quietTask(e, reason); }
+  function unstick(e) { if (e.status === "stuck") { e.status = "in_progress"; e.stuck = null; e.step = 0; settleQuiet(e); } }
+  /** TH-CMP-2: how much of the checklist is in and verified. Received or confirmed as not needed counts; "the client says they
+      don't have it" does not, until a person confirms. */
+  function verified(eid) { const L = itemsOf(eid).filter((i) => ["expected", "requested", "partial", "in_review", "says_none", "received", "waived"].includes(i.state)); return { n: L.filter((i) => i.state === "received" || i.state === "waived").length, m: L.length }; }
   /* T-120: the closing question. When a checklist is finished and the firm has switched this on, the client is asked once whether
      anything changed this year that nobody asked about. NO, or three days of silence, gets "that's everything". YES goes to a
      person. A client who already answered the check-in has been asked, so is not asked again. */
@@ -432,8 +450,9 @@
   }
   function closingSweep() { S.engs.forEach((e) => { if (e.closing && !e.closing.answeredAt && e.status === "complete" && S.now - new Date(e.closing.askedAt) > CLOSING_WAIT_DAYS * DAY) { e.closing.answeredAt = new Date(S.now); e.closing.answer = "none"; send(e, "M13", {}); } }); }
   function checkComplete(e) {
+    if (S.tasks.some((t) => t.status === "open" && t.engId === e.id && ["document", "says_none", "change_noted"].includes(t.kind))) return false;   // TH-CMP-6
     if (openItems(e.id).length === 0 && itemsOf(e.id).length && !["complete", "closed"].includes(e.status)) {
-      e.status = "complete"; e.stuck = null; e.next = null; e.completedAt = new Date(S.now); timeline(e, "Complete: every document received or waived"); return true;
+      e.status = "complete"; e.stuck = null; e.next = null; e.completedAt = new Date(S.now); settleQuiet(e); timeline(e, "All fetched: every document in and verified"); return true;
     }
     return false;
   }
@@ -452,7 +471,7 @@
     if (e.status !== "not_started") return "Already started";
     if (trialFull(e)) return trialFull(e);
     if (!c.email && !c.mobile) return "No contact";
-    e.startedAt = new Date(S.now); timeline(e, "Outreach started", S.user.name); audit("outreach.start", c.first + " " + c.last);
+    e.startedAt = new Date(S.now); timeline(e, "Go fetch: requests started", S.user.name); audit("engagement.go_fetch", c.first + " " + c.last);
     if (channelFor(c, e) === "text") { e.status = "in_progress"; e.next = nextAllowed(S.now); }
     else if (c.mobile && c.email && S.firm.senderStatus === "approved" && c.textConsent !== "withdrawn") {
       e.status = "awaiting_consent"; c.textConsent = "invited"; e.invitedAt = new Date(S.now); send(e, "M1", {}, "email"); e.next = new Date(S.now.getTime() + 3 * DAY);
@@ -474,9 +493,43 @@
     if (out.paced) audit("outreach.paced", out.started + " started. The first " + PACE_BATCH + " go now, the rest in groups of " + PACE_BATCH + " every " + PACE_GAP_MIN + " minutes");
     return out;
   }
-  const GAPS = [2, 3, 4, 5];
+  /* Fetch intensity (TH-PAC, docs/REBRAND.md section 5). How hard the hound follows up: for the firm, or for one client.
+     days are the days after the first request on which a reminder goes; final is the day of the last note, after which the client
+     has gone quiet. Steady is what the engine always did. No preset changes sending hours, Sundays, holidays, the one-a-day
+     limit, stopping when a document arrives, or STOP. COUNSEL: confirm Persistent (up to seven automatic texts in 12 days). */
+  const CADENCE_PRESETS = {
+    gentle: { label: "Gentle", days: [3, 7, 12], final: 18, suits: "Clients who always come through" },
+    steady: { label: "Steady", days: [2, 5, 9], final: 14, suits: "Most clients" },
+    persistent: { label: "Persistent", days: [1, 3, 5, 7, 10], final: 12, suits: "Clients who leave it to April" }
+  };
+  const gapsOf = (k) => { const p = CADENCE_PRESETS[k] || CADENCE_PRESETS.steady, d = p.days.concat(p.final); return d.map((x, i) => x - (i ? d[i - 1] : 0)); };
+  // The one lookup the scheduler uses: the client's own preset, else the firm's, else Steady.
+  function cadenceFor(e) { const c = e && client(e.clientId), k = (c && c.intensity) || (S.firm.hound && S.firm.hound.intensity) || "steady", key = CADENCE_PRESETS[k] ? k : "steady"; return { key, label: CADENCE_PRESETS[key].label, gaps: gapsOf(key), own: !!(c && c.intensity) }; }
+  // After a preset changes, the reminder already planned is moved to where the new preset puts it. Never sent at once because a
+  // setting changed, and never earlier than one day after the last message.
+  function recadence(e) {
+    if (e.status !== "in_progress" || !e.next || !(e.step >= 1) || !e.lastOut || e.takeover || (e.quietUntil && e.quietUntil > S.now)) return false;
+    const G = cadenceFor(e).gaps, gap = G[Math.min(e.step - 1, G.length - 1)], hour = S.firm.newDayHour;
+    let t = new Date(e.lastOut.getTime() + gap * DAY); t.setHours(hour, 0, 0, 0);
+    const floor = new Date(e.lastOut.getTime() + DAY), tomorrow = new Date(S.now.getTime() + DAY); tomorrow.setHours(hour, 0, 0, 0);
+    if (t <= S.now) t = tomorrow; if (t < floor) t = floor;
+    e.next = nextAllowedC(t, client(e.clientId)); return true;
+  }
+  function setIntensity(k) {
+    if (!may("owner")) return "Only an owner can change this"; if (!CADENCE_PRESETS[k]) return "Choose Gentle, Steady or Persistent";
+    const H = S.firm.hound; if ((H.intensity || "steady") === k) return null; H.intensity = k;
+    let n = 0; S.engs.forEach((e) => { const c = client(e.clientId); if (c && !c.intensity && recadence(e)) n++; });
+    audit("firm.cadence_changed", "Fetch intensity is now " + CADENCE_PRESETS[k].label + ". " + n + " planned reminder" + (n === 1 ? "" : "s") + " moved; none sent early"); return null;
+  }
+  function setClientIntensity(cid, k) {
+    const c = client(cid); if (!c) return "Unknown client"; if (!may()) return "Not allowed"; if (k && !CADENCE_PRESETS[k]) return "Choose Gentle, Steady or Persistent";
+    if ((c.intensity || null) === (k || null)) return null; if (k) c.intensity = k; else delete c.intensity;
+    const e = engOf(cid); if (e) { recadence(e); timeline(e, "Fetch intensity: " + (k ? CADENCE_PRESETS[k].label : "the firm's (" + cadenceFor(e).label + ")"), S.user.name); }
+    audit("client.cadence_changed", c.first + " " + c.last + ": " + (k ? CADENCE_PRESETS[k].label : "firm default")); return null;
+  }
   function step(e) {
     const c = client(e.clientId);
+    const GAPS = cadenceFor(e).gaps;
     if (halted() || !["in_progress", "awaiting_consent"].includes(e.status)) return;
     if (e.takeover) return;
     if (e.quietUntil && e.quietUntil > S.now) { e.next = nextAllowed(e.quietUntil); return; }
@@ -525,13 +578,14 @@
     S.msgs.push(m); e.voicemailAt = new Date(S.now); meter("voice"); hlog(e, "message", "Reminder call with a recorded message", m.why, "Rules"); audit("message.sent", "M33 to " + c.first + " " + c.last[0] + ". by phone", "Tallyhound"); return m;
   }
   function finalNote(e, c) {
-    send(e, "M6", { why: GAPS.length + " reminders unanswered" }); setStuck(e, "no_reply"); voicemail(e, c);
-    if (S.firm.hound.callTask) { const open = openItems(e.id); addTask({ kind: "call", reason: "Call the client", engId: e.id, script: "Hi " + c.first + ", it's " + ((S.users.find((u) => u.id === c.preparer) || {}).first || "your preparer") + " at " + S.firm.name + ". We're still missing " + open.length + " document" + (open.length === 1 ? "" : "s") + " for your return: " + open.map((i) => FORMS[i.form].plain + (i.payer ? " from " + i.payer : "")).join(", ") + ". Is there anything making these hard to get? You can text photos to the same number we've been using." }); alertx(e, "medium", "call", c.first + " " + c.last + " has not replied to " + GAPS.length + " reminders. A call task with a script is ready.", "call" + e.id); }
+    const GAPS = cadenceFor(e).gaps; send(e, "M6", { why: (GAPS.length - 1) + " reminders unanswered (" + cadenceFor(e).label + ")" }); setStuck(e, "no_reply"); voicemail(e, c);
+    alertx(e, "medium", "call", c.first + " " + c.last + " has not replied to " + (GAPS.length - 1) + " reminders. It is in the review queue with what is still missing" + (S.firm.hound.callTask ? " and a call script." : "."), "call" + e.id);
   }
   function tick() {
     // Deleting on schedule is a promise to the firm's clients. It runs whether or not the firm is paying, paused or stopped.
     if (!access().ok && !S.firm.stopped) { S.engs.forEach((e) => { if (e.status === "closed" && e.purgeAfter && e.purgeAfter <= S.now && !e.purged) purge(e.id, "Tallyhound"); }); retentionSweep(); return; }
     closingSweep();
+    S.engs.forEach((e) => { if (e.status !== "stuck") settleQuiet(e); });
     S.engs.forEach((e) => { if (e.next && e.next <= S.now) step(e); });
     S.msgs.forEach((m) => { if (m.status === "approved" && m.sendAt && m.sendAt <= S.now) { const e = eng(m.engId), c = e && client(e.clientId); if (!e || e.takeover || ["closed", "opted_out", "paused"].includes(e.status) || (m.channel === "text" && c.textConsent !== "given")) { m.status = "discarded"; m.note = "No longer needed when sending hours began"; } else if (!allowedC(S.now, c)) m.sendAt = nextAllowedC(S.now, c); else { m.status = "delivered"; m.at = new Date(S.now); e.lastOut = new Date(S.now); } }
       if (m.status === "approval" && S.now - m.at > S.firm.hound.slaHours * HOUR) { const e = eng(m.engId); if (e) alertx(e, "medium", "approval_wait", "A message to " + client(e.clientId).first + " " + client(e.clientId).last + " has waited over " + S.firm.hound.slaHours + " hours for approval. Nothing is sent until someone approves it.", "apw" + m.id); } });
@@ -566,7 +620,7 @@
     if (checkComplete(e)) { finished(e); return; }
     if (e.status === "not_started") { send(e, "M27", {}); return; }
     const it = nextItem(e);
-    if (it) { if (it.state === "partial") send(e, "M22R", Object.assign({ item: it }, missText(it.missing || [], c.lang, it.form))); else { it.state = "requested"; send(e, "M4", { item: it }); } e.step = 1; e.next = nextAllowed(new Date(S.now.getTime() + GAPS[0] * DAY)); }
+    if (it) { if (it.state === "partial") send(e, "M22R", Object.assign({ item: it }, missText(it.missing || [], c.lang, it.form))); else { it.state = "requested"; send(e, "M4", { item: it }); } e.step = 1; e.next = nextAllowed(new Date(S.now.getTime() + cadenceFor(e).gaps[0] * DAY)); }
     else { const wr = waitingRelease(e); e.next = wr ? nextAllowed(wr) : null; }
   }
   /* A document staff add themselves: scanned paper, something emailed to them directly. Checked the same way, but the client is not messaged about it. */
@@ -1014,6 +1068,13 @@
       else { it.state = "requested"; if (e.stuck === "client_says_none") unstick(e); sendSoon(e, "M5", { item: it }); if (!(e.queue && e.queue.length)) e.next = nextAllowed(new Date(S.now.getTime() + 2 * DAY)); }
     }
     if (t.kind === "call") { timeline(e, "Called by " + S.user.name + (p && p.note ? ": " + p.note : ""), S.user.name); if (p && p.note) remember(e, p.note, S.user.name); if (e.stuck === "no_reply") { unstick(e); e.step = 0; e.next = nextAllowed(new Date(S.now.getTime() + DAY)); } hlog(e, "decide", "Call logged; the Hound resumes tomorrow", p && p.note ? p.note : "", "Rules"); }
+    if (t.kind === "gone_quiet" && e) {
+      if (decision === "call") { addTask({ kind: "call", reason: "Call the client", engId: e.id, script: t.script || callScript(e, c) }); timeline(e, "Call planned", S.user.name); }
+      else if (decision === "restart") { e.status = "in_progress"; e.stuck = null; e.step = 0; e.next = nextAllowedC(S.now, c); timeline(e, "Fetching restarted", S.user.name); }
+      else if (decision === "pause") { e.status = "in_progress"; pause(e.id); }
+      else if (decision === "close") closeEng(e.id);
+      else { t.status = "open"; t.decision = null; t.by = null; t.decidedAt = null; return "Choose: call, restart, pause or close"; }
+    }
     if (t.kind === "question") {
       if (decision === "reply" && p && p.body) manual(e.id, p.body, true);
       if (e.stuck === "question_waiting") { unstick(e); e.next = nextAllowed(new Date(S.now.getTime() + HOUR)); }
@@ -1036,6 +1097,8 @@
   }
   function setItem(iid, state, note) {
     const it = S.items.find((x) => x.id === iid), e = eng(it.engId); it.state = state; if (note) it.note = note;
+    // A person has settled this item directly, so an "I don't have it" waiting in the review queue for the same item is answered too.
+    if (state !== "says_none") S.tasks.forEach((t) => { if (t.status === "open" && t.kind === "says_none" && t.itemId === it.id) { t.status = "decided"; t.decision = "settled"; t.by = S.user.name; t.decidedAt = new Date(S.now); if (e.stuck === "client_says_none") unstick(e); } });
     timeline(e, (state === "waived" ? "Waived " : state === "removed" ? "Removed " : state === "received" ? "Marked received: " : "Restored ") + (it.custom || FORMS[it.form].plain) + (note ? ": " + note : ""), S.user.name); audit("item." + state, client(e.clientId).last);
   }
   function addItem(eid, form, payer, custom) {
@@ -1043,7 +1106,7 @@
     timeline(e, "Added item: " + (custom || FORMS[form].plain), S.user.name);
     if (e.status === "complete") { e.status = "in_progress"; e.next = nextAllowed(S.now); }
   }
-  function pause(eid) { const e = eng(eid); if (["complete", "closed", "paused", "not_started"].includes(e.status)) return; e.prior = e.status; e.priorStuck = e.stuck; e.status = "paused"; e.next = null; timeline(e, "Paused", S.user.name); audit("outreach.pause", client(e.clientId).last); }
+  function pause(eid) { const e = eng(eid); if (["complete", "closed", "paused", "not_started"].includes(e.status)) return; e.prior = e.status; e.priorStuck = e.stuck; e.status = "paused"; e.next = null; settleQuiet(e); timeline(e, "Paused", S.user.name); audit("outreach.pause", client(e.clientId).last); }
   function resume(eid) { const e = eng(eid); if (e.status !== "paused") return; e.status = e.prior === "stuck" ? "in_progress" : e.prior || "in_progress"; e.stuck = null; e.step = 0; e.next = nextAllowed(new Date(S.now.getTime() + MIN)); timeline(e, "Resumed", S.user.name); }
   function fileName(c, e, d) { const clean = (s) => String(s || "").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, ""); return [clean(c.last), clean(c.first), e.year, d.form, clean(d.payer)].filter(Boolean).join("_") + ".pdf"; }
   function deliver(eid, by) {
@@ -1103,7 +1166,7 @@
     const r = retain(), held = S.docs.filter(hasContent), del = S.docs.filter((d) => !hasContent(d)), due = held.filter((d) => d.deliveredAt).map((d) => d.deliveredAt.getTime() + r.afterDelivery * DAY).sort((a, b) => a - b)[0];
     return { clients: S.clients.length, docsHeld: held.length, docsDeleted: del.length, undelivered: held.filter((d) => d.state === "accepted" && !d.deliveredAt).length, oldestDays: held.length ? Math.floor(Math.max(...held.map((d) => (S.now - d.at) / DAY))) : 0, nextDeletion: due ? new Date(due) : null, messages: S.msgs.length, unknown: S.tray.length, retain: Object.assign({}, r), afterClose: S.firm.retention };
   }
-  function closeEng(eid) { const e = eng(eid); e.status = "closed"; e.closedAt = new Date(S.now); e.purgeAfter = new Date(S.now.getTime() + S.firm.retention * DAY); e.next = null; timeline(e, "Closed. Documents purge after " + S.firm.retention + " days.", S.user.name); }
+  function closeEng(eid) { const e = eng(eid); settleQuiet(e); e.status = "closed"; e.closedAt = new Date(S.now); e.purgeAfter = new Date(S.now.getTime() + S.firm.retention * DAY); e.next = null; timeline(e, "Closed. Documents purge after " + S.firm.retention + " days.", S.user.name); }
   function purge(eid, by) { const e = eng(eid), who = by || S.user.name; S.docs.filter((d) => d.engId === eid).forEach((d) => { forget(d); d.state = "purged"; d.image = null; d.pages = null; d.read = null; d.payer = ""; d.recipientName = ""; d.elements = []; d.versions = []; d.reasons = ["Deleted under the retention rule."]; d.findings = []; }); S.msgs.filter((m) => m.engId === eid).forEach((m) => { m.body = "(deleted)"; m.aiNote = null; m.understood = null; }); e.memory = []; e.purged = new Date(S.now); timeline(e, "Documents and message text deleted", who); audit("purge", client(e.clientId).last, who); }
   const STATE_TZ = { ET: "CT DE FL GA IN KY MA MD ME MI NC NH NJ NY OH PA RI SC VA VT WV DC", CT: "AL AR IA IL KS LA MN MO MS ND NE OK SD TN TX WI", MT: "CO ID MT NM UT WY", AZ: "AZ", PT: "CA NV OR WA", AKT: "AK", HT: "HI" };
   const ZONES = { ET: 1, CT: 0, MT: -1, AZ: -1, PT: -2, AKT: -3, HT: -4 }, ZNAME = { ET: "Eastern", CT: "Central", MT: "Mountain", AZ: "Arizona", PT: "Pacific", AKT: "Alaska", HT: "Hawaii" };
@@ -1235,7 +1298,7 @@
     const dana = S.clients[0]; Object.assign(dana.profile, { childcare: true, charity: true });
     const ben = S.clients.find((c) => c.last === "Carter"); if (ben) Object.assign(ben.profile, { newJob: true, hsa: true });
     S.firm.docCheck = true; S.firm.elemOff = {};
-    S.firm.hound = { mode: "autopilot", aiLive: false, aiWrite: true, tone: "warm", persona: "Tallyhound", emailAfter: 2, slaHours: 4, pauseDays: 3, callTask: true };
+    S.firm.hound = { mode: "autopilot", aiLive: false, aiWrite: true, intensity: "steady", tone: "warm", persona: "Tallyhound", emailAfter: 2, slaHours: 4, pauseDays: 3, callTask: true };
     S.alerts = []; S.hlog = [];
     T_eng(dana).memory = [{ at: new Date(now - 4 * DAY), text: "Sam handles the bank and brokerage paperwork", source: "Claude" }]; T_eng(dana).target = new Date(2027, 1, 12, 17); T_eng(dana).hours = [19, 20, 19, 18];
     const wei = S.clients.find((c) => c.last === "Chen"); if (wei) { T_eng(wei).memory = [{ at: new Date(now - 2 * DAY), text: "Prefers texts in the evening", source: "Claude" }]; T_eng(wei).hours = [19, 19, 20]; S.tasks.filter((t) => t.kind === "question").forEach((t) => { t.category = "tax_question"; t.reason = "Tax question"; t.summary = "Wei asked whether an HSA contribution is deductible."; t.suggest = "Hi Wei, good question. HSA contributions are something I'll go over with you when we review your return. For now, if you have your HSA statement (Form 5498-SA), please send a photo."; t.suggestBy = "Claude"; }); }
@@ -1270,7 +1333,7 @@
     ["tray", "audit", "alerts", "hlog", "archive"].forEach((k) => { if (!Array.isArray(N[k])) N[k] = []; });
     if (!N.usage || typeof N.usage !== "object") N.usage = {};
     if (N.firm) N.firm.retain = Object.assign({}, RETAIN_DEFAULT, N.firm.retain);
-    const HD = { mode: "copilot", aiLive: false, aiWrite: true, tone: "warm", persona: "", emailAfter: 2, slaHours: 4, pauseDays: 3, callTask: true }; N.firm.hound = N.firm.hound || {}; Object.keys(HD).forEach((k) => { if (N.firm.hound[k] === undefined) N.firm.hound[k] = HD[k]; });
+    const HD = { mode: "copilot", aiLive: false, aiWrite: true, intensity: "steady", tone: "warm", persona: "", emailAfter: 2, slaHours: 4, pauseDays: 3, callTask: true }; N.firm.hound = N.firm.hound || {}; Object.keys(HD).forEach((k) => { if (N.firm.hound[k] === undefined) N.firm.hound[k] = HD[k]; });
     N.firm.templates = N.firm.templates || {}; if (!N.firm.templates.en) N.firm.templates.en = {}; if (!N.firm.templates.es) N.firm.templates.es = {}; if (!(N.now instanceof Date)) N.now = new Date();
     S = N; seq = +o.seq || 0; S.hold = null; S.user = S.users.find((u) => u.id === o.userId) || S.users[0];
     S.msgs.forEach((m) => { if (m.status === "writing") m.status = m.after || "delivered"; });
@@ -1515,7 +1578,7 @@
     if (e.status === "complete" && open) { e.status = "in_progress"; e.completedAt = null; e.step = 0; if (!e.next) e.next = nextAllowed(S.now); timeline(e, "Reopened: a document is outstanding again"); }
     else if (["in_progress", "stuck"].includes(e.status) && !open && any) { if (checkComplete(e)) finished(e); }
   }
-  window.TH = { undiscard, setClosedDays, startMany, deletionEvidence, setCallOk, plans, quoteFor, areaZone, zoneFor, addContact, removeContact, planEnded, setLine, isLandline, RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
+  window.TH = { verified, CADENCE_PRESETS, gapsOf, cadenceFor, setIntensity, setClientIntensity, undiscard, setClosedDays, startMany, deletionEvidence, setCallOk, plans, quoteFor, areaZone, zoneFor, addContact, removeContact, planEnded, setLine, isLandline, RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
     dump, load, blank, setNow, setUser, linkFor, linkLive, LINK_DAYS, consentFromPage, declineTexts, stopEmail, unsubscribeLink, CONSENT_WORDING,
     get S() { return S; }, FORMS, TPL, TPL_USE, QUESTIONS, STUCK, DAY, HOUR, MIN,
     client, eng, engOf, itemsOf, openItems, progress, fill, outputCheck, channelFor, allowed, nextAllowed, live, nextItem,

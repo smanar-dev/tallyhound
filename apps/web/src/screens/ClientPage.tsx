@@ -218,9 +218,9 @@ function Conversation({ T, e, c, openDoc }: Ctx & { openDoc: (id: string) => voi
 }
 
 function Activity({ T, e }: Ctx) {
-  const tl: Row[] = e.timeline || [], ic = (t: string): IconName => /Accepted|Complete/.test(t) ? "check" : /Stuck|re-ask|Re-ask|Unreadable|Wrong/.test(t) ? "alert" : /Deliver/.test(t) ? "deliver" : "clock";
+  const tl: Row[] = e.timeline || [], ic = (t: string): IconName => /Accepted|Complete|All fetched/.test(t) ? "check" : /Stuck|Gone quiet|re-ask|Re-ask|Unreadable|Wrong/.test(t) ? "alert" : /Deliver/.test(t) ? "deliver" : "clock";
   // A few of the engine's own log lines use older words. They are shown in the product's vocabulary.
-  const words = (t: string) => t.replace(/^Stuck: /, "Needs you: ").replace(/^Document sent to review: /, "Document sent to you to check: ").replace(/\bOutreach started\b/, "Collecting started").replace(/\bDelivered\b/g, "Files handed off").replace(/\bdelivered\b/g, "handed off");
+  const words = (t: string) => t.replace(/^(Stuck|Gone quiet): /, "Gone quiet: ").replace(/^Document sent to review: /, "Document sent to you to check: ").replace(/\bOutreach started\b/, "Collecting started").replace(/\bDelivered\b/g, "Files handed off").replace(/\bdelivered\b/g, "handed off");
   return <div className="card"><div className="list">{tl.length ? tl.map((t, i) => <div className="li" key={i}><span className="ico"><Icon name={ic(t.text)} small /></span><div className="grow">{words(t.text)}<div className="small faint">{when(T, t.at)} · {t.actor}</div></div></div>) : <Empty small>Nothing has happened yet. Every request, reply and decision for this client is listed here.</Empty>}</div></div>;
 }
 
@@ -288,8 +288,8 @@ export function ClientPage() {
   const { T, can, act, toast, reload } = useFirm(), { id } = useParams(), [params, setParams] = useSearchParams(), e = id ? T.eng(id) : null, c = e ? T.client(e.clientId) : null;
   const [handOff, setHandOff] = useState<{ folder: string; files: string[]; missing: string[] } | null>(null), [purge, setPurge] = useState(false), [typed, setTyped] = useState(""), [asClient, setAsClient] = useState(false);
   if (!e || !c) return <Page title="Client"><div className="card"><Empty><b>That client is not on your list.</b><br />They may have been removed, or the address is wrong.<br /><Link className="btn" style={{ marginTop: 12 }} to="/clients">Back to Clients</Link></Empty></div></Page>;
-  const s = T.S, p = T.progress(e.id), u = s.users.find((x: Row) => x.id === c.preparer), docs = s.docs.filter((d: Row) => d.engId === e.id).length, msgs = s.msgs.filter((m: Row) => m.engId === e.id && m.status !== "discarded").length, rc = T.recommend(e.id).add.length;
-  const TABS: [string, string, (string | number | null)?][] = [["checklist", "Checklist", p.done + "/" + p.total], ["suggested", "Suggested", rc ? rc + " to add" : null], ["documents", "Documents", docs], ["conversation", "Conversation", msgs], ["activity", "Activity"], ["details", "Details"]];
+  const s = T.S, u = s.users.find((x: Row) => x.id === c.preparer), docs = s.docs.filter((d: Row) => d.engId === e.id).length, msgs = s.msgs.filter((m: Row) => m.engId === e.id && m.status !== "discarded").length, rc = T.recommend(e.id).add.length;
+  const TABS: [string, string, (string | number | null)?][] = [["checklist", "Checklist", T.verified(e.id).n + " of " + T.verified(e.id).m], ["suggested", "Suggested", rc ? rc + " to add" : null], ["documents", "Documents", docs], ["conversation", "Conversation", msgs], ["activity", "Activity"], ["details", "Details"]];
   const tab = TABS.some((t) => t[0] === params.get("tab")) ? params.get("tab")! : "checklist", ctx = { T, e, c };
   // The viewer opens over the page and its address says which document, so a link to it can be shared with a colleague at the firm.
   const docIds: string[] = s.docs.filter((d: Row) => d.engId === e.id).sort((a: Row, b: Row) => a.at - b.at).map((d: Row) => d.id), viewing = params.get("doc");
@@ -322,7 +322,7 @@ export function ClientPage() {
       <div className="col" style={{ gap: 16 }}>
         <HoundCard {...ctx} />
         <NextCard {...ctx} onHandOff={doHandOff} />
-        <div className="card pad row" style={{ gap: 16, flexWrap: "nowrap" }}><Ring done={p.done} total={p.total} size={84} label={"of " + p.total} /><div className="col small" style={{ gap: 3 }}>{["received", "requested", "in_review", "says_none", "expected", "waived"].map((st) => { const n = T.itemsOf(e.id).filter((i: Row) => i.state === st).length; return n ? <span key={st} className="row" style={{ gap: 6 }}><span className="dots"><i className={st} /></span>{n} {(ISTATE[st] || st).toLowerCase()}</span> : null; })}</div></div>
+        <div className="card pad row" style={{ gap: 16, flexWrap: "nowrap" }}><Ring done={T.verified(e.id).n} total={T.verified(e.id).m} size={84} label={"of " + T.verified(e.id).m + " verified"} /><div className="col small" style={{ gap: 3 }}>{["received", "requested", "in_review", "says_none", "expected", "waived"].map((st) => { const n = T.itemsOf(e.id).filter((i: Row) => i.state === st).length; return n ? <span key={st} className="row" style={{ gap: 6 }}><span className="dots"><i className={st} /></span>{n} {(ISTATE[st] || st).toLowerCase()}</span> : null; })}</div></div>
         <div className="card pad small col" style={{ gap: 6 }}><h4>Where finished files go</h4><span>{s.firm.delivery.provider === "Download" ? "A zip you download" : s.firm.delivery.provider + " › " + s.firm.delivery.folder + " › " + e.year + " › " + (c.entity || c.last + ", " + c.first)}</span><span className="muted">{e.delivered ? "Last handed off " + when(T, e.delivered) : "Not handed off yet"}</span></div>
       </div>
     </div>

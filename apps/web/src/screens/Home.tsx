@@ -16,6 +16,7 @@ function NeedRow({ x }: { x: Need }) {
   let acts: ReactNode = null;
   if (can()) {
     if (x.t) acts = x.t.kind === "document" ? <Link className="btn sm pri" to={"/needs-you?task=" + x.t.id}>Check it</Link>
+      : x.t.kind === "gone_quiet" ? <Link className="btn sm" to={"/needs-you?task=" + x.t.id}>Decide what next</Link>
       : x.t.kind === "question" || x.t.kind === "call" ? <Link className="btn sm pri" to={"/clients/" + x.e.id + "?tab=conversation"}>{x.t.kind === "call" ? "Call script" : "Reply"}</Link>
       : x.t.kind === "says_none" ? <><button className="btn sm" onClick={() => decide("waive")}>Not needed this year</button><button className="btn sm" onClick={() => decide("reask")}>Ask again</button></>
       : <button className="btn sm" onClick={() => decide("handled")}>Dismiss</button>;
@@ -99,7 +100,7 @@ export function Home() {
         </div>
         <div className="col" style={{ gap: 20 }}>
           <div className="card pad"><h2>Season progress</h2>
-            <div className="row" style={{ margin: "14px 0", gap: 18, flexWrap: "nowrap" }}><Ring done={done} total={s.engs.length} size={118} label="complete" />
+            <div className="row" style={{ margin: "14px 0", gap: 18, flexWrap: "nowrap" }}><Ring done={done} total={s.engs.length} size={118} label="all fetched" />
               <div className="col" style={{ gap: 4, flex: 1 }}>{SEGS.filter((g) => countBy(T, g[0])).map((g) => <button key={g[0]} className="btn ghost sm" style={{ justifyContent: "flex-start", padding: "2px 4px" }} onClick={() => nav("/clients?show=" + g[0])}><i className="swatch" style={{ background: g[1] }} />{(STAT[g[0]] || [g[0]])[0]}<span className="sp" /><b>{countBy(T, g[0])}</b></button>)}</div></div>
             <div className="bar" style={{ height: 10 }}>{SEGS.map((g) => <i key={g[0]} style={{ width: (100 * countBy(T, g[0])) / Math.max(1, s.engs.length) + "%", background: g[1], marginRight: 2 }} />)}</div></div>
           <div className="card"><div className="hd"><h2>Coming up</h2></div>

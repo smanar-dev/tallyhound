@@ -71,3 +71,5 @@ tr.sel td{background:var(--tint)}
 .toastbtn{margin-left:14px;background:none;border:0;color:inherit;font:inherit;font-weight:700;text-decoration:underline;cursor:pointer;min-height:32px}
 .helpn{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--ink);color:#fff;font-size:14px;margin-right:10px}
 .helplist{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
+
+.plainlist{margin:4px 0 0;padding-left:18px}.plainlist li{margin:2px 0}

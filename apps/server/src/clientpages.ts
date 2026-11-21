@@ -9,7 +9,7 @@ const frame = (title: string, firm: FirmView, body: ReactNode, script = false): 
   h("html", { lang: "en" },
     h("head", null, h("meta", { charSet: "utf-8" }), h("meta", { name: "viewport", content: "width=device-width, initial-scale=1" }), h("meta", { name: "robots", content: "noindex, nofollow" }), h("title", null, title + " · " + firm.name), h("link", { rel: "stylesheet", href: "/client.css" }), script ? h("script", { src: "/client.js", defer: true }) : null),
     h("body", null, h("main", null, h("p", { className: "firm" }, firm.name), body,
-      h("footer", null, h("a", { href: firm.page + "#privacy" }, "Privacy"), " · ", h("a", { href: firm.page + "#terms" }, "Terms"), " · ", h("a", { href: firm.page + "#check" }, "Is this really from " + firm.name + "?"))))));
+      h("footer", null, h("a", { href: firm.page + "#privacy" }, "Privacy"), " · ", h("a", { href: firm.page + "#terms" }, "Terms"), " · ", h("a", { href: firm.page + "#check" }, "Is this really from " + firm.name + "?"), h("p", { className: "sent" }, "Sent with Tallyhound"))))));
 const call = (firm: FirmView) => (firm.phone ? ", or call " + firm.phone : "");
 
 /** Any link that is wrong, old, or already finished with. Says nothing about whose it was. */

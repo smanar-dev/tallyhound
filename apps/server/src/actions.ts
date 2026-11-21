@@ -43,6 +43,9 @@ export const ACTIONS: Record<string, Rule> = {
   startMany: { role: "staff", n: 1, run: (T, [ids]) => { const r = T.startMany((Array.isArray(ids) ? ids : []).slice(0, 5000).map(String)); T.tick(); return { started: r.started, capped: r.capped, refused: r.refused, paced: r.paced, lastAt: r.lastAt }; } },
   undiscard: staff(1),   // T-66: put back a document discarded in the last ten minutes
   // T-63: days the firm itself is closed. The engine checks the dates.
+  // Fetch intensity (TH-PAC): the firm's, by an owner; one client's, by staff. The engine checks the role and the value.
+  setIntensity: { role: "owner", n: 1, run: (T, [k]) => T.setIntensity(String(k || "")) },
+  setClientIntensity: { role: "staff", n: 2, run: (T, [cid, k]) => T.setClientIntensity(String(cid || ""), k ? String(k) : "") },
   setClosedDays: { role: "owner", n: 1, run: (T, [list]) => T.setClosedDays((Array.isArray(list) ? list : []).slice(0, 100).map(String)) },
   // chase
   start: staff(1), pause: staff(1), resume: staff(1), takeover: staff(2), handback: staff(2), approveMsg: staff(2), rejectMsg: staff(1), manual: staff(2), markHeadsUp: staff(1),

@@ -46,7 +46,7 @@ scene("the checklist can be changed the ways a preparer needs, and every change 
   // Confirm, then start from the card beside the checklist.
   await page.getByRole("button", { name: "Confirm checklist" }).first().click(); await page.getByRole("button", { name: "Go fetch" }).waitFor(); await page.getByRole("button", { name: "Go fetch" }).click(); await page.getByText(/^Off it goes/).waitFor();
   T = await W.state(firmId); assert.equal(engOf(T, "Ana").confirmed, true); assert.notEqual(engOf(T, "Ana").status, "not_started");
-  await page.getByRole("tab", { name: "Activity" }).click(); await page.locator(".split .li", { hasText: "Checklist confirmed" }).waitFor(); await page.locator(".split .li", { hasText: "Collecting started" }).waitFor();
+  await page.getByRole("tab", { name: "Activity" }).click(); await page.locator(".split .li", { hasText: "Checklist confirmed" }).waitFor(); await page.locator(".split .li", { hasText: "Go fetch: requests started" }).waitFor();
   await page.goto(W.url + "/clients/nobody"); await page.getByText("That client is not on your list.").waitFor();
 });
 
