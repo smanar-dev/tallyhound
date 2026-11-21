@@ -125,6 +125,24 @@ function ClosedDays() {
     <div className="row"><label className="f" style={{ margin: 0 }}>Add a closed day<input type="date" value={d} onChange={(ev) => setD(ev.target.value)} /></label><button className="btn" disabled={!d} onClick={() => { save([...days, d], "Added."); setD(""); }}>Add</button></div></div>;
 }
 // When messages may go.
+// Barks (TH-BRK): who hears when something needs a person, and the hours they are barked at. The engine routes; this only edits its rules.
+const BARK_ROWS: [string, string, string][] = [["document", "A document to check", "The sniff test was not sure"], ["question", "A client question", "Or a reply Tallyhound could not place"], ["says_none", "A client has none", "Says they don't have a document"], ["gone_quiet", "Gone quiet", "No reply after the last reminder"], ["change_noted", "A change noted", "A reply that may change the checklist"], ["call", "A call to make", "Planned from the review queue"], ["output_check", "A blocked message", "Failed the safety check. Owners always hear"]];
+function BarksTab() {
+  const { T, act, toast } = useFirm(), s = T.S, rules: Record<string, { owners?: boolean; users?: string[] }> = s.firm.barkRules || {}, h = T.staffHours(), staff: Row[] = s.users.filter((u: Row) => u.role !== "read_only" && !u.support);
+  const save = (next: typeof rules) => void act("setBarkRules", next).then((r) => toast(r ? String(r) : "Saved. The hound barks at the right people from now on."), () => {});
+  const set = (k: string, p: { owners?: boolean; users?: string[] }) => save({ ...rules, [k]: { owners: !!(rules[k] && rules[k]!.owners), users: (rules[k] && rules[k]!.users) || [], ...p } });
+  const hours = (a: number, b: number) => void act("setStaffHours", a, b).then((r) => toast(r ? String(r) : "Saved."), () => {});
+  return <div className="col" style={{ gap: 16 }}>
+    <div className="card"><div className="hd"><h2>Who hears the barks</h2></div><div className="bd"><p className="small muted">When something needs a person, Tallyhound barks: an alert to the right member of your team, pointing to the review queue. The client's preparer always hears about their own clients. Add owners or named people for any kind. Each person can turn kinds off for themselves under My alerts.</p></div>
+      <div className="tbl"><table style={{ minWidth: 0 }}><thead><tr><th>When</th><th>Preparer</th><th>Owners too</th><th>Also</th></tr></thead><tbody>{BARK_ROWS.map(([k, name, note]) => { const r = rules[k] || {}, sys = k === "output_check"; return <tr key={k}>
+        <td><b>{name}</b><div className="small muted">{note}</div></td><td>{sys ? "Owners" : "Always"}</td>
+        <td>{sys ? "Always" : <label className="toggle"><input type="checkbox" aria-label={"Owners also hear: " + name} checked={!!r.owners} onChange={(ev) => set(k, { owners: ev.target.checked })} /><span /></label>}</td>
+        <td><select aria-label={"Also bark for: " + name} value="" onChange={(ev) => { if (ev.target.value) set(k, { users: [...new Set([...(r.users || []), ev.target.value])] }); }}><option value="">Add a person</option>{staff.filter((u) => !(r.users || []).includes(u.id)).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select>
+          <div className="chips">{(r.users || []).map((id) => { const u = s.users.find((x: Row) => x.id === id); return u ? <span className="chip plain" key={id}>{u.name}<button className="chipx" aria-label={"Stop barking " + u.name + " for " + name} onClick={() => set(k, { users: (r.users || []).filter((x) => x !== id) })}>×</button></span> : null; })}</div></td></tr>; })}</tbody></table></div></div>
+    <div className="card pad col"><h2>Office hours for barks</h2><p className="small muted">Nobody is barked at outside these hours or at weekends. Anything that opens overnight is counted in the 7 am note instead. An item nobody has dealt with after one working day barks once more, to the owners.</p>
+      <div className="row"><label className="f">From<select value={h.start} onChange={(ev) => hours(+ev.target.value, h.end)}>{Array.from({ length: 24 }, (_, i) => <option key={i} value={i}>{i}:00</option>)}</select></label><label className="f">Until<select value={h.end} onChange={(ev) => hours(h.start, +ev.target.value)}>{Array.from({ length: 24 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}:00</option>)}</select></label></div></div>
+  </div>;
+}
 function HoursTab() {
   const { T, act, toast } = useFirm(), f = T.S.firm, [v, setV] = useState({ quietStart: f.quietStart, quietEnd: f.quietEnd, newDayHour: f.newDayHour }), days = [0, 2, 5, 9, 14];
   const sel = (k: keyof typeof v, label: string, opts: number[]) => <label className="f">{label}<select value={v[k]} onChange={(ev) => setV({ ...v, [k]: +ev.target.value })}>{opts.map((x) => <option key={x} value={x}>{(x > 12 ? x - 12 : x) + ":00 " + (x >= 12 ? "pm" : "am")}</option>)}</select></label>;
@@ -283,12 +301,12 @@ function SecurityTab() {
   </div>;
 }
 
-const ALL_TABS: [string, string][] = [["firm", "Your firm"], ["people", "People"], ["checklists", "Checklists"], ["wording", "Message wording"], ["hours", "Sending hours"], ["texting", "Text number"], ["domain", "Email address"], ["files", "Finished files"], ["plan", "Your plan"], ["security", "Security and data"]];
+const ALL_TABS: [string, string][] = [["firm", "Your firm"], ["people", "People"], ["checklists", "Checklists"], ["wording", "Message wording"], ["hours", "Sending hours"], ["barks", "Barks"], ["texting", "Text number"], ["domain", "Email address"], ["files", "Finished files"], ["plan", "Your plan"], ["security", "Security and data"]];
 export function Settings() {
   const { can } = useFirm(), feat = useFeatures(), [params, setParams] = useSearchParams(), TABS = ALL_TABS.filter((t) => t[0] !== "domain" || feat.domain || params.get("tab") === "domain"), tab = TABS.some((t) => t[0] === params.get("tab")) ? params.get("tab")! : "firm";
   if (!can("owner")) return <Page title="Settings"><div className="card pad"><p>Settings are for owners. Ask an owner at your firm if something here needs changing.</p></div></Page>;
   return <Page title="Settings">
     <div className="tabs" role="tablist">{TABS.map((t) => <button key={t[0]} role="tab" aria-selected={tab === t[0]} className={tab === t[0] ? "on" : ""} onClick={() => setParams(t[0] === "firm" ? {} : { tab: t[0] })}>{t[1]}</button>)}</div>
-    {tab === "firm" ? <FirmTab /> : tab === "people" ? <PeopleTab /> : tab === "checklists" ? <ChecklistsTab /> : tab === "wording" ? <WordingTab /> : tab === "hours" ? <HoursTab /> : tab === "texting" ? <TextingTab /> : tab === "domain" ? <DomainTab /> : tab === "files" ? <FilesTab /> : tab === "plan" ? <PlanTab /> : <SecurityTab />}
+    {tab === "firm" ? <FirmTab /> : tab === "people" ? <PeopleTab /> : tab === "checklists" ? <ChecklistsTab /> : tab === "wording" ? <WordingTab /> : tab === "hours" ? <HoursTab /> : tab === "barks" ? <BarksTab /> : tab === "texting" ? <TextingTab /> : tab === "domain" ? <DomainTab /> : tab === "files" ? <FilesTab /> : tab === "plan" ? <PlanTab /> : <SecurityTab />}
   </Page>;
 }

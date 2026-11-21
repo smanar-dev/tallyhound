@@ -203,16 +203,25 @@ for (const kind of KINDS) {
       T.S.alerts.unshift({ id: "a_x", at: new Date(T.S.now), engId: e.id, level: "high", kind: "frustrated", text: "Al Bosworth sounds upset about the W-2", key: null, read: false });
     });
     await H.worker.pass(); const to = (addr: string) => H.staffMails.filter((m) => m.to === addr);
-    assert.deepEqual(to("alex@firm1.test").map((m) => m.subject), ["Al B. needs you in Tallyhound", "1 client is waiting for you"]); assert.match(to("alex@firm1.test")[0]!.body, new RegExp("/clients/" + alId));
-    assert.deepEqual(to("pat1@firm1.test").map((m) => m.subject), ["1 client is waiting for you"], "the owner sees every client in the morning note; the urgent note went to the preparer");
+    assert.deepEqual(to("alex@firm1.test").map((m) => m.subject), ["Al B. needs you in Tallyhound", "Tallyhound: 1 thing in the review queue"]); assert.match(to("alex@firm1.test")[0]!.body, new RegExp("/clients/" + alId));
+    assert.deepEqual(to("pat1@firm1.test").map((m) => m.subject), ["Tallyhound: 1 thing in the review queue"], "the owner sees every client in the morning note; the urgent note went to the preparer");
     assert.equal(to("rae@firm1.test").length, 0); for (const m of H.staffMails) { assert.doesNotMatch(m.subject + m.body, /Bosworth|Daybreak|W-2|upset|x\.example/); assert.match(m.body, /Al B\./); }
     const n = H.staffMails.length; await H.worker.pass(); assert.equal(H.staffMails.length, n, "nothing is sent twice");
     // Each person chooses their own emails. Alex turns the morning note off; Pat's keeps coming.
     const alexB = await H.signInAs("alex@firm1.test"); assert.deepEqual((await alexB.get("/api/me")).json.notes, { morning: true, urgent: true }); assert.deepEqual((await alexB.post("/api/me/notes", { morning: false })).json.notes, { morning: false, urgent: true });
-    H.advance(86400); await H.worker.pass(); const day2 = H.staffMails.slice(n); assert.deepEqual(day2.filter((m) => /waiting for you/.test(m.subject)).map((m) => m.to), ["pat1@firm1.test"], "Tuesday: the owner's note only, since Alex switched theirs off"); await H.auth.setNotes(alex, { morningOff: false, urgentOff: false });
-    H.advance(4 * 86400); const m = H.staffMails.length; await H.worker.pass(); assert.equal(H.staffMails.slice(m).filter((x) => /waiting for you/.test(x.subject)).length, 0, "Saturday: no morning note");
-    H.advance(2 * 86400 - 4 * 3600); const k = H.staffMails.length; await H.worker.pass(); assert.equal(H.staffMails.slice(k).filter((x) => /waiting for you/.test(x.subject)).length, 0, "Monday at 6: not yet");
-    H.advance(3600); await H.worker.pass(); assert.equal(H.staffMails.slice(k).filter((x) => /waiting for you/.test(x.subject)).length, 2, "Monday at 7");
+    H.advance(86400); await H.worker.pass(); const day2 = H.staffMails.slice(n); assert.deepEqual(day2.filter((m) => /in the review queue/.test(m.subject)).map((m) => m.to), ["pat1@firm1.test"], "Tuesday: the owner's note only, since Alex switched theirs off"); await H.auth.setNotes(alex, { morningOff: false, urgentOff: false });
+    H.advance(4 * 86400); const m = H.staffMails.length; await H.worker.pass(); assert.equal(H.staffMails.slice(m).filter((x) => /in the review queue/.test(x.subject)).length, 0, "Saturday: no morning note");
+    H.advance(2 * 86400 - 4 * 3600); const k = H.staffMails.length; await H.worker.pass(); assert.equal(H.staffMails.slice(k).filter((x) => /in the review queue/.test(x.subject)).length, 0, "Monday at 6: not yet");
+    H.advance(3600); await H.worker.pass(); assert.equal(H.staffMails.slice(k).filter((x) => /in the review queue/.test(x.subject)).length, 2, "Monday at 7");
+    // TH-BRK: a new item barks its person by email once it has stood five minutes, with counts and no client; at night it is held for the morning note.
+    H.advance(3 * 3600); const b0 = H.staffMails.length; await H.app.withFirm(firmId, (T: any) => { const al = T.S.clients.find((c: { first: string }) => c.first === "Al"), e = T.engOf(al.id); T.addTask({ kind: "question", reason: "Question", category: "other", engId: e.id }); T.addTask({ kind: "document", reason: "Low confidence", engId: e.id }); });   // eslint-disable-line @typescript-eslint/no-explicit-any
+    await H.worker.pass(); assert.equal(H.staffMails.slice(b0).filter((x) => /barked/.test(x.subject)).length, 0, "not before it has stood five minutes"); H.advance(6 * 60); await H.worker.pass();
+    const barks = H.staffMails.slice(b0).filter((x) => /barked/.test(x.subject)); assert.deepEqual(barks.map((x) => [x.to, x.subject]), [["alex@firm1.test", "Tallyhound barked. 2 things need your team."]]);
+    assert.match(barks[0]!.body, /1 question\n {2}1 to check/); assert.match(barks[0]!.body, /\/needs-you\?mine=1&bark=/); assert.doesNotMatch(barks[0]!.subject + barks[0]!.body, /Bosworth|Al B/);
+    H.advance(600); await H.worker.pass(); assert.equal(H.staffMails.slice(b0).filter((x) => /barked\./.test(x.subject)).length, 1, "barked twice for the same items");
+    H.advance(10 * 3600); const b1 = H.staffMails.length; await H.app.withFirm(firmId, (T: any) => { const al = T.S.clients.find((c: { first: string }) => c.first === "Al"); T.addTask({ kind: "call", reason: "Call the client", engId: T.engOf(al.id).id }); });   // eslint-disable-line @typescript-eslint/no-explicit-any
+    H.advance(600); await H.worker.pass(); assert.equal(H.staffMails.slice(b1).filter((x) => /barked\./.test(x.subject)).length, 0, "a bark went out at night");
+    H.advance(11 * 3600); await H.worker.pass(); const morning = H.staffMails.slice(b1).filter((x) => x.to === "alex@firm1.test" && /in the review queue/.test(x.subject)); assert.equal(morning.length, 1); assert.match(morning[0]!.body, /Since you left yesterday\n {2}1 call to make/);
     await H.close();
   });
 

@@ -107,3 +107,26 @@ scene("TH-CMP: a client who never replies is in the review queue as gone quiet, 
   await page.goto(W.url + "/clients"); assert.match(text(await page.locator("tbody tr", { hasText: "Sam Lee" }).textContent()), /Needs you.*0 of 2/);
   await page.goto(W.url + "/needs-you?show=gone_quiet"); await page.locator(".rq > div").nth(1).getByRole("button", { name: "Restart fetching" }).click(); await page.getByText(/^Fetching restarted/).waitFor(); T = await W.state(firmId); assert.equal(T.S.engs[1].status, "in_progress");
 });
+
+scene("TH-BRK: ten items in five minutes are one bark; the bell shows it, the queue opens on this person's items, and the owner sets who hears what", async (W) => {
+  const { firmId, ownerId } = await busyFirm(W); const page = await W.signIn("pat1@firm1.test");
+  await page.goto(W.url + "/settings?tab=people"); await page.getByRole("button", { name: "Add a person" }).click(); const dlg = page.getByRole("dialog"); await dlg.getByLabel("Name").fill("Alex Staff"); await dlg.getByLabel("Work email").fill("alex@firm1.test"); await dlg.getByRole("button", { name: "Add", exact: true }).click(); await dlg.waitFor({ state: "detached" });
+  let T: Engine = await W.state(firmId); const alexId = T.S.users.find((u: { name: string }) => u.name === "Alex Staff").id;
+  // Sam's preparer is Alex. Ten questions from Sam arrive inside five minutes.
+  await W.app.staff(firmId, ownerId, (E: Engine) => { E.S.clients[1].preparer = alexId; });
+  const alex = await W.signIn("alex@firm1.test"); const mails = W.staffMails.length;
+  for (let i = 0; i < 10; i++) { await W.app.staff(firmId, ownerId, (E: Engine) => { E.addTask({ kind: "question", reason: "Question", category: "other", engId: E.S.engs[1].id, summary: "Sam asked something" }); }); W.advance(25); }
+  W.advance(6 * 60); await W.worker.pass();
+  const barks = W.staffMails.slice(mails).filter((m) => /barked/.test(m.subject) && m.to === "alex@firm1.test"); assert.deepEqual(barks.map((m) => [m.to, m.subject]), [["alex@firm1.test", "Tallyhound barked. 10 things need your team."]]); assert.ok(!/Sam|Lee/.test(barks[0]!.body), "a client is named in the email");
+  // In the app: the bell counts it, and it opens the queue on Alex's items only.
+  await alex.reload(); await alex.locator(".side .firm").waitFor(); await alex.getByRole("button", { name: /^Alerts, \d+ unread/ }).click(); await alex.getByText("10 things need your team.").first().click(); await alex.waitForURL("**/needs-you?mine=1");
+  await alex.getByRole("button", { name: "Mine only" }).waitFor(); assert.equal(await alex.locator(".rqi").count(), 10); for (const t of await alex.locator(".rqi").allTextContents()) assert.match(t, /Sam Lee/);
+  await alex.getByRole("button", { name: "Mine only" }).click(); await alex.getByRole("button", { name: "Everyone's" }).waitFor(); assert.ok((await alex.locator(".rqi").count()) > 10);
+  T = await W.state(firmId); assert.ok(T.S.barks.some((b: { userId: string; readAt: unknown }) => b.userId === alexId && b.readAt), "opening the queue from the bark did not mark it read");
+  // The owner adds owners to client questions; the next question barks both.
+  await page.goto(W.url + "/settings?tab=barks"); await page.getByRole("heading", { name: "Who hears the barks" }).waitFor(); await page.locator("label.toggle", { has: page.getByLabel("Owners also hear: A client question") }).click(); await page.getByText(/^Saved\. The hound barks/).waitFor();
+  T = await W.state(firmId); assert.deepEqual(T.barkRoute({ kind: "question", engId: T.S.engs[1].id }).sort(), [alexId, ownerId].sort());
+  // Staff cannot change the firm's rules, and choose their own kinds under My alerts.
+  assert.equal((await alex.request.post(W.url + "/api/act", { data: { fn: "setBarkRules", args: [{}] } })).status(), 403);
+  await alex.getByRole("button", { name: "My alerts" }).click(); await alex.getByRole("dialog").getByLabel("Client questions").click({ force: true, noWaitAfter: true }); await alex.getByText("Saved.", { exact: true }).first().waitFor(); T = await W.state(firmId); assert.deepEqual(T.barkRoute({ kind: "question", engId: T.S.engs[1].id }), [ownerId]);
+});

@@ -16,8 +16,13 @@ const ROLE = { owner: "Owner", staff: "Staff", read_only: "Read-only" } as const
 function EmailNotes() {
   const { me, toast } = useFirm(), [open, setOpen] = useState(false), [n, setN] = useState(me.notes || { morning: true, urgent: true });
   const set = async (k: "morning" | "urgent", on: boolean) => { const was = n; setN({ ...n, [k]: on }); try { const r = await api.post<{ notes: { morning: boolean; urgent: boolean } }>("/api/me/notes", { [k]: on }); setN(r.notes); me.notes = r.notes; toast("Saved."); } catch (e) { setN(was); toast((e as Error).message); } };
-  return <><button className="btn sm ghost notesbtn" onClick={() => setOpen(true)}>Emails to you</button>
-    {open ? <Modal title="Emails to you" onClose={() => setOpen(false)} footer={<button className="btn pri" onClick={() => setOpen(false)}>Done</button>}><div className="col" style={{ gap: 12 }}>
+  const { T, act } = useFirm(), mine = (T.S.users.find((u: Row) => u.id === me.id) || {}).bark || {}, kinds: string[] | null = mine.kinds || null, KIND: Record<string, string> = { document: "Documents to check", question: "Client questions", says_none: "Client has none", gone_quiet: "Gone quiet", change_noted: "Changes noted", call: "Calls to make", output_check: "Blocked messages" };
+  const bark = (p: { email?: boolean; kinds?: string[] | null }) => void act("setMyBarks", { email: p.email ?? mine.email !== false, kinds: p.kinds === undefined ? kinds : p.kinds }).then(() => toast("Saved."), () => {});
+  return <><button className="btn sm ghost notesbtn" onClick={() => setOpen(true)}>My alerts</button>
+    {open ? <Modal title="My alerts" onClose={() => setOpen(false)} footer={<button className="btn pri" onClick={() => setOpen(false)}>Done</button>}><div className="col" style={{ gap: 12 }}>
+      <p className="small muted">Who gets an alert when something needs a person. A bark tells you how many things in the review queue are yours. It always shows in the app, under the bell.</p>
+      <label className="row"><span className="toggle"><input type="checkbox" checked={mine.email !== false} onChange={(ev) => bark({ email: ev.target.checked })} /><span /></span>Email me a bark too, at most one every half hour, and never outside office hours</label>
+      <fieldset className="kinds"><legend className="small b">Bark me about</legend>{Object.keys(KIND).map((k) => <label key={k} className="row"><input type="checkbox" checked={!kinds || kinds.includes(k)} onChange={(ev) => { const all = Object.keys(KIND), cur = kinds || all, next = ev.target.checked ? [...new Set([...cur, k])] : cur.filter((x) => x !== k); bark({ kinds: next.length === all.length ? null : next }); }} />{KIND[k]}</label>)}</fieldset>
       <label className="row"><span className="toggle"><input type="checkbox" checked={n.morning} onChange={(ev) => void set("morning", ev.target.checked)} /><span /></span>A note at 7 am on working days when something is waiting for you</label>
       <label className="row"><span className="toggle"><input type="checkbox" checked={n.urgent} onChange={(ev) => void set("urgent", ev.target.checked)} /><span /></span>A note at once when something urgent comes up</label>
       <p className="small muted">These go to {me.email}. They name clients by first name and last initial and never carry a document or its details.</p></div></Modal> : null}</>;
@@ -49,13 +54,23 @@ export function Side({ open, onClose }: { open: boolean; onClose: () => void }) 
 
 function Bell() {
   const { T, act } = useFirm(), nav = useNavigate(), [open, setOpen] = useState(false), box = useRef<HTMLDivElement>(null);
-  const alerts: Row[] = T.S.alerts || [], unread = alerts.filter((a) => !a.read).length, LV: Record<string, string> = { high: "bad", medium: "warn", low: "", info: "info" };
+  const { me, toast } = useFirm(), barks: Row[] = (T.S.barks || []).filter((b: Row) => b.userId === me.id && ["queued", "sent", "held", "digest"].includes(b.status)), newBarks = barks.filter((b) => !b.readAt);
+  const openBark = (b: Row) => { setOpen(false); void act("barkRead", b.id).catch(() => {}); nav("/needs-you?mine=1"); };
+  // A bark that has just arrived says so once, with a way straight to this person's part of the queue.
+  const told = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (!told.current) { told.current = new Set(barks.map((b) => b.id)); return; }
+    for (const b of newBarks) if (!told.current.has(b.id)) { told.current.add(b.id); const w = T.barkWords(b.counts); toast("Tallyhound barked. " + (b.escalation ? "Something has waited more than a working day." : w.line), { label: "Open queue", run: () => openBark(b) }); }
+  }, [newBarks.map((b) => b.id).join()]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const alerts: Row[] = T.S.alerts || [], unread = alerts.filter((a) => !a.read).length + newBarks.length, LV: Record<string, string> = { high: "bad", medium: "warn", low: "", info: "info" };
   useEffect(() => { if (!open) return; const out = (ev: MouseEvent) => { if (box.current && !box.current.contains(ev.target as Node)) setOpen(false); }, esc = (ev: KeyboardEvent) => { if (ev.key === "Escape") setOpen(false); }; document.addEventListener("mousedown", out); document.addEventListener("keydown", esc); return () => { document.removeEventListener("mousedown", out); document.removeEventListener("keydown", esc); }; }, [open]);
   const go = (a: Row) => { setOpen(false); void act("alertRead", a.id).catch(() => {}); if (a.engId) nav("/clients/" + a.engId + "?tab=" + (a.kind === "handoff" || a.kind === "sla" ? "conversation" : "checklist")); };
   return <div className="rel" ref={box}>
     <button className="btn icon ghost" style={{ position: "relative" }} aria-label={unread ? "Alerts, " + unread + " unread" : "Alerts"} aria-expanded={open} onClick={() => setOpen(!open)}><Icon name="bell" />{unread ? <span className="badge-dot">{unread}</span> : null}</button>
     {open ? <div className="menu-pop" style={{ width: "min(380px,90vw)", maxHeight: 420, overflow: "auto" }}>
-      <div className="row" style={{ padding: "6px 10px" }}><b>Alerts</b><span className="sp" />{unread ? <button className="btn sm ghost" onClick={() => void act("alertsRead").catch(() => {})}>Mark all read</button> : null}</div>
+      {barks.length ? <><div className="row" style={{ padding: "6px 10px" }}><b>Barks</b><span className="sp" /><span className="small faint">Things in the review queue for you</span></div>
+        {barks.slice(0, 6).map((b) => { const w = T.barkWords(b.counts); return <button key={b.id} style={{ alignItems: "flex-start", opacity: b.readAt ? 0.6 : 1 }} onClick={() => openBark(b)}><Chip tone={b.escalation ? "warn" : "acc"}>{b.escalation ? "again" : "bark"}</Chip><span style={{ fontWeight: 500, whiteSpace: "normal" }}>{b.escalation ? "Something has waited more than a working day." : w.line}<br /><span className="small faint">{w.parts.join(", ")} · {when(T, b.at)}</span></span></button>; })}</> : null}
+      <div className="row" style={{ padding: "6px 10px" }}><b>Alerts</b><span className="sp" />{unread ? <button className="btn sm ghost" onClick={() => { void act("alertsRead").catch(() => {}); void act("barkRead", "all").catch(() => {}); }}>Mark all read</button> : null}</div>
       {alerts.length ? alerts.slice(0, 10).map((a) => <button key={a.id} style={{ alignItems: "flex-start", opacity: a.read ? 0.6 : 1 }} onClick={() => go(a)}><Chip tone={LV[a.level]}>{a.level}</Chip><span style={{ fontWeight: 500, whiteSpace: "normal" }}>{a.text}<br /><span className="small faint">{when(T, a.at)}</span></span></button>) : <div className="small muted" style={{ padding: 10 }}>No alerts. Failed sends, questions past their reply time and storage problems show up here.</div>}
     </div> : null}
   </div>;

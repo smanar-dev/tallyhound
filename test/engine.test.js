@@ -570,3 +570,53 @@ test("an item the client said they would send later is asked for again when its 
   const w2 = item(T, e, "W2"); assert.ok(w2.laterUntil); const n = out(T, e).length; T.advance(4 * T.DAY); assert.equal(out(T, e).length, n); assert.ok(e.next, "nothing was planned for the day it is due");
   T.advance(6 * T.DAY); assert.ok(out(T, e).length > n, "the file was left with nothing planned");
 });
+
+// ---- Barks (docs/REBRAND.md, TH-BRK) ----
+const barksOf = (T, uid) => (T.S.barks || []).filter((b) => b.userId === uid);
+const tenTasks = (T, e, kind) => { for (let i = 0; i < 10; i++) { T.addTask({ kind: kind || "question", reason: "Question", category: "other", engId: e.id }); T.advance(30 * 1000); } };
+test("TH-BRK-1, 2: an item is on its person's bark the moment it opens; ten items in five minutes are one bark and one email; the next email waits half an hour", () => {
+  const { T, e } = started(); T.addTask({ kind: "question", reason: "Question", category: "other", engId: e.id });
+  assert.equal(barksOf(T, "u2").length, 1, "not in the app at once"); assert.equal(barksOf(T, "u2")[0].status, "queued"); assert.deepEqual(T.barkDue(), [], "emailed before it had stood five minutes");
+  tenTasks(T, e); const due = T.barkDue(); assert.equal(due.length, 1); assert.equal(due[0].userId, "u2"); assert.equal(due[0].email, "alex@test.example"); assert.deepEqual(due[0].counts, { question: 11 }); assert.equal(due[0].words.line, "11 things need your team.");
+  assert.deepEqual(T.barkDue(), [], "sent twice");
+  // More in the same half hour: on a new bark in the app, but no second email yet.
+  T.addTask({ kind: "document", reason: "Low confidence", engId: e.id }); T.advance(10 * T.MIN); assert.deepEqual(T.barkDue(), []); assert.equal(barksOf(T, "u2").filter((b) => b.status === "queued").length, 1);
+  T.advance(25 * T.MIN); const next = T.barkDue(); assert.equal(next.length, 1); assert.deepEqual(next[0].counts, { document: 1 });
+});
+test("TH-BRK-2: any burst of items for one person inside the batch window is exactly one bark", () => {
+  for (const n of [1, 2, 7, 25]) { const { T, e } = started(); for (let i = 0; i < n; i++) { T.addTask({ kind: i % 2 ? "question" : "document", reason: "x", engId: e.id }); T.advance(Math.floor((4 * T.MIN) / n)); } T.advance(6 * T.MIN); assert.equal(T.barkDue().length, 1, n + " items"); assert.equal(barksOf(T, "u2").length, 1); }
+});
+test("TH-BRK-3: an item goes to the client's preparer; to every owner when there is none or when it is about the system; and to whoever the firm's rules add", () => {
+  const { T, c, e } = started(); const q = { kind: "question", reason: "Question", engId: e.id };
+  assert.deepEqual(T.barkRoute(q), ["u2"]); assert.deepEqual(T.barkRoute({ kind: "output_check", engId: e.id }), ["u1"]);
+  c.preparer = null; assert.deepEqual(T.barkRoute(q), ["u1"]); c.preparer = "u2";
+  T.setUser("u2"); assert.match(T.setBarkRules({ question: { owners: true } }), /Only an owner/); T.setUser("u1"); assert.equal(T.setBarkRules({ question: { owners: true }, gone_quiet: { users: ["u1", "nobody"] }, nonsense: { owners: true } }), null);
+  assert.deepEqual(T.barkRoute(q).sort(), ["u1", "u2"]); assert.deepEqual(T.barkRoute({ kind: "gone_quiet", engId: e.id }).sort(), ["u1", "u2"]); assert.deepEqual(Object.keys(T.S.firm.barkRules).sort(), ["gone_quiet", "question"]);
+  // Someone who can only look, or a support person, is never barked at.
+  T.S.users.push({ id: "u3", first: "Lee", name: "Lee Look", role: "read_only", email: "lee@test.example" }); c.preparer = "u3"; assert.deepEqual(T.barkRoute({ kind: "document", engId: e.id }), ["u1"]);
+});
+test("TH-BRK-4: each person chooses which kinds they hear about and whether they get the email", () => {
+  const { T, e } = started(); T.setUser("u2"); assert.equal(T.setMyBarks({ email: true, kinds: ["document"] }), null);
+  T.addTask({ kind: "question", reason: "Question", engId: e.id }); assert.equal(barksOf(T, "u2").length, 0); T.addTask({ kind: "document", reason: "Low confidence", engId: e.id }); assert.equal(barksOf(T, "u2").length, 1);
+  T.setMyBarks({ email: false, kinds: null }); T.advance(6 * T.MIN); assert.deepEqual(T.barkDue(), [], "emailed someone who switched the email off"); assert.equal(barksOf(T, "u2")[0].status, "sent", "it still shows in the app");
+  assert.equal(T.barkRead("all"), 1); assert.ok(barksOf(T, "u2")[0].readAt);
+});
+test("TH-BRK-6: an item that opens at 9 pm barks nobody in the night; it is counted in the morning note instead", () => {
+  const { T, e } = started(); T.advance(11 * T.HOUR); assert.equal(T.S.now.getHours(), 21); T.addTask({ kind: "question", reason: "Question", engId: e.id });
+  T.advance(10 * T.MIN); assert.deepEqual(T.barkDue(), []); assert.equal(barksOf(T, "u2")[0].status, "held");
+  T.advance(10 * T.HOUR); assert.deepEqual(T.barkDue(), [], "barked in the morning as well as the note"); assert.deepEqual(T.barkHeld("u2"), { question: 1 }); assert.deepEqual(T.barkHeld("u2"), {});
+  // Staff hours are the firm's to set.
+  T.setUser("u1"); assert.match(T.setStaffHours(18, 9), /before the end/); assert.equal(T.setStaffHours(7, 22), null); assert.deepEqual(T.staffHours(), { start: 7, end: 22 });
+});
+test("TH-BRK-7: an item nobody has dealt with after a working day barks once more, to the owners, and only once", () => {
+  const { T, e } = started(); T.addTask({ kind: "document", reason: "Low confidence", engId: e.id }); T.advance(6 * T.MIN); assert.equal(T.barkDue().length, 1);
+  T.advance(20 * T.HOUR); assert.equal(T.barkDue().filter((b) => b.escalation).length, 0); T.advance(5 * T.HOUR); const due = T.barkDue().filter((b) => b.escalation);
+  assert.equal(due.length, 1); assert.equal(due[0].userId, "u1"); assert.equal(due[0].who, "Jo D.", "outside the app a client is a first name and a last initial");
+  T.advance(3 * T.DAY); assert.equal(T.barkDue().filter((b) => b.escalation).length, 0, "escalated twice");
+  // A weekend does not count towards the working day.
+  const y = started(); y.T.advance(4 * y.T.DAY + 6 * y.T.HOUR); assert.equal(y.T.S.now.getDay(), 5); y.T.S.tasks.forEach((t) => { t.status = "decided"; }); y.T.barkDue(); y.T.addTask({ kind: "document", reason: "Low confidence", engId: y.e.id });
+  y.T.advance(2 * y.T.DAY); assert.equal(y.T.barkDue().filter((b) => b.escalation).length, 0, "escalated over the weekend");
+});
+test("TH-BRK: an item dealt with before its bark goes sends no email", () => {
+  const { T, e } = started(); const t = T.addTask({ kind: "says_none", reason: "Client says none", engId: e.id, itemId: item(T, e, "1098").id }); T.setUser("u2"); T.decideTask(t.id, "reask"); T.advance(6 * T.MIN); assert.deepEqual(T.barkDue(), []);
+});

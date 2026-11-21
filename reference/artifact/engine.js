@@ -817,7 +817,70 @@
   }
 
   /* ---------- inbound ---------- */
-  function addTask(t) { const x = Object.assign({ id: id("t"), at: new Date(S.now), status: "open" }, t); S.tasks.push(x); return x; }
+  /* Barks (TH-BRK, docs/REBRAND.md section 5). When something needs a person, Tallyhound barks: one alert to one member of staff
+     saying how many things in the review queue need them, by kind. The engine decides who hears about an item and when a bark is
+     due; the server only sends the email. Barks are for staff. The word never reaches a client.
+       - who: the client's preparer; owners for kinds that are about the system; all owners when a client has no preparer;
+         plus whoever the firm's rules add. Each person chooses the kinds they hear about and whether they get the email.
+       - when: an item joins that person's open bark the moment it opens (so the app shows it at once). The email goes once the
+         bark has stood for BARK_SETTLE_MIN, and never more than one per person per BARK_BATCH_MIN: ten items in five minutes
+         are one bark. Outside staff hours a bark is held and counted in the morning note instead.
+       - again: an item nobody has dealt with after one working day barks once more, to the owners. */
+  const BARK_BATCH_MIN = 30, BARK_SETTLE_MIN = 5, REVIEW_OVERDUE_HOURS = 24, STAFF_HOURS = { start: 8, end: 18 };
+  const BARK_KINDS = { document: "to check", question: "question", says_none: "says they don't have it", gone_quiet: "gone quiet", change_noted: "change noted", call: "call to make", output_check: "blocked message" }, BARK_SYSTEM = ["output_check"];
+  const staffHours = () => { const h = S.firm.staffHours || {}, a = +h.start, b = +h.end; return a >= 0 && b <= 24 && a < b ? { start: a, end: b } : STAFF_HOURS; };
+  const inStaffHours = (d) => { const h = staffHours(), day = d.getDay(); return day >= 1 && day <= 5 && d.getHours() >= h.start && d.getHours() < h.end && allowed(new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12)); };
+  const barkPrefs = (u) => Object.assign({ app: true, email: true, kinds: null }, (u && u.bark) || {});
+  /** Who hears about an item in the review queue. User ids. */
+  function barkRoute(t) {
+    const e = t.engId ? eng(t.engId) : null, c = e ? client(e.clientId) : null, live = S.users.filter((u) => u.role !== "read_only" && !u.support), owners = live.filter((u) => u.role === "owner");
+    const rule = (S.firm.barkRules || {})[t.kind] || {}, out = new Set();
+    const prep = c && live.find((u) => u.id === c.preparer);
+    if (BARK_SYSTEM.includes(t.kind) || !prep) owners.forEach((u) => out.add(u.id)); else out.add(prep.id);
+    if (rule.owners) owners.forEach((u) => out.add(u.id));
+    (rule.users || []).forEach((id) => { if (live.some((u) => u.id === id)) out.add(id); });
+    return [...out].filter((id) => { const k = barkPrefs(S.users.find((u) => u.id === id)).kinds; return !k || k.includes(t.kind); });
+  }
+  function barkQueue(t, escalation) {
+    if (!BARK_KINDS[t.kind]) return; S.barks = S.barks || [];
+    const to = escalation ? S.users.filter((u) => u.role === "owner" && !u.support).map((u) => u.id) : barkRoute(t);
+    for (const uid of to) {
+      let b = escalation ? null : S.barks.find((x) => x.userId === uid && x.status === "queued" && !x.escalation);
+      if (!b) { b = { id: id("b"), userId: uid, taskIds: [], counts: {}, escalation: !!escalation, status: "queued", at: new Date(S.now), sentAt: null, readAt: null }; S.barks.unshift(b); }
+      if (b.taskIds.includes(t.id)) continue; b.taskIds.push(t.id); b.counts[t.kind] = (b.counts[t.kind] || 0) + 1;
+    }
+    if (S.barks.length > 400) S.barks.length = 400;
+  }
+  /** "3 things need your team." The same words in the app, in the email subject and in the morning note. */
+  function barkWords(counts) { const n = Object.keys(counts || {}).reduce((a, k) => a + counts[k], 0); return { n, line: n + (n === 1 ? " thing needs" : " things need") + " your team.", parts: Object.keys(counts || {}).map((k) => counts[k] + " " + BARK_KINDS[k]) }; }
+  /** The timer's part. Marks and returns the barks whose email is due now. Call with the firm locked. */
+  function barkDue() {
+    S.barks = S.barks || []; const out = [], open = (b) => b.taskIds.filter((tid) => S.tasks.some((t) => t.id === tid && t.status === "open"));
+    // One more bark, to the owners, for anything that has waited a working day.
+    S.tasks.forEach((t) => { if (t.status !== "open" || t.escalatedAt || !BARK_KINDS[t.kind]) return; let h = 0; for (let x = +new Date(t.at); x < +S.now; x += HOUR) { const d = new Date(x); if (d.getDay() >= 1 && d.getDay() <= 5) h++; } if (h >= REVIEW_OVERDUE_HOURS) { t.escalatedAt = new Date(S.now); barkQueue(t, true); } });
+    for (const b of S.barks) {
+      if (b.status !== "queued") continue;
+      if (!open(b).length) { b.status = "settled"; b.readAt = b.readAt || new Date(S.now); continue; }   // everything in it was dealt with before it went
+      if (!inStaffHours(S.now)) { b.status = "held"; continue; }   // TH-BRK-6: nobody is barked at in the night; the morning note counts it
+      const last = S.barks.filter((x) => x.userId === b.userId && x.sentAt && !x.escalation).map((x) => +new Date(x.sentAt)).sort((x, y) => y - x)[0] || 0;
+      if (!b.escalation && (S.now - new Date(b.at) < BARK_SETTLE_MIN * MIN || S.now - last < BARK_BATCH_MIN * MIN)) continue;
+      b.status = "sent"; b.sentAt = new Date(S.now);
+      const u = S.users.find((x) => x.id === b.userId), t0 = b.escalation ? S.tasks.find((t) => t.id === b.taskIds[0]) : null, e0 = t0 && t0.engId ? eng(t0.engId) : null, c0 = e0 ? client(e0.clientId) : null;
+      if (u && barkPrefs(u).email) out.push({ id: b.id, userId: b.userId, email: u.email, first: u.first, escalation: b.escalation, counts: b.counts, words: barkWords(b.counts), who: c0 ? c0.first + " " + String(c0.last || "")[0] + "." : null });
+    }
+    return out;
+  }
+  /** For the morning note: what was held overnight for this person, as counts by kind. Marks it as counted. */
+  function barkHeld(uid) { const counts = {}; (S.barks || []).forEach((b) => { if (b.userId === uid && b.status === "held") { b.status = "digest"; b.sentAt = new Date(S.now); b.taskIds.forEach((tid) => { const t = S.tasks.find((x) => x.id === tid && x.status === "open"); if (t) counts[t.kind] = (counts[t.kind] || 0) + 1; }); } }); return counts; }
+  function barkRead(bid) { const me = S.user && S.user.id; let n = 0; (S.barks || []).forEach((b) => { if (b.userId === me && !b.readAt && (bid === "all" || b.id === bid)) { b.readAt = new Date(S.now); n++; } }); return n; }
+  function setMyBarks(p) { const u = S.users.find((x) => x.id === (S.user && S.user.id)); if (!u) return "Unknown user"; const kinds = Array.isArray(p && p.kinds) ? p.kinds.filter((k) => BARK_KINDS[k]) : null; u.bark = { app: true, email: !(p && p.email === false), kinds: kinds && kinds.length < Object.keys(BARK_KINDS).length ? kinds : null }; return null; }
+  function setBarkRules(rules) {
+    if (!may("owner")) return "Only an owner can change this"; const out = {};
+    Object.keys(BARK_KINDS).forEach((k) => { const r = (rules || {})[k]; if (!r) return; const users = (Array.isArray(r.users) ? r.users : []).filter((id) => S.users.some((u) => u.id === id && u.role !== "read_only")); if (r.owners || users.length) out[k] = { owners: !!r.owners, users }; });
+    S.firm.barkRules = out; audit("firm.bark_rules", "Who hears about each kind of item was changed"); return null;
+  }
+  function setStaffHours(start, end) { if (!may("owner")) return "Only an owner can change this"; start = Math.round(+start); end = Math.round(+end); if (!(start >= 0 && end <= 24 && start < end)) return "Choose a start before the end"; S.firm.staffHours = { start, end }; audit("firm.staff_hours", start + ":00 to " + end + ":00"); return null; }
+  function addTask(t) { const x = Object.assign({ id: id("t"), at: new Date(S.now), status: "open" }, t); S.tasks.push(x); barkQueue(x, false); return x; }
   function afterAccept(e, c) {
     e.step = 0; e.illeg = 0;
     if (checkComplete(e)) { finished(e); return; }
@@ -1662,7 +1725,7 @@
     const N = walk(o.state);
     ["clients", "engs", "items", "msgs", "docs", "tasks", "users"].forEach((k) => { if (!Array.isArray(N[k])) throw new Error("Not a Tallyhound workspace: " + k + " is missing"); });
     if (!N.firm || typeof N.firm !== "object" || !N.users.length) throw new Error("Not a Tallyhound workspace: firm is missing");
-    ["tray", "audit", "alerts", "hlog", "archive"].forEach((k) => { if (!Array.isArray(N[k])) N[k] = []; });
+    ["tray", "audit", "alerts", "hlog", "archive", "barks"].forEach((k) => { if (!Array.isArray(N[k])) N[k] = []; });
     if (!N.usage || typeof N.usage !== "object") N.usage = {};
     if (N.firm) N.firm.retain = Object.assign({}, RETAIN_DEFAULT, N.firm.retain);
     const HD = { mode: "copilot", aiLive: false, aiWrite: true, replyV2: "shadow", intensity: "steady", voice: "professional", tone: "warm", persona: "", emailAfter: 2, slaHours: 4, pauseDays: 3, callTask: true }; N.firm.hound = N.firm.hound || {}; Object.keys(HD).forEach((k) => { if (N.firm.hound[k] === undefined) N.firm.hound[k] = HD[k]; });
@@ -1673,7 +1736,7 @@
   }
   function blank(opt) {
     seed(); opt = opt || {};
-    ["clients", "engs", "items", "msgs", "docs", "tasks", "tray", "audit", "alerts", "hlog", "archive"].forEach((k) => { S[k] = []; }); S.usage = {};
+    ["clients", "engs", "items", "msgs", "docs", "tasks", "tray", "audit", "alerts", "hlog", "archive", "barks"].forEach((k) => { S[k] = []; }); S.usage = {};
     S.firm.delivery = { provider: "Download", folder: "Client Tax Docs", auto: "off" }; S.firm.verified = opt.verified === false ? false : true; S.firm.retain = Object.assign({}, RETAIN_DEFAULT);
     seq = 0; S.now = opt.now || new Date(); S.firm.createdAt = new Date(S.now); S.firm.taxYear = opt.taxYear || S.firm.taxYear || 2026;
     if (opt.plan && PLANS.some((p) => p[0] === opt.plan)) { S.firm.plan = opt.plan; S.firm.billing = { state: "active", plan: opt.plan, since: new Date(S.now) }; } else { S.firm.plan = "Trial"; S.firm.billing = { state: "trial", plan: null, trialEnds: new Date(S.now.getTime() + TRIAL_DAYS * DAY) }; }
@@ -1910,7 +1973,7 @@
     if (e.status === "complete" && open) { e.status = "in_progress"; e.completedAt = null; e.step = 0; if (!e.next) e.next = nextAllowed(S.now); timeline(e, "Reopened: a document is outstanding again"); }
     else if (["in_progress", "stuck"].includes(e.status) && !open && any) { if (checkComplete(e)) finished(e); }
   }
-  window.TH = { V2, WAIVE_REASONS, LASTING, CHANGE_WORDS, LATER_MAX_DAYS, ALREADY_SENT_LOOKBACK_DAYS, replyV2, setSpouse, VOICES, VOICE_TPL, VOICE_FIXED, voiceFor, setVoice, setClientVoice, setSignOff, previewVoice, verified, CADENCE_PRESETS, gapsOf, cadenceFor, setIntensity, setClientIntensity, undiscard, setClosedDays, startMany, deletionEvidence, setCallOk, plans, quoteFor, areaZone, zoneFor, addContact, removeContact, planEnded, setLine, isLandline, RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
+  window.TH = { addTask, BARK_KINDS, BARK_BATCH_MIN, BARK_SETTLE_MIN, REVIEW_OVERDUE_HOURS, barkRoute, barkDue, barkHeld, barkRead, barkWords, setMyBarks, setBarkRules, setStaffHours, staffHours, V2, WAIVE_REASONS, LASTING, CHANGE_WORDS, LATER_MAX_DAYS, ALREADY_SENT_LOOKBACK_DAYS, replyV2, setSpouse, VOICES, VOICE_TPL, VOICE_FIXED, voiceFor, setVoice, setClientVoice, setSignOff, previewVoice, verified, CADENCE_PRESETS, gapsOf, cadenceFor, setIntensity, setClientIntensity, undiscard, setClosedDays, startMany, deletionEvidence, setCallOk, plans, quoteFor, areaZone, zoneFor, addContact, removeContact, planEnded, setLine, isLandline, RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
     dump, load, blank, setNow, setUser, linkFor, linkLive, LINK_DAYS, consentFromPage, declineTexts, stopEmail, unsubscribeLink, CONSENT_WORDING,
     get S() { return S; }, FORMS, TPL, TPL_USE, QUESTIONS, STUCK, DAY, HOUR, MIN,
     client, eng, engOf, itemsOf, openItems, progress, fill, outputCheck, channelFor, allowed, nextAllowed, live, nextItem,

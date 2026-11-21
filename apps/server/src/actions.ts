@@ -50,6 +50,11 @@ export const ACTIONS: Record<string, Rule> = {
   setVoice: { role: "owner", n: 1, run: (T, [k]) => T.setVoice(String(k || "")) },
   setClientVoice: { role: "staff", n: 2, run: (T, [cid, k]) => T.setClientVoice(String(cid || ""), k ? String(k) : "") },
   setSignOff: { role: "owner", n: 1, run: (T, [text]) => T.setSignOff(String(text == null ? "" : text).slice(0, 80)) },
+  // Barks (TH-BRK): who hears about what, staff hours, each person's own choices, and marking a bark read.
+  setBarkRules: { role: "owner", n: 1, run: (T, [rules]) => T.setBarkRules(rules && typeof rules === "object" ? rules : {}) },
+  setStaffHours: { role: "owner", n: 2, run: (T, [a, b]) => T.setStaffHours(Number(a), Number(b)) },
+  setMyBarks: { role: "staff", n: 1, run: (T, [p]) => T.setMyBarks(p && typeof p === "object" ? p : {}) },
+  barkRead: { role: "staff", n: 1, run: (T, [id]) => T.barkRead(String(id || "all")) },
   setSpouse: { role: "staff", n: 2, run: (T, [cid, other]) => T.setSpouse(String(cid || ""), other ? String(other) : "") },
   setClosedDays: { role: "owner", n: 1, run: (T, [list]) => T.setClosedDays((Array.isArray(list) ? list : []).slice(0, 100).map(String)) },
   // chase
