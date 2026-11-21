@@ -44,7 +44,7 @@ export function activity(T: Engine, limit: number, engId?: string): Event[] {
 export const countBy = (T: Engine, status: string): number => T.S.engs.filter((e: Row) => e.status === status).length;
 
 // The filters above the client list. "Needs you" is anyone waiting on a person, whatever their status.
-export const PILLS: [string, string][] = [["all", "All"], ["attention", "Needs you"], ["in_progress", "Collecting"], ["awaiting_consent", "Waiting for OK to text"], ["not_started", "Not started"], ["complete", "Complete"], ["other", "Paused or opted out"]];
+export const PILLS: [string, string][] = [["all", "All"], ["attention", "Needs you"], ["in_progress", "Fetching"], ["awaiting_consent", "Waiting for OK to text"], ["not_started", "Ready to fetch"], ["complete", "All fetched"], ["other", "Paused or opted out"]];
 export function inPill(T: Engine, e: Row, p: string, open: Row[] = openTasks(T)): boolean {
   return p === "all" || (p === "attention" ? e.status === "stuck" || open.some((t) => t.engId === e.id) : p === "other" ? ["paused", "opted_out", "closed"].includes(e.status) : e.status === p);
 }

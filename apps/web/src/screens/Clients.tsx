@@ -1,5 +1,6 @@
 // The client list: filters, selection, things to do to many clients at once, and the three dialogs that get a firm collecting.
 // Ported from the demo's clients(), clientTable() and its addClient, assignTpl and start dialogs.
+import { HoundNote } from "../components/brand";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { Engine } from "virtual:engine";
@@ -37,7 +38,7 @@ function AddClient({ onClose }: { onClose: () => void }) {
     try {
       const r = (await act("addClient", { first: v.first, last: v.last, mobile: v.mobile, email: v.email, lang: "en", entity: v.entity.trim(), rtype: v.rtype, template: v.rtype === "1040" ? v.template : BIZ[v.rtype] })) as { ok: boolean; why?: string; engId?: string };
       if (!r.ok) { setWhy((r.why || "Could not add this client") + "."); return; }   // T-38: the engine's own reason, and nothing was saved
-      toast("Client added with a checklist. Confirm it, then start collecting."); onClose(); nav("/clients/" + r.engId);
+      toast("Client added with a checklist. Confirm it, then say go fetch."); onClose(); nav("/clients/" + r.engId);
     } catch { /* the toast has said why */ } finally { setBusy(false); }
   };
   return <Modal title="Add a client" onClose={onClose} footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn pri" disabled={busy} onClick={save}>Add client</button></>}>
@@ -51,7 +52,7 @@ function AddClient({ onClose }: { onClose: () => void }) {
       {v.rtype === "1040" ? <label className="f">Checklist<select value={v.template} onChange={set("template")}>{T.templates().map((t: Row) => <option key={t.id} value={t.id}>{t.name} ({t.items.length})</option>)}</select></label>
         : <label className="f">Business, trust or organization name<input type="text" value={v.entity} onChange={set("entity")} /></label>}
     </div>
-    <p className="small muted">Needs a name and either a mobile number or an email. Nothing is sent until you start collecting.</p>
+    <p className="small muted">Needs a name and either a mobile number or an email. Nothing goes out until you say go fetch.</p>
   </Modal>;
 }
 
@@ -83,16 +84,16 @@ function StartCollecting({ onClose }: { onClose: () => void }) {
   const first = ready.find((e) => pick.has(e.id)), fc = first ? T.client(first.clientId) : null, byText = !!fc && fc.textConsent === "given" && s.firm.senderStatus === "approved";
   const toggle = (id: string) => { const n = new Set(pick); if (n.has(id)) n.delete(id); else n.add(id); setPick(n); };
   const go = async () => {
-    setBusy(true);
+    setBusy(true); const docs = [...pick].reduce((n, id) => n + T.openItems(id).length, 0);
     try {
       const r = (await act("startMany", [...pick])) as { started: number; capped: number; refused: string[]; paced?: number };
-      toast("Started " + plural(r.started, "client") + "." + (r.capped ? " " + r.capped + " more are waiting: the free trial collects from " + T.TRIAL_CLIENTS + " clients. Choose a plan to start them." : "") + (r.refused.length ? " Not started: " + r.refused.join("; ") + "." : ""));
+      toast("Off it goes. " + plural(r.started, "client") + ", " + plural(docs, "document") + " to fetch." + (r.capped ? " " + r.capped + " more are waiting: the free trial collects from " + T.TRIAL_CLIENTS + " clients. Choose a plan to start them." : "") + (r.refused.length ? " Not started: " + r.refused.join("; ") + "." : ""));
       onClose(); if (r.capped) nav("/settings?tab=plan");
     } catch { /* the toast has said why */ } finally { setBusy(false); }
   };
   const steps = <div className="steps">{["Who", "Preview", "Send"].map((x, i) => <span key={x} className={step === i + 1 ? "on" : step > i + 1 ? "done" : ""}>{i ? " › " : ""}{i + 1}. {x}</span>)}</div>;
   const foot = <><button className="btn" onClick={() => (step > 1 ? setStep(step - 1) : onClose())}>{step > 1 ? "Back" : "Cancel"}</button>{step < 3 ? <button className="btn pri" disabled={!pick.size} onClick={() => setStep(step + 1)}>Continue</button> : <button className="btn pri" disabled={busy} onClick={go}><Icon name="send" small />Start {pick.size}</button>}</>;
-  return <Modal title="Start collecting" wide onClose={onClose} head={steps} footer={foot}>
+  return <Modal title="Go fetch" wide onClose={onClose} head={steps} footer={foot}>
     {step === 1 ? <>
       {ready.length ? <><p className="muted">These clients have a confirmed checklist and have not been contacted.</p>
         <div className="list card" style={{ boxShadow: "none" }}>{ready.map((e) => { const c = T.client(e.clientId); return <label className="li" style={{ cursor: "pointer" }} key={e.id}><input type="checkbox" checked={pick.has(e.id)} onChange={() => toggle(e.id)} /><Avatar first={c.first} last={c.last} small /><span className="grow"><b>{cname(c)}</b><span className="small muted"> · {plural(T.itemsOf(e.id).length, "document")} · {c.textConsent === "given" ? "texts" : c.email ? "email invitation" : "no way to reach them"}</span></span></label>; })}</div></>
@@ -129,7 +130,7 @@ export function Clients() {
   // One action for everyone selected. Whoever it does not apply to is left alone and counted.
   const bulk = async (kind: "checkin" | "recommend" | "confirm" | "start" | "pause" | "resume") => {
     try {
-      if (kind === "start") { const r = (await act("startMany", ids)) as { started: number; capped: number; refused: string[]; paced?: number }; toast((r.paced ? "The first 50 go now and the rest in groups of 50 every half hour. " : "") + "Started " + r.started + (ids.length - r.started ? ", left " + (ids.length - r.started) + " that could not be started" + (r.refused.length ? " (" + r.refused.join("; ").toLowerCase() + ")" : "") : "") + "."); }
+      if (kind === "start") { const r = (await act("startMany", ids)) as { started: number; capped: number; refused: string[]; paced?: number }; toast((r.paced ? "The first 50 go now and the rest in groups of 50 every half hour. " : "") + "Off it goes. Fetching for " + r.started + (ids.length - r.started ? ", left " + (ids.length - r.started) + " that could not be started" + (r.refused.length ? " (" + r.refused.join("; ").toLowerCase() + ")" : "") : "") + "."); }
       else if (kind === "checkin") { const r = await actMany(ids.map((id) => ["sendCheckin", id])), ok = r.filter((x) => !x).length; toast("Check-in sent to " + plural(ok, "client") + "." + (ids.length - ok ? " " + (ids.length - ok) + " left out: already collecting, already answered, or no way to reach them." : "")); }
       else if (kind === "recommend") { const r = (await actMany(ids.map((id) => ["addRecommended", id]))) as number[], n = r.reduce((a, b) => a + (+b || 0), 0), m = r.filter((x) => +x > 0).length; toast("Added " + plural(n, "suggested document") + " across " + plural(m, "client") + ". Each one shows the reason on the checklist."); }
       else {
@@ -140,14 +141,14 @@ export function Clients() {
       clear();
     } catch { /* the toast has said why */ }
   };
-  const actions: ReactNode = can() ? <><Link className="btn hide-s" to="/add-clients"><Icon name="upload" small />Import</Link><button className="btn" onClick={() => setDialog({ kind: "add" })}><Icon name="plus" small /><span className="hide-s">Add client</span></button>{ready ? <button className="btn pri" onClick={() => setDialog({ kind: "start" })}><Icon name="send" small />Start collecting ({ready})</button> : null}</> : null;
+  const actions: ReactNode = can() ? <><Link className="btn hide-s" to="/add-clients"><Icon name="upload" small />Import your client list</Link><button className="btn" onClick={() => setDialog({ kind: "add" })}><Icon name="plus" small /><span className="hide-s">Add client</span></button>{ready ? <button className="btn pri" onClick={() => setDialog({ kind: "start" })}><Icon name="send" small />Go fetch ({ready})</button> : null}</> : null;
 
   return <Page title="Clients" actions={actions}>
     <div className="row"><div className="pills">{PILLS.map((p) => <button key={p[0]} className={pill === p[0] ? "on" : ""} aria-pressed={pill === p[0]} onClick={() => setPill(p[0])}>{p[1]}<span>{s.engs.filter((e: Row) => inPill(T, e, p[0], open)).length}</span></button>)}</div><span className="sp" />
       <input type="search" placeholder="Filter this list" aria-label="Filter clients" style={{ width: 180 }} value={q} onChange={(e) => { setQ(e.target.value); setLimit(PAGE); }} />
       <select aria-label="Preparer" value={prep} onChange={(e) => setPrep(e.target.value)}><option value="">All preparers</option>{s.users.filter((u: Row) => u.role !== "read_only").map((u: Row) => <option key={u.id} value={u.id}>{u.first}</option>)}</select></div>
     <div className="card">
-      {!s.clients.length ? <Empty><div className="big"><Icon name="users" /></div><b>No clients yet.</b><br />Bring in your list, or add one client to try it.{can() ? <div className="row" style={{ justifyContent: "center", marginTop: 14 }}><Link className="btn pri" to="/add-clients"><Icon name="upload" small />Import a list</Link><button className="btn" onClick={() => setDialog({ kind: "add" })}><Icon name="plus" small />Add one client</button></div> : null}</Empty>
+      {!s.clients.length ? <HoundNote title="No clients yet." mode="sniff wag"><p>Import your client list and the hound will get to work.</p>{can() ? <div className="row" style={{ justifyContent: "center", marginTop: 14 }}><Link className="btn pri" to="/add-clients"><Icon name="upload" small />Import your client list</Link><button className="btn" onClick={() => setDialog({ kind: "add" })}><Icon name="plus" small />Add one client</button></div> : null}</HoundNote>
         : !rows.length ? <Empty>No clients match. <button className="btn sm" onClick={() => { setQ(""); setPrep(""); setPill("all"); }}>Clear filters</button></Empty>
         : <><div className="tbl"><table className="ctbl"><thead><tr><th style={{ width: 36 }}>{can() ? <input type="checkbox" aria-label="Select all shown" checked={allSel} onChange={() => { const n = new Set(sel); shown.forEach((e) => (allSel ? n.delete(e.id) : n.add(e.id))); setSel(n); }} /> : null}</th><th>Client</th><th>Preparer</th><th>Status</th><th>Documents</th><th>Last heard</th><th>What happens next</th></tr></thead>
           <tbody>{shown.map((e) => { const c = T.client(e.clientId), p = T.progress(e.id), u = s.users.find((x: Row) => x.id === c.preparer); return <tr key={e.id} tabIndex={0} className={"click" + (sel.has(e.id) ? " sel" : "")} onClick={() => nav("/clients/" + e.id)} onKeyDown={(ev) => { if (ev.key === "Enter" && ev.target === ev.currentTarget) nav("/clients/" + e.id); }}>
@@ -162,7 +163,7 @@ export function Clients() {
     </div>
     {ids.length && can() ? <div className="card pad row bulkbar" role="region" aria-label="Selected clients"><b>{ids.length} selected</b><span className="sp" />
       <button className="btn sm" onClick={() => bulk("checkin")}>Send check-in</button><button className="btn sm" onClick={() => setDialog({ kind: "assign", ids })}>Choose a checklist</button><button className="btn sm" onClick={() => bulk("recommend")}>Add suggested documents</button>
-      <button className="btn sm" onClick={() => bulk("confirm")}>Confirm checklists</button><button className="btn sm" onClick={() => bulk("start")}>Start collecting</button><button className="btn sm" onClick={() => bulk("pause")}>Pause</button><button className="btn sm" onClick={() => bulk("resume")}>Resume</button>
+      <button className="btn sm" onClick={() => bulk("confirm")}>Confirm checklists</button><button className="btn sm" onClick={() => bulk("start")}>Go fetch</button><button className="btn sm" onClick={() => bulk("pause")}>Pause</button><button className="btn sm" onClick={() => bulk("resume")}>Resume</button>
       <button className="btn sm ghost" style={{ color: "#fff" }} onClick={clear}>Clear</button></div> : null}
     {dialog?.kind === "add" ? <AddClient onClose={() => setDialog(null)} /> : null}
     {dialog?.kind === "start" ? <StartCollecting onClose={() => setDialog(null)} /> : null}

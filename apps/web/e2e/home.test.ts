@@ -15,10 +15,10 @@ scene("web: a new owner signs in through the screens and lands on a Home that sa
   // docs/UX.md rule 2: three numbered steps, and only the current one has a button. Rule 6: no primary button that cannot do anything.
   const steps = page.locator(".gs"); assert.equal(await steps.count(), 3); assert.equal(await page.locator(".gs.cur").count(), 1);
   assert.equal(await page.locator(".gs:not(.cur) .btn").count(), 0); assert.deepEqual((await page.locator(".gs.cur .btn").allTextContents()).map(text), ["Import a list", "Add one client"]);
-  assert.equal(await page.getByRole("button", { name: /Start collecting/ }).count(), 0);
+  assert.equal(await page.getByRole("button", { name: /Go fetch/ }).count(), 0);
   assert.equal(await page.locator(".pipe").count(), 0, "no counts for a firm with no clients");
   // The menu: four things, then More (rule 4). Settings is the owner's.
-  assert.deepEqual((await page.locator(".side nav .nav").allTextContents()).map(text), ["Home", "Clients", "Needs you", "The Hound your assistant", "Add clients", "All messages", "Progress", "How it works", "Settings"]);
+  assert.deepEqual((await page.locator(".side nav .nav").allTextContents()).map(text), ["Home", "Clients", "Review queue", "The hound", "Add clients", "All messages", "Progress", "How it works", "Settings"]);
   await page.locator(".side").getByRole("link", { name: "Add clients" }).click(); await page.getByText("Where is your client list today?").waitFor(); assert.equal(await page.title(), "Add clients · Tallyhound");
   await page.locator(".side").getByRole("link", { name: "Progress" }).click(); await page.getByText("Nothing to measure yet.").waitFor();
   await page.getByRole("button", { name: "Sign out" }).click(); await page.waitForURL("**/signin"); await page.goto(W.url + "/"); await page.waitForURL("**/signin");
@@ -31,11 +31,11 @@ scene("web: Home shows what the engine holds, and waiving from Home changes the 
   assert.deepEqual(got, want); assert.equal(await page.locator("a.pstep").count(), 5);
   assert.match(text(await page.locator(".side .firm span").textContent()), /3 clients/);
   // Needs you: Jo said she has no mortgage statement.
-  const row = page.locator(".card", { hasText: "Needs you" }).first().locator(".li", { hasText: "Jo Day" }); assert.match(text(await row.textContent()), /Says they don't have a document/);
-  assert.equal(text(await page.locator(".side .nav", { hasText: "Needs you" }).locator(".n").textContent()), "1");
-  assert.match(text(await page.locator(".feed").textContent()), /Jo Day sent a W-2 wage statement from Acme Logistics Accepted/);
+  const row = page.locator(".card", { hasText: "Review queue" }).first().locator(".li", { hasText: "Jo Day" }); assert.match(text(await row.textContent()), /Says they don't have a document/);
+  assert.equal(text(await page.locator(".side .nav", { hasText: "Review queue" }).locator(".n").textContent()), "1");
+  assert.match(text(await page.locator(".feed").textContent()), /Jo Day sent a W-2 wage statement from Acme Logistics Passed the sniff test/);
   assert.match(text(await page.locator(".card", { hasText: "from an unknown sender" }).last().textContent()), /1 message from an unknown sender/);
-  await row.getByRole("button", { name: "Waive" }).click(); await row.waitFor({ state: "detached" });
+  await row.getByRole("button", { name: "Not needed this year" }).click(); await row.waitFor({ state: "detached" });
   const after = await W.state(firmId); assert.equal(after.S.tasks.filter((t: { status: string }) => t.status === "open").length, 0); assert.equal(after.S.items.find((i: { form: string }) => i.form === "1098").state, "waived");
   assert.ok(after.S.audit.some((a: { actor: string }) => a.actor === "Pat Owner"), "and the audit trail names who did it");
   // Client search finds by name and by phone.
@@ -46,7 +46,7 @@ scene("web: Home shows what the engine holds, and waiving from Home changes the 
 scene("web: a read-only person can look at Home and is offered nothing that changes anything", async (W) => {
   const { firmId, ownerId } = await busyFirm(W); await W.firms.addUser(firmId, (await W.auth.userById(ownerId))!, { name: "Sam Reader", email: "reader@firm1.test", role: "read_only" });
   const page = await W.signIn("reader@firm1.test");
-  const row = page.locator(".card", { hasText: "Needs you" }).first().locator(".li", { hasText: "Jo Day" }); await row.waitFor();
+  const row = page.locator(".card", { hasText: "Review queue" }).first().locator(".li", { hasText: "Jo Day" }); await row.waitFor();
   assert.equal(await row.locator("button.btn.sm").count(), 0, "no Waive or Ask again"); assert.equal(await page.locator(".side .nav", { hasText: "Settings" }).count(), 0); assert.equal(await page.locator(".gs").count(), 0);
   assert.match(text(await page.locator(".who").textContent()), /Sam Reader ?Read-only/);
 });

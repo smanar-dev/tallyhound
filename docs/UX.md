@@ -6,10 +6,10 @@ Tools in this market lose customers because they are hard to learn. A CPA in Jan
 
 1. **A new firm is collecting in ten clicks.** Measured on the demo: from an empty firm to twelve clients being contacted takes 10 clicks and one paste. A change that adds a click to this path needs a reason.
 2. **One screen tells you what to do next.** Home shows three numbered steps until the first requests go out: add clients, choose a checklist, start collecting. Only the current step has buttons.
-3. **One place for work that needs a person.** "Needs you" holds unsure documents, client questions, "I don't have that" replies, calls to make and drafts to approve. One badge in the menu, not three.
-4. **Four things in the main menu.** Home, Clients, Needs you, The Hound. Everything else sits under More.
+3. **One place for work that needs a person.** The review queue holds unsure documents, client questions, "I don't have that" replies, calls to make and drafts to approve. One badge in the menu, not three.
+4. **Four things in the main menu.** Home, Clients, Review queue, The hound. Everything else sits under More.
 5. **No screen starts empty and silent.** Every empty screen says what will appear there and offers the one button that gets you there.
-6. **A primary button appears only when it can do something.** No "Start collecting" when there is nobody to start.
+6. **A primary button appears only when it can do something.** No "Go fetch" when there is nobody to fetch for.
 7. **Plain words.** The table below is the vocabulary. Do not bring the left column back.
 8. **The system explains itself.** Every automatic action has a one-line reason a CPA can read ("Why it did that").
 9. **Nothing irreversible without a clear warning.** Removing a template or waiving an item says what it affects. Purge asks for the client's last name.
@@ -17,25 +17,35 @@ Tools in this market lose customers because they are hard to learn. A CPA in Jan
 
 ## Vocabulary
 
+Rewritten November 21, 2026 from the brand book and the content book (`docs/REBRAND.md` section 4). `apps/web/e2e/rules.test.ts` checks the left column never appears on a screen.
+
 | Do not say | Say |
 |---|---|
-| Start outreach | Start collecting |
-| Review / Review queue | Needs you |
+| Start outreach, Start collecting | Go fetch (the button); "Fetch for Maria" for one client; "say go fetch" in a sentence |
+| Needs you, as the name of the place | The review queue. "Needs you" is the status on a client or a document |
+| Review, reviewed (of what Tallyhound does to a document) | sniff test; passed the sniff test; did not pass the sniff test |
+| Queue (anything but the review queue) | Coming up |
+| Stuck | Gone quiet, or Needs you |
+| Not started, Collecting, Complete | Ready to fetch, Fetching, All fetched |
+| Copilot, Autopilot | Approve each message, Send on its own |
+| Waive | Not needed this year, with a reason |
+| Take over | I'll handle Maria |
+| Alert, notification (to staff) | A bark. Never said to a client |
+| The Hound | the hound, lower case. It has no name yet |
 | Inbox | All messages |
 | Unmatched tray | Unknown senders |
-| Stuck | Needs you / gone quiet |
 | Waiting on consent | Waiting for OK to text |
 | Handoffs | Questions for you |
 | Approvals | Drafts to approve |
-| Queue | Coming up |
 | Playbook | Rules it follows |
 | Live log | Activity |
 | Requirements | Suggested |
 | Deliver | Hand off files |
 | Latest reasoning | Why it did that |
 | Engagement | File (never shown to users as "engagement") |
+| TallyHound, Tally Hound, TH | Tallyhound |
 
-Copilot and Autopilot stay as names, always with the plain sentence next to them: "You approve each message" and "It sends on its own and comes to you when it needs a person".
+Mechanics, from the brand book: US spelling; sentence case for headings and buttons; form names written exactly (W-2, 1099-NEC, Schedule K-1); no em dashes; no exclamation marks; no emoji; the hound never appears beside an error and never in anything a firm's client sees.
 
 ## How to test it
 

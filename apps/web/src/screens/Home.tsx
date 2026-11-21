@@ -1,4 +1,5 @@
 // Home: one screen that tells a preparer what to do next (docs/UX.md rule 2). Ported from the demo's home().
+import { HoundNote } from "../components/brand";
 import { Link, useNavigate } from "react-router-dom";
 import { useState, type ReactNode } from "react";
 import { useFeatures, useFirm } from "../lib/firm";
@@ -16,7 +17,7 @@ function NeedRow({ x }: { x: Need }) {
   if (can()) {
     if (x.t) acts = x.t.kind === "document" ? <Link className="btn sm pri" to={"/needs-you?task=" + x.t.id}>Check it</Link>
       : x.t.kind === "question" || x.t.kind === "call" ? <Link className="btn sm pri" to={"/clients/" + x.e.id + "?tab=conversation"}>{x.t.kind === "call" ? "Call script" : "Reply"}</Link>
-      : x.t.kind === "says_none" ? <><button className="btn sm" onClick={() => decide("waive")}>Waive</button><button className="btn sm" onClick={() => decide("reask")}>Ask again</button></>
+      : x.t.kind === "says_none" ? <><button className="btn sm" onClick={() => decide("waive")}>Not needed this year</button><button className="btn sm" onClick={() => decide("reask")}>Ask again</button></>
       : <button className="btn sm" onClick={() => decide("handled")}>Dismiss</button>;
     else if (x.checkin) acts = <Link className="btn sm pri" to={"/clients/" + x.e.id + "?tab=checklist"}>Go through the checklist</Link>;
     else if (x.suggest) acts = <Link className="btn sm pri" to={"/clients/" + x.e.id + "?tab=" + (x.custom ? "checklist" : "suggested")}>See suggestion</Link>;
@@ -47,7 +48,7 @@ function StartCard() {
   const checkinAll = async () => {
     const who: Row[] = s.engs.filter((e: Row) => e.status === "not_started" && !e.checkin); if (!who.length) return toast("Nobody left to send it to.");
     try { const r = await actMany(who.map((e) => ["sendCheckin", e.id])), ok = r.filter((x) => !x).length, no = who.length - ok;
-      toast(ok ? "Check-in sent to " + plural(ok, "client") + ". Answers come back to Needs you as proposed checklists." + (no ? " " + no + " could not be sent." : "") : String(r.find((x) => x) || "It could not be sent.")); } catch { /* the toast has said why */ }
+      toast(ok ? "Check-in sent to " + plural(ok, "client") + ". Answers come back to the review queue as proposed checklists." + (no ? " " + no + " could not be sent." : "") : String(r.find((x) => x) || "It could not be sent.")); } catch { /* the toast has said why */ }
   };
   const unconf = s.engs.filter((e: Row) => !e.confirmed && e.status === "not_started").length, started = s.engs.filter((e: Row) => e.status !== "not_started").length;
   if (started || !can()) return null;
@@ -56,7 +57,7 @@ function StartCard() {
   return <div className="card pad col" style={{ gap: 4 }}><h2>Get your first requests out</h2>
     <Step k={1} title="Add your clients" text={n ? plural(n, "client") + " added." : "Upload a spreadsheet of names with a mobile number or email, or add one client to try it."}><Link className="btn pri" to="/add-clients"><Icon name="upload" small />Import a list</Link><Link className="btn" to="/clients?do=add"><Icon name="plus" small />Add one client</Link></Step>
     <Step k={2} title="Give each client a checklist" text={n && !unconf ? "Every client has a confirmed checklist." : (sentCk > backs ? backs + " of " + sentCk + " check-ins are back. " : "") + "The list of documents each client owes you. Let clients tell you with a few taps, or pick a ready-made list for everyone."}><button className="btn pri" onClick={checkinAll}><Icon name="send" small />Ask clients with a 2-minute check-in</button><Link className="btn" to="/clients?do=assign"><Icon name="file" small />Choose a checklist for all {unconf}</Link><Link className="btn" to="/clients?show=not_started">Go through them one by one</Link></Step>
-    <Step k={3} title="Start collecting" text={"Tallyhound asks each client for their documents by text and email, checks what comes back, and follows up. " + (s.firm.hound.mode === "copilot" ? "You approve each message before it goes." : "It only comes to you when it needs a person.")}><Link className="btn pri" to="/clients?do=start"><Icon name="send" small />Start collecting for {plural(ready, "client")}</Link></Step>
+    <Step k={3} title="Go fetch" text={"Tallyhound asks each client for their documents by text and email, checks what comes back, and follows up. " + (s.firm.hound.mode === "copilot" ? "You approve each message before it goes." : "It only comes to you when it needs a person.")}><Link className="btn pri" to="/clients?do=start"><Icon name="send" small />Go fetch for {plural(ready, "client")}</Link></Step>
   </div>;
 }
 
@@ -82,7 +83,7 @@ export function Home() {
   const upcoming: Row[] = s.engs.filter((e: Row) => e.next && e.next > s.now && ["in_progress", "awaiting_consent"].includes(e.status)).sort((a: Row, b: Row) => a.next - b.next).slice(0, 6);
   const anyStarted = s.engs.some((e: Row) => e.status !== "not_started"), feed = activity(T, 10);
   const more = readyToStart(T).length;
-  return <Page title="Home" actions={can() && more && anyStarted ? <Link className="btn pri" to="/clients?do=start"><Icon name="send" small />Start collecting ({more})</Link> : null}>
+  return <Page title="Home" actions={can() && more && anyStarted ? <Link className="btn pri" to="/clients?do=start"><Icon name="send" small />Go fetch ({more})</Link> : null}>
     <div><h1>Good {h < 12 ? "morning" : h < 17 ? "afternoon" : "evening"}, {s.user.first}</h1>
       <p className="muted" style={{ marginTop: 4 }}>{DOW[s.now.getDay()]}, {MON[s.now.getMonth()]} {s.now.getDate()}. {!s.clients.length ? "Three steps to your first request. It takes about ten minutes." : !anyStarted ? "Your clients are in. Nothing has been sent yet." : ny.length ? ny.length + " thing" + (ny.length > 1 ? "s need" : " needs") + " you. Tallyhound is handling the rest." : "Nothing needs you. Tallyhound is collecting for everyone else."}</p></div>
     <StartCard /><SetupCard />
@@ -91,8 +92,8 @@ export function Home() {
       <p className="small muted" style={{ marginTop: -8 }}>{plural(wk.length, "document")} in the last 7 days{wk.length ? " · " + Math.round((100 * auto) / wk.length) + "% checked with no staff touch" : ""}</p>
       <div className="split">
         <div className="col" style={{ gap: 20 }}>
-          <div className="card"><div className="hd"><h2>Needs you</h2><span className="sp" />{openTasks(T).length ? <Link className="btn sm" to="/needs-you">See all</Link> : null}</div>
-            {ny.length ? <div className="list">{ny.slice(0, 8).map((x, i) => <NeedRow key={(x.t ? x.t.id : x.e.id) + ":" + i} x={x} />)}</div> : <Empty><div className="big"><Icon name="check" /></div><b>All clear.</b><br />Client questions, documents Tallyhound is unsure about and clients who have gone quiet show up here.</Empty>}</div>
+          <div className="card"><div className="hd"><h2>Review queue</h2><span className="sp" />{openTasks(T).length ? <Link className="btn sm" to="/needs-you">See all</Link> : null}</div>
+            {ny.length ? <div className="list">{ny.slice(0, 8).map((x, i) => <NeedRow key={(x.t ? x.t.id : x.e.id) + ":" + i} x={x} />)}</div> : <HoundNote title="Nothing needs you right now."><p>The hound has it. A document it could not confirm, a client question or a client who has gone quiet shows up here.</p></HoundNote>}</div>
           <div className="card"><div className="hd"><h2>Latest activity</h2><span className="sp" /><span className="small faint">Newest first</span></div>
             {feed.length ? <div className="list feed">{feed.map((x, i) => <FeedLine key={i + ":" + +x.at} x={x} />)}</div> : <Empty>Nothing yet. Requests sent, replies and documents show up here as they happen.</Empty>}</div>
         </div>

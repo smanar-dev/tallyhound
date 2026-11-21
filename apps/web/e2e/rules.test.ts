@@ -42,12 +42,14 @@ scene("T-52: an HTML payload planted in every stored text field shows as text on
 
 // The left column of docs/UX.md's vocabulary table: words that must not come back. "Approvals" and "Handoffs" are retired as names
 // for a list; "approval" in a sentence about the carriers is ordinary English and stays.
-const BANNED = ["start outreach", "review queue", "review", "inbox", "unmatched tray", "unmatched", "stuck", "waiting on consent", "handoffs", "approvals", "queue", "playbook", "live log", "requirements", "deliver", "latest reasoning", "engagements?"];
+// "The review queue" is the brand's name for the one place work waits for a person, so that phrase is taken out before "review" and
+// "queue" are looked for on their own: a document is never "reviewed" by Tallyhound, and nothing else is a "queue".
+const BANNED = ["start outreach", "start collecting", "copilot", "autopilot", "review", "inbox", "unmatched tray", "unmatched", "stuck", "waiting on consent", "handoffs", "approvals", "queue", "playbook", "live log", "requirements", "deliver", "latest reasoning", "engagements?"];
 for (const busy of [true, false]) scene("T-65: no screen uses a word the vocabulary table retired (" + (busy ? "a busy firm" : "an empty firm") + ")", async (W) => {
   const firmId = busy ? (await busyFirm(W)).firmId : (await W.newFirm()).firmId, page = await W.signIn("pat1@firm1.test");
   for (const route of busy ? await routesFor(W, firmId) : ROUTES) {
     await page.goto(W.url + route); await page.locator(".side .firm").waitFor();
-    const seen = (await page.evaluate(() => document.body.innerText + " " + [...document.querySelectorAll("[aria-label],[title],[placeholder]")].map((e) => (e.getAttribute("aria-label") || "") + " " + (e.getAttribute("title") || "") + " " + (e.getAttribute("placeholder") || "")).join(" "))).toLowerCase();
+    const seen = (await page.evaluate(() => document.body.innerText + " " + [...document.querySelectorAll("[aria-label],[title],[placeholder]")].map((e) => (e.getAttribute("aria-label") || "") + " " + (e.getAttribute("title") || "") + " " + (e.getAttribute("placeholder") || "")).join(" "))).toLowerCase().replace(/review queue/g, " ");
     for (const w of BANNED) assert.ok(!new RegExp("\\b" + w + "\\b").test(seen), route + ' says "' + w + '"');
   }
 });

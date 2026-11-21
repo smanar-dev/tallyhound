@@ -1,6 +1,7 @@
 // The firm's workspace in the browser. The server sends the saved state; the same rules engine that runs on the server loads it
 // here, so every count, status and check on screen comes from the engine and nothing is worked out twice (CLAUDE.md).
 // The engine here is for reading. Anything that changes something goes to the server as one action and the state is fetched again.
+import { Hound } from "../components/brand";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createEngine, type Engine } from "virtual:engine";
 import { api, type Features, ApiError, type Me } from "./api";
@@ -69,7 +70,7 @@ export function FirmProvider({ children, onSignedOut }: { children: ReactNode; o
   }, [reload, toast]);
   const value = useMemo<Firm | null>(() => phase.at !== "ready" ? null : { T: phase.T, me: phase.me, can: (level) => (level === "owner" ? phase.me.role === "owner" : phase.me.role !== "read_only"), act, actMany, reload, toast }, [phase, act, actMany, reload, toast]);
 
-  if (phase.at === "loading" || phase.at === "signin") return <div className="main"><div className="empty" role="status">Loading your firm…</div></div>;
+  if (phase.at === "loading" || phase.at === "signin") return <div className="main"><div className="empty hound" role="status"><Hound width={120} mode="run" /><p>Loading your firm…</p></div></div>;
   if (phase.at === "error") return <div className="main"><div className="empty" role="alert"><b>Tallyhound could not load your firm.</b><br />{phase.message}<br /><button className="btn" style={{ marginTop: 12 }} onClick={() => { setPhase({ at: "loading" }); void reload(); }}>Try again</button></div></div>;
   return <Ctx.Provider value={value}>{children}{toastText ? <div className="toast" role="status">{toastText}{undo ? <button className="toastbtn" onClick={() => { const u = undo; setToast(null); setUndo(null); window.clearTimeout(timer.current); u.run(); }}>{undo.label}</button> : null}</div> : null}</Ctx.Provider>;
 }

@@ -14,7 +14,7 @@ scene("T-18: in Copilot nothing reaches a phone until Approve is pressed, and wh
   const { firmId, ownerId } = await W.newFirm();
   await W.app.staff(firmId, ownerId, (T: Engine) => { T.S.firm.senderStatus = "approved"; T.importRows(T.parseCSV("First,Last,Email,Mobile\nJo,Day,jo@x.example,6155550111")); const e = T.S.engs[0]; e.confirmed = true; T.giveConsent(T.S.clients[0].id, "page"); });
   const page = await W.signIn("pat1@firm1.test"), T0: Engine = await W.state(firmId), jo = T0.S.engs[0]; assert.equal(T0.S.firm.hound.mode, "copilot");
-  const before = W.sms.sent.length; await page.goto(W.url + "/clients/" + jo.id); await page.getByRole("button", { name: "Start collecting" }).click(); await page.getByText(/^Collecting started/).waitFor();
+  const before = W.sms.sent.length; await page.goto(W.url + "/clients/" + jo.id); await page.getByRole("button", { name: "Go fetch" }).click(); await page.getByText(/^Off it goes/).waitFor();
   await page.getByRole("tab", { name: /Conversation/ }).click(); const draft = page.getByLabel(/^Draft:/); await draft.waitFor();
   assert.equal(W.sms.sent.length, before, "the first request is a draft, not a text"); assert.match(text(await page.locator(".convo").textContent()), /Draft waiting for you/);
   const body = await draft.inputValue(); assert.match(body, /Jo/); await draft.fill(body.replace("Hi Jo", "Hello Jo")); await page.getByRole("button", { name: "Approve and send" }).click(); await draft.waitFor({ state: "detached" });
@@ -37,14 +37,14 @@ scene("the checklist can be changed the ways a preparer needs, and every change 
   T = await W.state(firmId); assert.equal(T.itemsOf(ana.id).length, before + 1);
   // Waive it with a reason (docs/UX.md rule 9: it says what it affects), then restore it.
   const row = page.locator(".li", { hasText: "First Farmers Bank" }); await row.getByRole("button", { name: /^Actions for/ }).click(); await page.getByRole("button", { name: "Not needed this year" }).click();
-  const dlg = page.getByRole("dialog", { name: "Not needed this year" }); assert.match(text(await dlg.textContent()), /comes off what Ana is asked for/); await dlg.getByLabel("Reason, for the file").fill("Account closed in 2025"); await dlg.getByRole("button", { name: "Waive" }).click();
+  const dlg = page.getByRole("dialog", { name: "Not needed this year" }); assert.match(text(await dlg.textContent()), /comes off what Ana is asked for/); await dlg.getByLabel("Reason, for the file").fill("Account closed in 2025"); await dlg.getByRole("button", { name: "Not needed this year" }).click();
   await row.getByText(/Not needed · .*Account closed in 2025/).waitFor(); T = await W.state(firmId); assert.equal(T.itemsOf(ana.id).find((i: { payer: string }) => i.payer === "First Farmers Bank").state, "waived");
   await row.getByRole("button", { name: /^Actions for/ }).click(); await page.getByRole("button", { name: "Restore" }).click(); await row.getByText(/Not requested yet/).waitFor();
   await row.getByRole("button", { name: /^Actions for/ }).click(); await page.getByRole("button", { name: "Remove from checklist" }).click(); await row.waitFor({ state: "detached" });
   // T-66: no question first, and ten seconds to take it back.
   await page.getByRole("button", { name: "Undo" }).click(); await page.getByText("Put back.").waitFor(); await row.waitFor(); await row.getByRole("button", { name: /^Actions for/ }).click(); await page.getByRole("button", { name: "Remove from checklist" }).click(); await row.waitFor({ state: "detached" });
   // Confirm, then start from the card beside the checklist.
-  await page.getByRole("button", { name: "Confirm checklist" }).first().click(); await page.getByRole("button", { name: "Start collecting" }).waitFor(); await page.getByRole("button", { name: "Start collecting" }).click(); await page.getByText(/^Collecting started/).waitFor();
+  await page.getByRole("button", { name: "Confirm checklist" }).first().click(); await page.getByRole("button", { name: "Go fetch" }).waitFor(); await page.getByRole("button", { name: "Go fetch" }).click(); await page.getByText(/^Off it goes/).waitFor();
   T = await W.state(firmId); assert.equal(engOf(T, "Ana").confirmed, true); assert.notEqual(engOf(T, "Ana").status, "not_started");
   await page.getByRole("tab", { name: "Activity" }).click(); await page.locator(".split .li", { hasText: "Checklist confirmed" }).waitFor(); await page.locator(".split .li", { hasText: "Collecting started" }).waitFor();
   await page.goto(W.url + "/clients/nobody"); await page.getByText("That client is not on your list.").waitFor();
@@ -53,7 +53,7 @@ scene("the checklist can be changed the ways a preparer needs, and every change 
 scene("T-90: a document added by staff is checked like any other, shown with its three checks, and the client hears nothing", async (W) => {
   const { firmId } = await busyFirm(W), page = await W.signIn("pat1@firm1.test"), T0: Engine = await W.state(firmId), jo = engOf(T0, "Jo"), sent = W.sms.sent.length + W.email.sent.length;
   await page.goto(W.url + "/clients/" + jo.id + "?tab=documents"); await page.locator(".dcard").first().waitFor(); assert.equal(await page.locator(".dcard").count(), 1);
-  const first = page.locator(".dcard").first(); assert.match(text(await first.textContent()), /W-2.*Accepted.*Acme Logistics · 2026.*Right document.*Right information.*Clear to read/);
+  const first = page.locator(".dcard").first(); assert.match(text(await first.textContent()), /W-2.*Passed the sniff test.*Acme Logistics · 2026.*Right document.*Right information.*Clear to read/);
   const v = T0.verdict(T0.S.docs.find((d: { engId: string }) => d.engId === jo.id)); assert.equal(await first.locator(".dots3 i.ok").count(), [v.doc, v.info, v.clear].filter((x: { ok: boolean }) => x.ok === true).length, "the dots are T.verdict's answers");
   await page.locator('input[type="file"]').setInputFiles({ name: "paper-w2.jpg", mimeType: "image/jpeg", buffer: JPEG }); await page.getByText(/1 document added and checked\. Jo was not messaged\./).waitFor();
   assert.equal(await page.locator(".dcard").count(), 2); assert.equal(W.sms.sent.length + W.email.sent.length, sent);

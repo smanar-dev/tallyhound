@@ -34,7 +34,7 @@ export async function world() {
     stripe: (async (u: unknown) => new Response(JSON.stringify({ id: "x_1", url: String(u).includes("portal") ? "https://billing.stripe.com/p/session/x_1" : "https://checkout.stripe.com/c/pay/x_1" }), { status: 200, headers: { "content-type": "application/json" } })) as unknown as typeof fetch,
     // A stand-in for Google's token service, enough to connect and disconnect a drive.
     google: (async (u: unknown, init: RequestInit = {}) => { const p = new URLSearchParams(String(init.body || "")), ok = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { "content-type": "application/json" } }); return String(u).includes("/token") ? ok(p.get("grant_type") === "authorization_code" ? { access_token: "a1", refresh_token: "r1", expires_in: 3600, scope: "https://www.googleapis.com/auth/drive.file" } : { access_token: "a2", expires_in: 3600 }) : ok({}); }) as unknown as typeof fetch,
-    // A stand-in for Ask the Hound's model: it uses the real look-up, then answers from what came back.
+    // A stand-in for Ask the hound's model: it uses the real look-up, then answers from what came back.
     converse: { async converse(c) { const q = c.messages.at(-1)!.text; if (/advice/i.test(q)) throw Object.assign(new Error("busy"), { code: "busy" }); const L = c.run("find_clients", {}) as { name: string }[]; return L.length + " on your list: " + L.map((x) => x.name).join(", ") + "."; } } });
   await H.server.listen({ port, host: "127.0.0.1" });
   browser = browser || (await chromium.launch());

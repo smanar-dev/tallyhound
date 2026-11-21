@@ -31,7 +31,7 @@ function NextSeason() {
   const done = s.engs.filter((e: Row) => e.year < next && ["complete", "closed"].includes(e.status)).length, open = s.engs.filter((e: Row) => e.year < next && !["complete", "closed"].includes(e.status)).length;
   const go = async () => { setAsk(false); try { const r = (await act("rollSeason", next)) as { rolled?: number; left?: number } | string; if (typeof r === "string") return toast(r + "."); toast("Tax year " + next + " started: " + plural(r.rolled || 0, "client") + " carried forward" + (r.left ? ", " + r.left + " still on " + cur : "") + "."); } catch { /* said */ } };
   return <div className="col" style={{ gap: 8, borderTop: "1px solid var(--line2)", paddingTop: 14 }}><h3>Start the {next} season</h3>
-    <p className="small muted">Each finished client gets a new checklist for {next}, built from what they sent for {cur}: the same documents are expected again, and anything they said they do not have is not asked for. Their {cur} file becomes a short summary on their page. Nothing is sent until you start collecting.</p>
+    <p className="small muted">Each finished client gets a new checklist for {next}, built from what they sent for {cur}: the same documents are expected again, and anything they said they do not have is not asked for. Their {cur} file becomes a short summary on their page. Nothing goes out until you say go fetch.</p>
     <div className="row"><button className="btn" disabled={!done} onClick={() => setAsk(true)}>Start the {next} season</button><span className="small muted">{done ? plural(done, "client") + " finished and ready" : "No client is finished with " + cur + " yet"}{open ? ". " + open + " still being collected stay on " + cur : ""}.</span></div>
     {ask ? <Modal title={"Start the " + next + " season?"} onClose={() => setAsk(false)} footer={<><button className="btn" onClick={() => setAsk(false)}>Cancel</button><button className="btn pri" onClick={go}>Start {next}</button></>}><p>{plural(done, "client")} will move to tax year {next}. Their {cur} documents and messages are replaced by a summary: which documents came in, and when. {open ? open + " still being collected stay as they are. " : ""}This cannot be undone.</p></Modal> : null}</div>;
 }
@@ -134,7 +134,7 @@ function HoursTab() {
     <ClosedDays />
     <h4 style={{ marginTop: 8 }}>The rhythm when a client goes quiet</h4>
     <ol className="rhythm">{days.map((d, i) => <li key={d}><b>Day {d}</b><span>{["First request", "Reminder", "Reminder", "Reminder", "Final note"][i]}</span></li>)}</ol>
-    <p className="small muted">Never on Sundays or federal holidays. At most one automated message a day, unless the client replied in the last {f.liveMin} minutes. After the final note Tallyhound asks you to call, if that is switched on under The Hound, Rules it follows.</p></div>;
+    <p className="small muted">Never on Sundays or federal holidays. At most one automated message a day, unless the client replied in the last {f.liveMin} minutes. After the final note Tallyhound asks you to call, if that is switched on under The hound, Rules it follows.</p></div>;
 }
 
 // Texting: the firm's details for the carriers, where the approval stands, and the note to send clients before the first message.
@@ -239,11 +239,11 @@ function PlanTab() {
   const meter = (label: string, used: number, allow: number, p: number) => <div className="col" style={{ gap: 4 }}><div className="row"><b className="grow">{label}</b><span className="small muted">{used.toLocaleString()} of {allow.toLocaleString()}</span></div><div className="bar"><i style={{ width: pct(p) + "%" }} className={p >= 1 ? "bad" : p >= 0.8 ? "warn" : ""} /></div></div>;
   return <div className="col" style={{ gap: 16 }}>
     <div className="card pad col"><h2>Your plan</h2>
-      {b.state === "trial" ? <p>You are on the free trial: <b>{a.daysLeft} {a.daysLeft === 1 ? "day" : "days"} left</b>, and room to start collecting from {a.clientsLeft} more {a.clientsLeft === 1 ? "client" : "clients"}.</p>
+      {b.state === "trial" ? <p>You are on the free trial: <b>{a.daysLeft} {a.daysLeft === 1 ? "day" : "days"} left</b>, and room to fetch from {a.clientsLeft} more {a.clientsLeft === 1 ? "client" : "clients"}.</p>
         : b.state === "expired" ? <div className="note bad" role="alert">The free trial has ended. Nothing is sent or read until a plan starts. Your data is kept.</div>
         : b.state === "paused" ? <div className="note"><Icon name="pause" small /><span>Paused{b.pausedUntil ? " until " + day(b.pausedUntil) : ""}. Your data is kept, nothing runs and nothing is billed. Documents are still deleted on schedule.</span></div>
         : <p><b>{b.plan}</b>{mine ? <>: ${mine[1]} a month, for up to {mine[2].toLocaleString()} clients. You have {n.toLocaleString()}.</> : null}</p>}
-      {b.state === "paused" ? <div><button className="btn pri" onClick={() => void act("resumeNow").then(() => toast("Resumed. Collecting carries on."), () => {})}>Resume now</button></div> : null}
+      {b.state === "paused" ? <div><button className="btn pri" onClick={() => void act("resumeNow").then(() => toast("Resumed. Fetching carries on."), () => {})}>Resume now</button></div> : null}
       {params.get("paid") === "1" ? <div className="note good" role="status"><Icon name="check" small /><span>{b.state === "active" ? "Thank you. Your plan is on." : "Thank you. Your plan starts as soon as the payment is confirmed, usually within a minute."}</span></div> : null}
       {bill?.pastDue ? <div className="note bad" role="alert">The last payment did not go through. Collecting carries on{bill.graceEnds ? " until " + day(new Date(bill.graceEnds)) : " for a few days"}. Update the card under Manage billing and nothing stops.</div> : null}
       {bill?.paying ? <div><button className="btn" disabled={going} onClick={() => void leave("/api/billing/portal", {})}>Manage billing, cards and invoices</button></div> : null}

@@ -1,4 +1,4 @@
-// The Hound screen and the Hound panel on a client's page (T-20).
+// The hound screen and the hound panel on a client's page (T-20).
 import { after } from "node:test";
 import assert from "node:assert/strict";
 import { busyFirm, closeBrowser, DNS, scene } from "./world.ts";
@@ -7,9 +7,9 @@ import type { Engine } from "../../server/src/kit.ts";
 after(closeBrowser);
 const text = (s: string | null) => (s || "").replace(/\s+/g, " ").trim();
 
-scene("the Hound shows what it did and why, what is coming up, and lets an owner choose how much it does on its own", async (W) => {
-  const { firmId } = await busyFirm(W), page = await W.signIn("pat1@firm1.test"); await page.locator(".side").getByRole("link", { name: /The Hound/ }).click(); await page.locator(".stat").first().waitFor();
-  let T: Engine = await W.state(firmId); assert.match(text(await page.locator(".topbar .chip").textContent()), /Autopilot: it sends on its own/);
+scene("the hound shows what it did and why, what is coming up, and lets an owner choose how much it does on its own", async (W) => {
+  const { firmId } = await busyFirm(W), page = await W.signIn("pat1@firm1.test"); await page.locator(".side").getByRole("link", { name: /The hound/ }).click(); await page.locator(".stat").first().waitFor();
+  let T: Engine = await W.state(firmId); assert.match(text(await page.locator(".topbar .chip").textContent()), /It sends on its own/);
   // What it did: the engine's log, newest first, each with its reason.
   const rows = page.locator(".card .list .li"); assert.equal(await rows.count(), Math.min(80, T.S.hlog.length)); assert.ok((await page.locator(".card .list").textContent())!.includes("Why: "));
   await page.getByRole("button", { name: "Messages", exact: true }).click(); await page.waitForFunction((n) => document.querySelectorAll(".card .list .li").length === n, T.S.hlog.filter((h: { kind: string }) => h.kind === "message").length);
@@ -20,7 +20,7 @@ scene("the Hound shows what it did and why, what is coming up, and lets an owner
   const was = +new Date(T.S.engs.find((e: { clientId: string }) => T.client(e.clientId).first === "Sam").next); await sam.getByRole("button", { name: "Put off a day" }).click(); await page.getByText("Put off by a day.").waitFor();
   T = await W.state(firmId); assert.ok(+new Date(T.S.engs.find((e: { clientId: string }) => T.client(e.clientId).first === "Sam").next) > was);
   // Rules it follows: switch to Copilot. It is saved, audited, and the next message is a draft.
-  await page.getByRole("tab", { name: "Rules it follows" }).click(); await page.getByLabel(/^Copilot/).click(); await page.getByText("Saved.", { exact: true }).waitFor();
+  await page.getByRole("tab", { name: "Rules it follows" }).click(); await page.getByLabel(/^Approve each message/).click(); await page.getByText("Saved.", { exact: true }).waitFor();
   T = await W.state(firmId); assert.equal(T.S.firm.hound.mode, "copilot"); assert.ok(T.S.audit.some((a: { action: string; detail: string }) => a.action === "settings.hound" && /Now on copilot/.test(a.detail)));
   // The "Saved." from the change before may still be on screen, so wait for the saved state itself, not for the words.
   await page.getByLabel("Tone").selectOption("brief"); for (let i = 0; i < 100 && (await W.state(firmId)).S.firm.hound.tone !== "brief"; i++) await new Promise((r) => setTimeout(r, 50)); assert.equal((await W.state(firmId)).S.firm.hound.tone, "brief");
@@ -29,13 +29,13 @@ scene("the Hound shows what it did and why, what is coming up, and lets an owner
 
 scene("staff can see the rules but not change them; a person takes a conversation over and hands it back from the client page", async (W) => {
   const { firmId, ownerId } = await busyFirm(W); await W.firms.addUser(firmId, (await W.auth.userById(ownerId))!, { name: "Alex Staff", email: "alex@firm1.test", role: "staff" });
-  const page = await W.signIn("alex@firm1.test"); await page.goto(W.url + "/hound?tab=rules"); await page.getByText("Only an owner can change these.").waitFor(); assert.equal(await page.getByLabel(/^Copilot/).isDisabled(), true); assert.equal(await page.getByLabel("Tone").isDisabled(), true);
+  const page = await W.signIn("alex@firm1.test"); await page.goto(W.url + "/hound?tab=rules"); await page.getByText("Only an owner can change these.").waitFor(); assert.equal(await page.getByLabel(/^Approve each message/).isDisabled(), true); assert.equal(await page.getByLabel("Tone").isDisabled(), true);
   let T: Engine = await W.state(firmId); const jo = T.S.engs[0]; await page.goto(W.url + "/clients/" + jo.id); const card = page.locator(".card", { hasText: "What it knows about Jo" }); await card.waitFor();
-  await card.getByRole("button", { name: "Take over the conversation" }).click(); await page.getByText(/^You have the conversation/).waitFor(); await page.waitForURL("**tab=conversation"); assert.match(text(await card.textContent()), /A person has it.*Alex Staff took over/);
+  await card.getByRole("button", { name: /^I'll handle / }).click(); await page.getByText(/^You have the conversation/).waitFor(); await page.waitForURL("**tab=conversation"); assert.match(text(await card.textContent()), /A person has it.*Alex Staff took over/);
   T = await W.state(firmId); assert.equal(T.S.engs[0].takeover.by, "Alex Staff");
-  await card.getByLabel(/Tell the Hound something about Jo/).fill("Travels for work, best reached on Fridays"); await card.getByRole("button", { name: "Add", exact: true }).click(); await card.getByText("Travels for work, best reached on Fridays").first().waitFor();
-  await card.getByLabel("Documents needed by").fill("2027-03-01"); await page.getByText(/^Saved\. The Hound follows up more often/).waitFor(); T = await W.state(firmId); assert.equal(new Date(T.S.engs[0].target).getMonth(), 2);
-  await card.getByLabel("Note for the Hound").fill("Spoke to Jo, W-2 coming Friday"); await card.getByRole("button", { name: "Hand back to the Hound" }).click(); await page.getByText(/^Handed back/).waitFor();
+  await card.getByLabel(/Tell the hound something about Jo/).fill("Travels for work, best reached on Fridays"); await card.getByRole("button", { name: "Add", exact: true }).click(); await card.getByText("Travels for work, best reached on Fridays").first().waitFor();
+  await card.getByLabel("Documents needed by").fill("2027-03-01"); await page.getByText(/^Saved\. The hound follows up more often/).waitFor(); T = await W.state(firmId); assert.equal(new Date(T.S.engs[0].target).getMonth(), 2);
+  await card.getByLabel("Note for the hound").fill("Spoke to Jo, W-2 coming Friday"); await card.getByRole("button", { name: "Hand back to the hound" }).click(); await page.getByText(/^Handed back/).waitFor();
   T = await W.state(firmId); assert.equal(T.S.engs[0].takeover, null); assert.ok(T.S.engs[0].memory.some((m: { text: string }) => /W-2 coming Friday/.test(m.text)));
 });
 
@@ -93,7 +93,7 @@ scene("settings: an owner rewrites a message within the rules, cannot break it, 
 
 scene("Ask: a question gets an answer read from the firm's own work, a failure is said in words, and nothing changes", async (W) => {
   const { firmId } = await busyFirm(W), page = await W.signIn("pat1@firm1.test"), before = JSON.stringify((await W.state(firmId)).S.clients);
-  await page.goto(W.url + "/hound?tab=ask"); await page.getByRole("heading", { name: "Ask the Hound" }).waitFor(); await page.getByText("It cannot send or change anything.").waitFor();
+  await page.goto(W.url + "/hound?tab=ask"); await page.getByRole("heading", { name: "Ask the hound" }).waitFor(); await page.getByText("It cannot send or change anything.").waitFor();
   await page.getByRole("button", { name: "Who needs me, and why?" }).click(); await page.locator(".bub.in", { hasText: /on your list: / }).waitFor();
   const T: Engine = await W.state(firmId); assert.match(text(await page.locator(".bub.in").last().textContent()), new RegExp("^" + T.S.engs.length + " on your list: ")); assert.match(text(await page.locator(".bub.in").last().textContent()), /Jo Day/);
   await page.getByLabel("Your question").fill("Give me tax advice"); await page.keyboard.press("Enter"); await page.locator(".bub.in", { hasText: "Claude is busy. Try again in a moment." }).waitFor();
@@ -111,7 +111,7 @@ scene("Your plan: an owner sees the plan and what is used, pauses for the quiet 
   await page.getByLabel("Pause until").fill(near); await page.getByRole("button", { name: "Pause", exact: true }).click();
   // Paused: every screen but Settings is the lock page, and the plan page offers the way back.
   await page.getByRole("button", { name: "Resume now" }).first().waitFor(); T = await W.state(firmId); assert.equal(T.billing().state, "paused"); assert.equal(T.access().ok, false);
-  await page.goto(W.url + "/settings?tab=plan"); await page.getByText(/^Paused until /).waitFor(); await page.getByRole("button", { name: "Resume now" }).click(); await page.getByText("Resumed. Collecting carries on.").waitFor(); assert.equal((await W.state(firmId)).billing().state, "active");
+  await page.goto(W.url + "/settings?tab=plan"); await page.getByText(/^Paused until /).waitFor(); await page.getByRole("button", { name: "Resume now" }).click(); await page.getByText("Resumed. Fetching carries on.").waitFor(); assert.equal((await W.state(firmId)).billing().state, "active");
 });
 
 scene("Finished files: an owner connects Google Drive by a visit to Google and back, sets the folder, and disconnects; a refusal at Google is said in words", async (W) => {

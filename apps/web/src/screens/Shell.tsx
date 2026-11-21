@@ -33,8 +33,8 @@ export function Side({ open, onClose }: { open: boolean; onClose: () => void }) 
       <Link className="logo" to="/" onClick={onClose} aria-label="Tallyhound, home"><Logo dark size={34} /></Link>
       <div className="firm"><b>{s.firm.name}</b><span>Tax year {s.firm.taxYear || 2026} · {s.engs.length} clients</span></div>
       <nav className="col" style={{ gap: 4 }} aria-label="Main">
-        {item("/", "Home", "home")}{item("/clients", "Clients", "users")}{item("/needs-you", "Needs you", "review", waiting)}
-        {item("/hound", <>The Hound <small style={{ fontWeight: 500, opacity: 0.6, marginLeft: 4 }}>your assistant</small></>, "spark")}
+        {item("/", "Home", "home")}{item("/clients", "Clients", "users")}{item("/needs-you", "Review queue", "review", waiting)}
+        {item("/hound", "The hound", "spark")}
         <div className="navsec">More</div>
         {item("/add-clients", "Add clients", "upload")}{item("/messages", "All messages", "inbox", s.tray.length)}{item("/progress", "Progress", "chart")}{item("/help", "How it works", "eye")}
         {can("owner") ? item("/settings", "Settings", "gear") : null}

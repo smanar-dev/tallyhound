@@ -20,8 +20,8 @@ scene("first run: from an empty firm to a client being contacted, in twelve clic
   await click("Home", "link"); assert.equal(text(await page.locator(".gs.cur b").first().textContent()), "Give each client a checklist");
   await click(/Choose a checklist for all 1/, "link"); await page.getByRole("dialog").waitFor(); await click("Assign");
   await page.getByRole("dialog").waitFor({ state: "detached" }); T = await W.state(firmId); assert.equal(T.S.engs[0].confirmed, true);
-  await click("Home", "link"); assert.equal(text(await page.locator(".gs.cur b").first().textContent()), "Start collecting");
-  await click(/Start collecting for 1 client/, "link"); const wiz = page.getByRole("dialog", { name: "Start collecting" }); await wiz.waitFor();
+  await click("Home", "link"); assert.equal(text(await page.locator(".gs.cur b").first().textContent()), "Go fetch");
+  await click(/Go fetch for 1 client/, "link"); const wiz = page.getByRole("dialog", { name: "Go fetch" }); await wiz.waitFor();
   assert.match(text(await wiz.textContent()), /Jo Day · \d+ documents · email invitation/); await click("Continue");
   assert.match(text(await wiz.locator(".pb").textContent()), /^Hi Jo, it's .* at Test CPAs 1/, "the preview is the engine's own first message");
   await click("Continue"); assert.match(text(await wiz.textContent()), /Tallyhound will contact 1 client/); await click(/^Start 1$/);
@@ -36,9 +36,9 @@ scene("the client list filters like the engine counts, and one action reaches ev
   await page.locator(".side").getByRole("link", { name: "Clients", exact: true }).click(); await page.locator("table.ctbl").waitFor();
   const count = (st: string) => T0.S.engs.filter((e: { status: string }) => e.status === st).length;
   const pills = Object.fromEntries((await page.locator(".pills button").evaluateAll((els) => els.map((e) => [e.firstChild!.textContent, +e.querySelector("span")!.textContent!]))) as [string, number][]);
-  assert.equal(pills.All, 3); assert.equal(pills["Not started"], count("not_started")); assert.equal(pills["Waiting for OK to text"], count("awaiting_consent")); assert.equal(pills["Needs you"], 1);
+  assert.equal(pills.All, 3); assert.equal(pills["Ready to fetch"], count("not_started")); assert.equal(pills["Waiting for OK to text"], count("awaiting_consent")); assert.equal(pills["Needs you"], 1);
   assert.deepEqual((await page.locator("tbody tr td:nth-child(2) b").allTextContents()).map(text), ["Jo Day", "Sam Lee", "Ana Ruiz"], "whoever needs you comes first, then by last name");
-  await page.getByRole("button", { name: /^Not started/ }).click(); await page.waitForURL("**show=not_started"); await page.locator("tbody tr").nth(1).waitFor({ state: "detached" }); assert.deepEqual((await page.locator("tbody tr td:nth-child(2) b").allTextContents()).map(text), ["Ana Ruiz"]);
+  await page.getByRole("button", { name: /^Ready to fetch/ }).click(); await page.waitForURL("**show=not_started"); await page.locator("tbody tr").nth(1).waitFor({ state: "detached" }); assert.deepEqual((await page.locator("tbody tr td:nth-child(2) b").allTextContents()).map(text), ["Ana Ruiz"]);
   assert.match(text(await page.locator("tbody tr").textContent()), /Confirm the checklist/);
   await page.getByLabel("Filter clients").fill("zzz"); await page.getByText("No clients match.").waitFor(); await page.getByRole("button", { name: "Clear filters" }).click(); await page.locator("tbody tr").nth(2).waitFor(); assert.equal(await page.locator("tbody tr").count(), 3);
   // Select everyone, give them all one checklist without confirming, in one request.
@@ -49,8 +49,8 @@ scene("the client list filters like the engine counts, and one action reaches ev
   // Confirm and start Ana from the list.
   await page.getByLabel("Select Ana Ruiz").check(); await page.getByRole("button", { name: "Confirm checklists" }).click(); await page.getByText(/^Confirmed 1/).waitFor();
   let T: Engine = await W.state(firmId); const ana = T.S.engs.find((e: { clientId: string }) => T.client(e.clientId).first === "Ana"); assert.equal(ana.confirmed, true); assert.ok(T.S.audit.some((a: { action: string }) => a.action === "checklist.confirm"));
-  await page.getByRole("button", { name: /Start collecting \(1\)/ }).click(); const wiz = page.getByRole("dialog", { name: "Start collecting" }); await wiz.getByRole("button", { name: "Continue" }).click(); await wiz.getByRole("button", { name: "Continue" }).click(); await wiz.getByRole("button", { name: /^Start 1$/ }).click(); await wiz.waitFor({ state: "detached" });
-  T = await W.state(firmId); assert.notEqual(T.S.engs.find((e: { id: string }) => e.id === ana.id).status, "not_started"); assert.equal(await page.getByRole("button", { name: /Start collecting \(/ }).count(), 0, "the button goes when nobody is left to start (rule 6)");
+  await page.getByRole("button", { name: /Go fetch \(1\)/ }).click(); const wiz = page.getByRole("dialog", { name: "Go fetch" }); await wiz.getByRole("button", { name: "Continue" }).click(); await wiz.getByRole("button", { name: "Continue" }).click(); await wiz.getByRole("button", { name: /^Start 1$/ }).click(); await wiz.waitFor({ state: "detached" });
+  T = await W.state(firmId); assert.notEqual(T.S.engs.find((e: { id: string }) => e.id === ana.id).status, "not_started"); assert.equal(await page.getByRole("button", { name: /Go fetch \(/ }).count(), 0, "the button goes when nobody is left to start (rule 6)");
   // Keyboard: Enter on a row opens the client; Escape closes a dialog and gives the focus back.
   await page.locator("tbody tr").first().focus(); await page.keyboard.press("Enter"); await page.waitForURL("**/clients/**"); await page.goBack();
   const add = page.getByRole("button", { name: "Add client" }); await add.click(); await page.getByRole("dialog").waitFor(); assert.equal(await page.evaluate(() => (document.activeElement as HTMLElement).closest("[role=dialog]") !== null), true, "focus is inside the dialog");
@@ -61,5 +61,5 @@ scene("a read-only person sees the list and nothing that changes it", async (W) 
   const { firmId, ownerId } = await busyFirm(W); await W.firms.addUser(firmId, (await W.auth.userById(ownerId))!, { name: "Sam Reader", email: "reader@firm1.test", role: "read_only" });
   const page = await W.signIn("reader@firm1.test"); await page.goto(W.url + "/clients?do=add"); await page.locator("table.ctbl").waitFor();
   assert.equal(await page.locator("tbody tr").count(), 3); assert.equal(await page.locator("input[type=checkbox]").count(), 0); assert.equal(await page.getByRole("dialog").count(), 0, "the address cannot open a dialog either");
-  assert.equal(await page.getByRole("button", { name: /Add client|Start collecting/ }).count(), 0);
+  assert.equal(await page.getByRole("button", { name: /Add client|Go fetch/ }).count(), 0);
 });

@@ -51,7 +51,7 @@ export const api = {
     const j = (await res.json().catch(() => ({}))) as { message?: string; error?: string }; if (!res.ok) throw new ApiError(res.status, j.error || "error", j.message || "The return could not be read."); return j as never;
   },
   site: () => call<{ signup: boolean }>("GET", "/api/site"),
-  /** A question for the Hound, with the conversation so far. It only reads. */
+  /** A question for the hound, with the conversation so far. It only reads. */
   ask: (messages: { role: "user" | "assistant"; text: string }[]) => call<{ text: string }>("POST", "/api/hound/ask", { messages }),
   /** An owner takes a copy of the firm's consent records or its audit trail, as a spreadsheet. */
   async exportCsv(what: "consent" | "audit"): Promise<void> {

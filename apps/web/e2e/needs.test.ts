@@ -24,7 +24,7 @@ scene("a document Tallyhound was unsure about is settled in Needs you: accept on
   W.reading.doc = { ...W.CLEAN_W2, form: "1099INT", payer: "First Farmers Bnk", confidence: 0.5, note: "An interest statement" }; await W.app.inboundSms({ to: FIRM, from: JO, body: "", media: [{ bytes: PHOTO, contentType: "image/jpeg" }], providerId: "n2" });
   W.reading.doc = { ...W.CLEAN_W2, payer: "", confidence: 0.3, legibility: 0.9, note: "Hard to tell" }; await W.app.inboundSms({ to: FIRM, from: JO, body: "", media: [{ bytes: PHOTO, contentType: "image/jpeg" }], providerId: "n3" });
   let T: Engine = await W.state(firmId); const waiting = T.S.tasks.filter((t: { kind: string; status: string }) => t.kind === "document" && t.status === "open"); assert.equal(waiting.length, 3, "all three went to a person");
-  const page = await W.signIn("pat1@firm1.test"); await page.locator(".side").getByRole("link", { name: /Needs you/ }).click(); await page.locator(".rq").waitFor();
+  const page = await W.signIn("pat1@firm1.test"); await page.locator(".side").getByRole("link", { name: /Review queue/ }).click(); await page.locator(".rq").waitFor();
   assert.equal(await page.locator(".rqi").count(), 4, "three documents and Jo's missing mortgage statement"); assert.equal(text(await page.getByRole("button", { name: /^Documents to check/ }).locator("span").textContent()), "3");
   await page.getByRole("button", { name: /^Documents to check/ }).click(); await page.waitForURL("**show=document"); await page.locator(".rqi").nth(3).waitFor({ state: "detached" }); assert.equal(await page.locator(".rqi").count(), 3);
   // The picture is really drawn, and the three checks are the engine's.
@@ -40,7 +40,7 @@ scene("a document Tallyhound was unsure about is settled in Needs you: accept on
   // The last one goes back to the client with one plain sentence.
   await page.locator(".rqi").nth(1).waitFor({ state: "detached" }); await page.getByLabel("Why ask again").selectOption("illegible"); await page.getByRole("button", { name: "Ask again" }).click(); await page.getByText(/^Asked again\. Jo gets one plain sentence/).waitFor();
   assert.ok(W.sms.sent.length > sent, "Jo was texted"); T = await W.state(firmId); assert.equal(T.S.tasks.filter((t: { kind: string; status: string }) => t.kind === "document" && t.status === "open").length, 0);
-  await page.getByText("Nothing needs you.").waitFor(); assert.match(text(await page.locator(".page").textContent()), /3 cleared today/);
+  await page.getByText("Nothing needs you right now.").waitFor(); assert.match(text(await page.locator(".page").textContent()), /3 cleared today/);
 });
 
 scene("a client's question is answered from Needs you, and a reply with an advice word cannot be sent", async (W) => {
@@ -76,7 +76,7 @@ scene("in Copilot, drafts wait in Needs you and nothing is sent until one is app
   const { firmId, ownerId } = await W.newFirm();
   await W.app.staff(firmId, ownerId, (T: Engine) => { T.S.firm.senderStatus = "approved"; T.importRows(T.parseCSV("First,Last,Email,Mobile\nJo,Day,jo@x.example,6155550111\nSam,Lee,sam@x.example,6155550122")); for (const e of T.S.engs) { e.confirmed = true; T.giveConsent(e.clientId, "page"); } for (const e of T.S.engs) T.start(e.id); T.tick(); });
   const page = await W.signIn("pat1@firm1.test"), before = W.sms.sent.length; await page.goto(W.url + "/needs-you"); const card = page.locator(".card", { hasText: "Drafts to approve" }); await card.waitFor();
-  assert.equal(await card.locator(".li").count(), 2); assert.equal(text(await page.locator(".side .nav", { hasText: "Needs you" }).locator(".n").textContent()), "2");
+  assert.equal(await card.locator(".li").count(), 2); assert.equal(text(await page.locator(".side .nav", { hasText: "Review queue" }).locator(".n").textContent()), "2");
   await card.locator(".li", { hasText: "Sam Lee" }).getByRole("button", { name: "Approve and send" }).click(); await card.locator(".li").nth(1).waitFor({ state: "detached" });
   assert.equal(W.sms.sent.length, before + 1); assert.equal(W.sms.sent.at(-1)!.to, "6155550122"); await card.getByRole("button", { name: "Discard" }).click(); await page.getByText("Draft discarded.").waitFor(); assert.equal(W.sms.sent.length, before + 1);
 });
