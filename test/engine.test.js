@@ -531,11 +531,11 @@ test("TH-RPL: \"I already sent that\": a document waiting for a person is said t
 });
 test("TH-RPL: \"after the 15th\" waits until that date, at most 30 days; a date nobody can read falls back to will-send-later", () => {
   const { T, c, e } = v2firm(); T.setItem(item(T, e, "1098").id, "received"); assert.equal(T.inboundText(c.id, "I can send the W-2 after the 15th"), "send_after_date"); const w2 = item(T, e, "W2");
-  assert.equal(new Date(w2.laterUntil).getDate(), 15); assert.equal(new Date(w2.laterUntil).getMonth(), 1); assert.equal(last(T, e).tpl, "M20D"); assert.match(last(T, e).body, /after February 15/);
+  assert.equal(new Date(w2.laterUntil).getDate(), 16, "after the 15th means the 16th at the earliest"); assert.equal(new Date(w2.laterUntil).getMonth(), 1); assert.equal(last(T, e).tpl, "M20D"); assert.match(last(T, e).body, /after February 15/);
   const n = out(T, e).filter((m) => m.itemId === w2.id).length; T.advance(15 * T.DAY); assert.equal(out(T, e).filter((m) => m.itemId === w2.id).length, n, "asked for it before the date"); T.advance(12 * T.DAY); assert.ok(out(T, e).filter((m) => m.itemId === w2.id).length > n, "never asked again after the date");
   // From the model: a date far out is not trusted, and one within 60 days is capped at 30.
   const y = v2firm(); y.T.inboundText(y.c.id, "later", { intent: "send_after_date", confidence: "high", date: "2027-09-01", legacy_intent: "will_send_later" }); assert.equal(last(y.T, y.e).tpl, "M20");
-  const z = v2firm(); z.T.inboundText(z.c.id, "in March", { intent: "send_after_date", confidence: "high", date: "2027-03-20", legacy_intent: "will_send_later" }); assert.ok(new Date(item(z.T, z.e, "W2").laterUntil) - z.T.S.now <= 30 * z.T.DAY + z.T.HOUR);
+  const z = v2firm(); z.T.inboundText(z.c.id, "in March", { intent: "send_after_date", confidence: "high", date: "2027-03-20", legacy_intent: "will_send_later" }); assert.ok(new Date(item(z.T, z.e, "W2").laterUntil) - z.T.S.now <= 31 * z.T.DAY + z.T.HOUR);   // the named day is capped at 30 days out; the hold ends the morning after it
   // Spanish, in the client's language.
   const s = v2firm(); s.c.lang = "es"; assert.equal(s.T.inboundText(s.c.id, "despues del 15"), "send_after_date"); assert.match(last(s.T, s.e).body, /después del 15 de febrero/);
 });
@@ -555,7 +555,7 @@ test("TH-RPL-1, 2, 4: the model's answer is checked field by field; anything but
   for (const m of out(x.T, x.e)) { assert.ok(!/IGNORE|penalty|4567/.test(m.body)); assert.deepEqual(x.T.outputCheck(m.body, "text", { year: 2026 }), []); }
   assert.ok(!/penalty|IGNORE/.test(lastIn(x.T, x.e).line), "the staff line is built from the checked fields, not the model's words");
   // An add is only ever a suggestion until a person accepts it.
-  assert.ok(!x.T.itemsOf(x.e.id).some((i) => i.form === "1099NEC")); x.T.decideTask(openTasks(x.T, x.e, "change_noted")[0].id, "apply_change"); assert.ok(x.T.itemsOf(x.e.id).some((i) => i.form === "1099NEC" && i.source === "reply"));
+  assert.ok(!x.T.itemsOf(x.e.id).some((i) => i.form === "1099NEC")); x.T.decideTask(openTasks(x.T, x.e, "change_noted")[0].id, "apply_change"); assert.ok(x.T.itemsOf(x.e.id).some((i) => i.form === "1099NEC" && i.source === "life_change"));
 });
 test("TH-RPL: in shadow (a new firm's default) the new reading is recorded and the reply is handled the old way", () => {
   const { T, c, e } = started(); assert.equal(T.S.firm.hound.replyV2, "shadow"); const r = T.inboundText(c.id, "we sold the house");
@@ -586,14 +586,23 @@ test("TH-BRK-1, 2: an item is on its person's bark the moment it opens; ten item
 test("TH-BRK-2: any burst of items for one person inside the batch window is exactly one bark", () => {
   for (const n of [1, 2, 7, 25]) { const { T, e } = started(); for (let i = 0; i < n; i++) { T.addTask({ kind: i % 2 ? "question" : "document", reason: "x", engId: e.id }); T.advance(Math.floor((4 * T.MIN) / n)); } T.advance(6 * T.MIN); assert.equal(T.barkDue().length, 1, n + " items"); assert.equal(barksOf(T, "u2").length, 1); }
 });
-test("TH-BRK-3: an item goes to the client's preparer; to every owner when there is none or when it is about the system; and to whoever the firm's rules add", () => {
-  const { T, c, e } = started(); const q = { kind: "question", reason: "Question", engId: e.id };
+test("TH-BRK-3, 13, 14: an item goes to its kind's target: the client's preparer, the front desk, the owners or named people; nobody there means the owners", () => {
+  const { T, c, e } = started(); const q = { kind: "question", reason: "Question", engId: e.id }, gq = { kind: "gone_quiet", engId: e.id }, cr = { kind: "cant_reach", engId: e.id };
   assert.deepEqual(T.barkRoute(q), ["u2"]); assert.deepEqual(T.barkRoute({ kind: "output_check", engId: e.id }), ["u1"]);
-  c.preparer = null; assert.deepEqual(T.barkRoute(q), ["u1"]); c.preparer = "u2";
-  T.setUser("u2"); assert.match(T.setBarkRules({ question: { owners: true } }), /Only an owner/); T.setUser("u1"); assert.equal(T.setBarkRules({ question: { owners: true }, gone_quiet: { users: ["u1", "nobody"] }, nonsense: { owners: true } }), null);
-  assert.deepEqual(T.barkRoute(q).sort(), ["u1", "u2"]); assert.deepEqual(T.barkRoute({ kind: "gone_quiet", engId: e.id }).sort(), ["u1", "u2"]); assert.deepEqual(Object.keys(T.S.firm.barkRules).sort(), ["gone_quiet", "question"]);
-  // Someone who can only look, or a support person, is never barked at.
-  T.S.users.push({ id: "u3", first: "Lee", name: "Lee Look", role: "read_only", email: "lee@test.example" }); c.preparer = "u3"; assert.deepEqual(T.barkRoute({ kind: "document", engId: e.id }), ["u1"]);
+  // With nobody on the front desk, gone quiet goes to the preparer and can't reach to the owners (scenario 22).
+  assert.deepEqual(T.barkRoute(gq), ["u2"]); assert.deepEqual(T.barkRoute(cr), ["u1"]);
+  c.preparer = null; assert.deepEqual(T.barkRoute(q), ["u1"]); assert.deepEqual(T.barkRoute(gq), ["u1"]); c.preparer = "u2";
+  // An owner marks an office manager: both kinds now go to the front desk.
+  T.S.users.push({ id: "u5", first: "Fran", name: "Fran Desk", role: "staff", email: "fran@test.example" });
+  T.setUser("u2"); assert.match(T.setDuty("u5", true), /Only an owner/); T.setUser("u1"); assert.equal(T.setDuty("u5", true), null); assert.deepEqual(T.barkRoute(gq), ["u5"]); assert.deepEqual(T.barkRoute(cr), ["u5"]); assert.deepEqual(T.barkRoute(q), ["u2"]);
+  // One rule per kind.
+  T.setUser("u2"); assert.match(T.setBarkRules({ question: { target: "owners" } }), /Only an owner/); T.setUser("u1");
+  assert.match(T.setBarkRules({ question: { target: "everyone" } }), /Choose who/); assert.match(T.setBarkRules({ question: { target: "named_users", user_ids: ["nobody"] } }), /Name at least one/);
+  assert.equal(T.setBarkRules({ question: { target: "owners" }, document: { target: "named_users", user_ids: ["u1", "u5"] }, gone_quiet: { target: "client_preparer" }, change_noted: { target: "front_desk" } }), null);
+  assert.deepEqual(T.barkRoute(q), ["u1"]); assert.deepEqual(T.barkRoute({ kind: "document", engId: e.id }).sort(), ["u1", "u5"]); assert.deepEqual(T.barkRoute(gq), ["u2"]); assert.deepEqual(T.barkRoute({ kind: "change_noted", engId: e.id }), ["u5"]);
+  T.setDuty("u5", false); assert.deepEqual(T.barkRoute({ kind: "change_noted", engId: e.id }), ["u1"], "a front desk with nobody on it falls back to the owners");
+  // Someone who can only look is never barked at.
+  T.S.users.push({ id: "u3", first: "Lee", name: "Lee Look", role: "read_only", email: "lee@test.example" }); c.preparer = "u3"; T.setBarkRules({}); assert.deepEqual(T.barkRoute({ kind: "document", engId: e.id }), ["u1"]);
 });
 test("TH-BRK-4: each person chooses which kinds they hear about and whether they get the email", () => {
   const { T, e } = started(); T.setUser("u2"); assert.equal(T.setMyBarks({ email: true, kinds: ["document"] }), null);
@@ -668,4 +677,107 @@ test("TH-MEM-7: after three replies inside the same two-hour window, that client
   const { T, e } = started(); e.hours = [14, 9]; assert.equal(T.bestHour(e), null, "two replies are not a habit"); e.hours = [18, 19, 18, 9]; assert.equal(T.bestHour(e), 18);
   e.hours = [23, 23, 23, 22]; assert.equal(T.bestHour(e), null, "replies in the night never move a send outside sending hours");
   e.hours = [9, 18, 19, 18, 19]; assert.equal(T.bestHour(e), 18); e.hours = [8, 9, 9, 15]; assert.equal(T.bestHour(e), 8);
+});
+
+// ---- Website feature delta: holds, can't reach, call cards (TH-PLN-7, TH-BRK-12, TH-CAL) ----
+test("TH-PLN-7: staff hold one item until a date, which replaces the catalogue's; a past date is refused; ask now clears it and still keeps to one message a day", () => {
+  const { T, c, e } = started(); T.setUser("u2"); T.addItem(e.id, "K1", "Chen & Park LLC"); const k1 = item(T, e, "K1");
+  assert.equal(T.holdOf(k1, e).reason, "catalogue_date"); assert.equal(T.holdOf(k1, e).until.getMonth(), 2); assert.equal(T.holdOf(k1, e).until.getDate(), 15);
+  assert.match(T.setHold(k1.id, "2027-01-20"), /has passed/); assert.equal(T.holdOf(k1, e).reason, "catalogue_date", "a refused date changed something");
+  assert.equal(T.setHold(k1.id, "2027-03-01"), null); assert.equal(T.holdOf(k1, e).reason, "staff_date"); assert.equal(T.holdOf(k1, e).until.getDate(), 1);
+  T.setItem(item(T, e, "W2").id, "received"); T.setItem(item(T, e, "1098").id, "received"); T.advance(34 * T.DAY); assert.ok(!out(T, e).some((m) => m.itemId === k1.id), "asked for the K-1 before March 1");
+  T.advance(3 * T.DAY); assert.ok(out(T, e).some((m) => m.itemId === k1.id), "never asked after the hold ended");
+  // Clear a hold; ask now.
+  const y = started(); y.T.setUser("u2"); y.T.addItem(y.e.id, "K1", "Chen & Park LLC"); const k = item(y.T, y.e, "K1"); assert.equal(y.T.setHold(k.id, ""), null); assert.equal(y.T.holdOf(k, y.e), null);
+  const z = started(); z.T.setUser("u2"); const mort = item(z.T, z.e, "1098"); z.T.setHold(mort.id, "2027-02-20"); const n = out(z.T, z.e).length; assert.equal(z.T.askNow(mort.id), null); assert.equal(out(z.T, z.e).length, n, "ask now sent a second message the same day");
+  z.T.advance(z.T.DAY + z.T.HOUR); assert.equal(last(z.T, z.e).itemId, mort.id); assert.match(z.T.askNow("nope"), /No such item/);
+});
+test("TH-SNF-7: the wrong-year reply says when the right form usually arrives", () => {
+  const { T, c, e } = started(); T.inboundDoc(c.id, { form: "W2", year: 2025, payer: "Acme Logistics" }, "text"); assert.equal(last(T, e).tpl, "M7"); assert.match(last(T, e).body, /for 2025\. We need the 2026 version of your W-2 wage statement from Acme Logistics\. It usually arrives by January 31\.$/);
+  assert.equal(T.usualIssue("K1", "en"), "It usually arrives by March 15."); assert.equal(T.usualIssue("1099CONS", "es"), "Suele llegar antes del 15 de febrero."); assert.equal(T.usualIssue("CHARITY", "en"), "");
+});
+test("TH-SNF-6: a document is filed as year, form and payer inside the client's folder, with nothing a drive refuses", () => {
+  const { T, c, e } = started(); const d = T.inboundDoc(c.id, { form: "W2", year: 2026, payer: "Acme Logistics" }, "text"); assert.equal(T.filedName(c, e, d), "2026 W-2 Acme Logistics.pdf");
+  assert.equal(T.filedName(c, e, { form: "1099INT", payer: "First/Farmers: Bank? " + "x".repeat(60) }).length <= "2026 1099-INT ".length + 40 + 4, true); assert.ok(!/[\/:?]/.test(T.filedName(c, e, { form: "1099INT", payer: "First/Farmers: Bank?" })));
+  assert.equal(T.filedName(c, e, { form: "K1", payer: "Chen & Park LLC", corrected: true }), "2026 Schedule K-1 Chen & Park LLC CORRECTED.pdf");
+});
+test("TH-BRK-12: STOP with no email leaves one can't-reach item; STOP with email is a note and no item; it settles when the client can be reached again", () => {
+  let x = started(); x.c.email = ""; x.c.emailOk = false; x.T.inboundText(x.c.id, "STOP"); let cr = x.T.S.tasks.filter((t) => t.kind === "cant_reach" && t.status === "open"); assert.equal(cr.length, 1); assert.match(cr[0].context.failed.join(" | "), /Texts: Jo replied STOP \| Email: no address on file/);
+  x.T.advance(2 * x.T.DAY); assert.equal(x.T.S.tasks.filter((t) => t.kind === "cant_reach" && t.status === "open").length, 1, "a second one was opened"); assert.equal(x.T.S.tasks.filter((t) => t.kind === "gone_quiet").length, 0);
+  x.T.inboundText(x.c.id, "START"); x.T.advance(x.T.HOUR); assert.equal(x.T.S.tasks.filter((t) => t.kind === "cant_reach" && t.status === "open").length, 0, "still open after the client came back");
+  x = started(); x.T.inboundText(x.c.id, "STOP"); assert.equal(x.T.S.tasks.filter((t) => t.kind === "cant_reach").length, 0); assert.ok(x.e.timeline.some((t) => /opted out of texts/.test(t.text))); assert.equal((x.T.S.barks || []).length, 0);
+});
+const quietCard = () => { const x = started(); x.T.advance(16 * x.T.DAY); x.T.setUser("u2"); return Object.assign(x, { q: x.T.S.tasks.find((t) => t.kind === "gone_quiet" && t.status === "open") }); };
+test("TH-CAL-2, 3, 5: a call is logged with an outcome; voicemail and no answer need a day to try again and the card comes back that morning at nine", () => {
+  let x = quietCard(); assert.match(x.T.decideTask(x.q.id, "log_call", {}), /Choose what happened/); assert.match(x.T.decideTask(x.q.id, "log_call", { outcome: "voicemail" }), /Choose a day/); assert.match(x.T.decideTask(x.q.id, "log_call", { outcome: "no_answer", followUp: "2027-01-01" }), /later day/); assert.equal(x.q.status, "open"); assert.ok(!x.q.calls);
+  const day = new Date(x.T.S.now.getTime() + 2 * x.T.DAY), ymd = day.getFullYear() + "-" + String(day.getMonth() + 1).padStart(2, "0") + "-" + String(day.getDate()).padStart(2, "0");
+  assert.equal(x.T.decideTask(x.q.id, "log_call", { outcome: "voicemail", note: "Left a message with her son. SSN 123-45-6789", followUp: ymd }), null); assert.equal(x.q.status, "open"); assert.equal(x.q.calls.length, 1); assert.equal(x.q.calls[0].by, "Alex Staff"); assert.ok(!/123-45-6789/.test(x.q.calls[0].note), "the note was not scrubbed");
+  assert.equal(new Date(x.q.snoozedUntil).getHours(), 9); const before = (x.T.S.barks || []).length; x.T.advance(x.T.DAY); assert.ok(x.q.snoozedUntil, "came back a day early"); x.T.advance(x.T.DAY + 2 * x.T.HOUR); assert.ok(!x.q.snoozedUntil); assert.ok(x.q.reopenedAt); assert.ok(before >= 0 && x.T.S.barks.some((b) => b.status === "queued" && b.taskIds.includes(x.q.id)), "not in the next bark");
+  assert.ok(x.e.timeline.some((t) => /^Call logged: left a voicemail/.test(t.text)));
+});
+test("TH-CAL-4, 5: each outcome does its own thing, and fetching restarts only for a client who has gone quiet, on a new preset if asked", () => {
+  let x = quietCard(); x.T.decideTask(x.q.id, "log_call", { outcome: "reached_will_send" }); assert.equal(x.q.status, "open"); assert.equal(x.T.decideTask(x.q.id, "restart", { preset: "gentle" }), null); assert.equal(x.e.status, "in_progress"); assert.equal(x.T.cadenceFor(x.e).key, "gentle"); assert.equal(x.e.step, 0);
+  x = quietCard(); const w2 = item(x.T, x.e, "W2"); x.T.decideTask(x.q.id, "log_call", { outcome: "reached_has_none", items: [w2.id] }); assert.equal(w2.state, "says_none"); assert.equal(item(x.T, x.e, "1098").state !== "says_none", true); assert.ok(x.T.S.tasks.some((t) => t.kind === "says_none" && t.itemId === w2.id && t.status === "open"));
+  x = quietCard(); x.c.email = ""; x.c.emailOk = false; x.T.decideTask(x.q.id, "log_call", { outcome: "wrong_number" }); assert.equal(x.c.mobileBad, true); assert.ok(x.c.phoneInvalidAt); assert.ok(x.T.S.tasks.some((t) => t.kind === "cant_reach" && t.status === "open"));
+  x = started(); x.T.setUser("u2"); const t = x.T.addTask({ kind: "gone_quiet", reason: "x", why: "no_reply", engId: x.e.id }); assert.match(x.T.decideTask(t.id, "restart"), /only be restarted for a client who has gone quiet/);
+});
+test("TH-CNV-4: \"I already sent it\" finds a photo Tallyhound filed under the wrong item, moves it, asks again for the item it left, and tells the client they were right", () => {
+  const { T, c, e } = v2firm(); T.addItem(e.id, "W2", "Riverbend Clinic"); const [a, b] = T.itemsOf(e.id).filter((i) => i.form === "W2");
+  const d = T.inboundDoc(c.id, { form: "W2", year: 2026, payer: "" }, "text"); assert.equal(d.state, "accepted"); const got = T.S.items.find((i) => i.id === d.itemId), want = got.id === a.id ? b : a; assert.equal(want.state !== "received", true);
+  assert.equal(T.inboundText(c.id, "pretty sure I already sent the W-2 last week", { intent: "already_sent", confidence: "high", item_id: want.id, legacy_intent: "other_update" }), "already_sent");
+  assert.equal(d.itemId, want.id); assert.equal(want.state, "received"); assert.equal(got.state, "expected", "the item it left was not reopened"); assert.equal(last(T, e).tpl, "M35Y"); assert.match(last(T, e).body, /^You're right, we have it\. Thank you, Jo\.$/);
+  assert.match(lastIn(T, e).line, /Found it under .* and moved it here\. The reminder is cancelled\./); assert.equal(lastIn(T, e).found.moved, true); assert.ok(e.timeline.some((t) => /^Document moved to/.test(t.text)));
+});
+test("TH-CNV-4: a document a person placed is never moved; a question opens instead", () => {
+  const { T, c, e } = v2firm(); T.addItem(e.id, "W2", "Riverbend Clinic"); const [a, b] = T.itemsOf(e.id).filter((i) => i.form === "W2");
+  const d = T.inboundDoc(c.id, { form: "W2", year: 2026, payer: "", read: { legible: 0.9, conf: 0.5, note: "", missing: [] } }, "text"); T.decideTask(T.S.tasks.find((t) => t.kind === "document" && t.status === "open").id, "accept", { itemId: a.id }); assert.equal(d.itemId, a.id);
+  T.inboundText(c.id, "I already sent that", { intent: "already_sent", confidence: "high", item_id: b.id, legacy_intent: "other_update" }); assert.equal(d.itemId, a.id, "a staff-placed document was moved"); assert.equal(b.state !== "received", true);
+  assert.ok(T.S.tasks.some((t) => t.kind === "question" && t.status === "open" && /was not moved/.test(t.summary))); assert.match(lastIn(T, e).line, /a person placed/);
+});
+test("TH-CNV-5: a life change fills the change item from a fixed table; nothing changes until a person applies what they tick", () => {
+  const { T, c, e } = v2firm(); T.inboundText(c.id, "We sold the house in June"); const t = openTasks(T, e, "change_noted")[0];
+  assert.deepEqual(t.changes.map((x) => [x.kind, x.form, x.custom || x.reason]), [["remove", "1098", "sold_home"], ["add", "OTHER", "Form 1099-S for the sale of the home"], ["add", "OTHER", "Closing statement for the sale"]]);
+  assert.equal(item(T, e, "1098").state !== "waived", true); assert.equal(T.itemsOf(e.id).length, 2);
+  T.decideTask(t.id, "apply_change", { pick: [0, 2] }); assert.equal(item(T, e, "1098").state, "waived"); const added = T.itemsOf(e.id).filter((i) => i.source === "life_change"); assert.deepEqual(added.map((i) => i.custom), ["Closing statement for the sale"]);
+  // Other events.
+  const ev = (say) => { const x = v2firm(); x.T.inboundText(x.c.id, say); return (openTasks(x.T, x.e, "change_noted")[0] || {}).changes || []; };
+  assert.deepEqual(ev("we bought a house in May").map((x) => x.kind + ":" + x.form), ["add:1098", "add:OTHER"].filter((k, i) => i > 0 || true).slice(ev("we bought a house in May").length === 1 ? 1 : 0));
+  assert.deepEqual(ev("I started a business this year").map((x) => x.form), ["1099NEC", "1099K"]); assert.deepEqual(ev("I started a new job in March").map((x) => x.kind + ":" + x.form), ["add:W2"]);
+  for (const k of Object.keys(T.LIFE_SUGGEST)) assert.ok(T.CHANGE_WORDS.sold_home && T.LIFE_SUGGEST[k].words);
+  // The model may name an event; a made-up one is ignored.
+  const y = v2firm(); y.T.inboundText(y.c.id, "x", { intent: "life_change", confidence: "high", event: "won_lottery", change: { kind: "add", form_code: "1099NEC", reason: "other" }, legacy_intent: "other_update" }); assert.equal(openTasks(y.T, y.e, "change_noted")[0].changes.length, 1);
+});
+
+// ---- Website Feature Delta: the understood panel, the sniff trace and the activity log ----
+test("TH-CNV-3: every row of the understood panel has words in English and Spanish, and no braces left in them", () => {
+  const T = require("../packages/engine").createEngine();
+  for (const L of ["en", "es"]) for (const k of Object.keys(T.PANEL.en)) { const row = T.PANEL[L][k]; assert.ok(Array.isArray(row) && row.length === 3 && row.every((x) => typeof x === "string" && x), L + " " + k); }
+  const e = T.S.engs.find((x) => x.status === "in_progress" && T.itemsOf(x.id).some((i) => T.OPEN.includes(i.state))), c = T.client(e.clientId);
+  T.inboundText(c.id, "I'll send it after February 20");
+  const m = T.S.msgs.filter((x) => x.engId === e.id && x.dir === "in").slice(-1)[0];
+  for (const L of ["en", "es"]) { const P = T.panelOf(m, L); assert.equal(P.v, 1); assert.ok(P.summary && P.action.text && P.team.text); assert.ok(!/[{}]/.test(P.summary + P.action.text + P.team.text), "an unfilled slot in " + L); assert.ok(["high", "low", "rules"].includes(P.confidence)); }
+  assert.equal(T.panelOf(T.S.msgs.find((x) => x.dir === "out")), null, "only a client's message has a panel");
+});
+test("TH-SNF-1 to 5: the trace has the eight steps in order, stops at the first failure, and holds no amount", () => {
+  const T = require("../packages/engine").createEngine(); assert.equal(T.TRACE_STEPS.length, 8);
+  const ok = T.S.docs.find((d) => d.state === "accepted"), t = T.traceOf(ok);
+  assert.deepEqual(t.steps.map((x) => x.step), T.TRACE_STEPS.map((x) => x[0])); assert.equal(t.outcome, "passed"); assert.ok(!t.steps.some((x) => x.status === "fail"));
+  const e = T.eng(ok.engId), bad = Object.assign({}, ok, { id: "d_test", state: "rejected", findings: ["wrong_year"], year: e.year - 1 }), b = T.traceOf(bad), i = b.steps.findIndex((x) => x.status === "fail");
+  assert.equal(b.steps[i].step, "tax_year"); assert.equal(b.steps[i].detail_code, "wrong_year"); assert.ok(b.steps.slice(i + 1).every((x) => x.status === "skip")); assert.equal(b.outcome, "stopped"); assert.equal(b.filed_path, null);
+  const who = T.traceOf(Object.assign({}, ok, { state: "in_review", recipient: "other" })); assert.equal(who.steps.find((x) => x.status === "fail").step, "recipient");
+  const blur = T.traceOf(Object.assign({}, ok, { state: "rejected", findings: ["illegible"] })); assert.equal(blur.steps.find((x) => x.status === "fail").step, "legible");
+  for (const d of T.S.docs) for (const L of ["en", "es"]) for (const s of T.traceOf(d, L).steps) { assert.ok(s.label); assert.ok(!/\$|\d{3}-\d{2}-\d{4}/.test(s.display), "a trace line holds an amount or an identifier"); }
+  T.keepTrace(ok, "Corrected"); assert.equal(ok.traces.length, 1); assert.equal(ok.traces[0].steps.length, 8);
+});
+test("TH-LOG-1 to 4: the activity log lists every message, document and decision for one client, newest first, and filters by kind", () => {
+  const T = require("../packages/engine").createEngine();
+  const e = T.S.engs.find((x) => T.S.docs.some((d) => d.engId === x.id) && T.S.msgs.some((m) => m.engId === x.id)), c = T.client(e.clientId), all = T.activity(c.id);
+  const es = T.S.engs.filter((x) => x.clientId === c.id).map((x) => x.id);
+  assert.equal(all.filter((r) => r.kind === "message").length, T.S.msgs.filter((m) => es.includes(m.engId)).length);
+  assert.ok(all.filter((r) => r.kind === "document").length >= T.S.docs.filter((d) => es.includes(d.engId)).length);
+  for (let i = 1; i < all.length; i++) assert.ok(+new Date(all[i - 1].at) >= +new Date(all[i].at));
+  for (const k of ["message", "document", "decision"]) assert.ok(T.activity(c.id, k).every((r) => r.kind === k));
+  assert.ok(all.every((r) => ["client", "user", "system"].includes(r.actorType) && r.actor && r.summary));
+  const other = T.S.clients.find((x) => x.id !== c.id); assert.ok(!T.activity(other.id).some((r) => all.some((a) => a.ref === r.ref && a.kind !== "decision")), "one client's log shows another's");
+  assert.deepEqual(T.activity("nobody"), []);
 });

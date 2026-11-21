@@ -35,6 +35,16 @@ function Three({ T, d }: { T: Engine; d: Row }) {
 }
 
 /** Everything beside the picture: the verdict, the decision, what was read, the required parts. onDecided runs after a decision is saved. */
+// TH-SNF-1 to 5: the eight steps of the sniff test with what each found, and where the file went. It reads the verdict; it decides nothing.
+const OUTCOME: Record<string, string> = { passed: "Passed", stopped: "Stopped at the first step that failed", to_a_person: "Sent to a person", duplicate: "Already had it", discarded: "Discarded", rejected: "Asked again", purged: "Deleted on schedule" };
+function Trace({ T, d, open }: { T: Engine; d: Row; open: boolean }) {
+  const t = T.traceOf(d), ICO: Record<string, [string, "check" | "x" | "minus"]> = { pass: ["ok", "check"], fail: ["no", "x"], skip: ["na", "minus"], na: ["na", "minus"] }, WORD: Record<string, string> = { pass: "passed", fail: "failed", skip: "not reached", na: "does not apply" };
+  return <details className="sec trace" open={open}><summary><h4>Sniff trace</h4><span className="sp" /><span className="small faint">{OUTCOME[t.outcome] || "Being sniffed"}</span></summary>
+    <ol>{t.steps.map((x: Row, i: number) => <li key={x.step} className="chk"><span className={"ci " + ICO[x.status]![0]}><Icon name={ICO[x.status]![1]} /></span><div><b>{i + 1}. {x.label}</b> <span className="small faint">({WORD[x.status]})</span>{x.display ? <div className="small muted">{x.display}</div> : null}</div></li>)}</ol>
+    {t.filed_path ? <div className="small">Filed at <span className="mono" style={{ overflowWrap: "anywhere" }}>{t.filed_path}</span></div> : null}
+    {(d.traces || []).map((o: Row, i: number) => <div className="small muted" key={i}>Before it was {String(o.why || "changed").toLowerCase()} by {o.by}: {o.steps.filter((x: Row) => x.status === "fail").map((x: Row) => x.display).join("; ") || "every step passed"}.</div>)}</details>;
+}
+
 export function DocSide({ d, onDecided, keys }: { d: Row; onDecided?: () => void; keys?: boolean }) {
   const { T, can, act, toast } = useFirm(), s = T.S, e = d.engId ? T.eng(d.engId) : null, c = e ? T.client(e.clientId) : d.clientId ? T.client(d.clientId) : null;
   const task: Row | undefined = s.tasks.find((t: Row) => t.docId === d.id && t.status === "open"), edit = can() && (!!task || d.state === "accepted");
@@ -51,6 +61,7 @@ export function DocSide({ d, onDecided, keys }: { d: Row; onDecided?: () => void
       <p style={{ marginTop: 8 }}>{(d.reasons || []).join(" ") || "Checking."}</p>
       {d.read && d.read.note ? <div className="note info" style={{ marginTop: 10 }}><Icon name="spark" small /><span>{d.read.by === "text" ? "Read from the text inside the PDF: " : "Claude read it: "}{d.read.note}</span></div> : null}</div>
     <Three T={T} d={d} />
+    <Trace T={T} d={d} open={!!task} />
     {task && can() && customs.length ? sec("Which request is this?", <>{customs.map((i) => <button key={i.id} className={"btn" + (d.matchItem === i.id ? " pri" : "")} style={{ justifyContent: "flex-start", textAlign: "left" }} onClick={() => void decide("accept", { itemId: i.id }, "Accepted against that request.")}><Icon name="check" small />{i.custom}{d.matchItem === i.id ? <span className="small" style={{ marginLeft: "auto", opacity: 0.8 }}>best match</span> : null}</button>)}<p className="small muted">Pick one to accept the document against that request.</p></>) : null}
     {task && can() ? sec(customs.length ? "Or" : "Your decision", <>
       <button className={"btn" + (customs.length ? "" : " pri")} onClick={() => void decide("accept", null, "Accepted.")}><Icon name="check" small />Accept as read{keys ? <span className="kbd" style={{ marginLeft: "auto" }}>A</span> : null}</button>
@@ -65,7 +76,7 @@ export function DocSide({ d, onDecided, keys }: { d: Row; onDecided?: () => void
     {els.length ? sec("Required parts", <><div>{els.map((x) => <div className="chk" key={x.key || x.label}><span className={"ci " + (x.status !== "missing" ? "ok" : x.required ? "no" : "na")}><Icon name={x.status !== "missing" ? "check" : "x"} /></span><div>{x.label}{x.status === "supplied" ? <span className="small faint"> (sent separately)</span> : null}{x.required ? null : <span className="small faint"> (optional for your firm)</span>}</div></div>)}</div>
       {d.state === "incomplete" && gaps.length ? <div className="note"><Icon name="send" small /><span>Tallyhound asked the client for {T.missText(gaps.map((x) => x.key), "en", d.form).fix} and keeps reminding until it arrives.</span></div> : null}</>, <span className={"small " + (gaps.length ? "bad-text" : "faint")}>{els.filter((x) => x.status !== "missing").length} of {els.length} present</span>) : null}
     {d.conf != null ? sec("How sure Tallyhound was", <><div className="meter"><i style={{ width: pct + "%", background: d.conf >= acceptAt ? "var(--good)" : "var(--accent)" }} /><u style={{ left: acceptAt * 100 + "%" }} /></div><div className="small muted">Accepted on its own at {acceptAt.toFixed(2)} or above.{d.capReason ? " Held back: " + d.capReason + "." : ""}</div></>, <b>{Number(d.conf).toFixed(2)}</b>) : null}
-    {d.state === "accepted" && c && e ? sec("Filed as", <div className="mono" style={{ overflowWrap: "anywhere" }}>{T.fileName(c, e, d)}</div>) : null}
+    {d.state === "accepted" && c && e ? sec("Filed as", <div className="mono" style={{ overflowWrap: "anywhere" }}>{T.filedName(c, e, d)}</div>) : null}
     {sec("History", <div className="small"><div>Received {when(T, d.at)} by {CHANNEL[d.channel] || d.channel}{c ? " from " + cname(c) : ""}</div>{(d.versions || []).map((v: Row) => <div className="muted" key={v.v}>v{v.v}: {v.form} {v.year} {v.payer || ""} · {v.by}</div>)}{d.itemId ? (() => { const it = s.items.find((i: Row) => i.id === d.itemId); return it ? <div className="muted">Counts for: {iname(T, it)}{it.payer ? " from " + it.payer : ""}</div> : null; })() : null}</div>)}
   </>;
 }

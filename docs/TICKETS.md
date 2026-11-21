@@ -494,6 +494,18 @@ Sources: the brand book, the content book and "New features spec and build plan"
 
 57. Closing the open points of this round. The owner's choice of who writes each message is now explicit beside the voice (`hound.aiWrite`: the voice's own wording, or Claude rewording it), as Jordan decided. TH-VOI-8: Message wording has a voice selector; `saveWording` and `resetWording` take a voice, keep each voice's edits apart (`firm.templatesBy`), and check what is saved against sample data (Maria, never a client). The demo firm is the brand's sample cast: Maple & Pine Tax Co., Maria and Daniel Garcia, Luis Ortega, Ray Chen. Three product errors use the content book's words (texting number being approved, a file that could not be read, storage disconnected). The rules tab says how many replies shadow has recorded.
 
+# Round 18 (November 21): what the website shows, built
+
+Source: the Website Feature Delta spec. `docs/DELTA.md` maps it onto this codebase, records the nine decisions (C1 to C9, each as the spec recommends) and lists the differences. Tickets T-162 to T-168.
+
+58. T-162, the follow-up plan (TH-PLN-1 to 8). `apps/server/src/plan.ts`: `planFor` reads what has happened and runs the engine's own scheduler ahead on a copy of one client (`T.dumpOne`), so the plan is the scheduler, early. `GET /api/clients/:id/plan`. The Plan tab on a client's page: week grid, legend, the exact words by text or email. Property test over 500 generated files: the first planned ask is the next message sent.
+59. T-163, holds (TH-PLN-7, TH-OUT-24). `setHold`, `askNow`, `holdOf`; a late form waits for its usual issue date unless staff say otherwise; the wrong-year reply says when the form usually arrives (`usualIssue`).
+60. T-164, the conversation (TH-CNV-1 to 7). `panelOf` beside each reply; reply by text or by email; "I already sent that" finds the document and moves it when the system placed it (`M35Y`); a life change suggests edits from a fixed table and a person ticks which to apply. "After the 15th" now waits until the 16th. The reply contract gained `event`.
+61. T-165, the sniff trace (TH-SNF-1 to 7). `traceOf` reads the verdict and shows eight steps; the trace before a correction is kept; files are named "2026 W-2 Acme Logistics.pdf" (`filedName`). A document in someone else's name no longer sends the client anything.
+62. T-166, barks (TH-BRK-12 to 14). The `cant_reach` item; each kind goes to the client's preparer, the office manager, the owners or named people (`setBarkRules`); `setDuty` marks the office manager under Settings, People.
+63. T-167, the call card (TH-CAL-1 to 6). Who to call, what is missing, what is in; "Log the call" with what happened, a note and a day to try again; a voicemail needs a day and the card comes back at 9 that morning; restart at a chosen pace.
+64. T-168, the activity log (TH-LOG-1 to 5). `activity(clientId, kind)`: every message, document and decision with who did it, newest first; filters and a download on the Activity tab.
+
 ## Everything still to be done (November 21)
 
 Nothing in `docs/TICKETS.md` is unbuilt. What is left needs something code cannot supply.
@@ -507,5 +519,7 @@ Nothing in `docs/TICKETS.md` is unbuilt. What is left needs something code canno
 **Only possible in a pilot:** the reply evaluation on consented data with the spec's gates (the repository has a synthetic set of 85); five working days in shadow before switching reply understanding on; Manar and a pilot firm approving the client wording; one pilot firm running the spec's scenarios on its own sample clients.
 
 **Known limits, by choice:** a staff click and the five-minute timer still load the whole firm (about 0.8 s at 2,500 clients); `/api/state` sends the browser the whole workspace; the browser tests run on Chromium only, and nobody has tried a screen reader, a real phone, Safari or Firefox; the content book's staff-notification sentences are followed in meaning, not word for word, because emails leave out the client's surname and the document.
+
+**From the website spec, not built:** splitting one PDF that holds several forms (decision C7, V1). The website must show it as coming next.
 
 **Outside this repository:** the marketing website on Base44 (decision 10 in `docs/REBRAND.md`); the brand book's own list (logo exports, the hound pose pack, the slide and email templates, founder photos, the trademark search).

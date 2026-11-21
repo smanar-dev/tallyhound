@@ -21,6 +21,10 @@ Rewritten November 21, 2026 from the brand book and the content book (`docs/REBR
 
 | Do not say | Say |
 |---|---|
+| Front desk | Office manager |
+| Cadence, sequence (for one client) | Follow-up plan; the Plan tab |
+| Pipeline steps | Sniff trace |
+| Unreachable | Can't reach |
 | Start outreach, Start collecting | Go fetch (the button); "Fetch for Maria" for one client; "say go fetch" in a sentence |
 | Needs you, as the name of the place | The review queue. "Needs you" is the status on a client or a document |
 | Review, reviewed (of what Tallyhound does to a document) | sniff test; passed the sniff test; did not pass the sniff test |

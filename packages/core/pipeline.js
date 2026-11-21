@@ -157,8 +157,8 @@ function createApp({ store, sms, email, ai, clock, log, files, voice }) {
       const e = T.eng(d.engId), c = e && T.client(e.clientId); if (!c) continue;
       const base = v.folder + "/" + e.year + "/" + (c.entity || c.last + ", " + c.first), final = d.state === "accepted" && d.deliveredAt, unused = ["rejected", "duplicate", "discarded"].includes(d.state);
       const want = final ? "final" : unused ? "unused" : "incoming", folder = want === "final" ? base : base + (want === "unused" ? "/_Not used" : "/_To check");
-      if (m && m.id && m.place !== want) { m.busy = now().getTime(); d.hold = "storage"; out.push({ act: "move", docId: d.id, provider: v.provider, id: m.id, place: want, folder, name: want === "final" ? T.fileName(c, e, d) : m.name || d.id }); }
-      else if (!(m && m.id) && d.fileKey && (m || final)) { const name = want === "final" ? T.fileName(c, e, d) : "arrived " + new Date(d.at).toISOString().slice(0, 10) + " " + d.id + ext(d.contentType); d.master = Object.assign(m || { at: new Date(T.S.now) }, { busy: now().getTime(), name }); d.hold = "storage"; out.push({ act: "put", docId: d.id, provider: v.provider, key: d.fileKey, place: want, folder, name }); }
+      if (m && m.id && m.place !== want) { m.busy = now().getTime(); d.hold = "storage"; out.push({ act: "move", docId: d.id, provider: v.provider, id: m.id, place: want, folder, name: want === "final" ? (T.filedName ? T.filedName(c, e, d).replace(/\.pdf$/, ext(d.contentType)) : T.fileName(c, e, d)) : m.name || d.id }); }
+      else if (!(m && m.id) && d.fileKey && (m || final)) { const name = want === "final" ? (T.filedName ? T.filedName(c, e, d).replace(/\.pdf$/, ext(d.contentType)) : T.fileName(c, e, d)) : "arrived " + new Date(d.at).toISOString().slice(0, 10) + " " + d.id + ext(d.contentType); d.master = Object.assign(m || { at: new Date(T.S.now) }, { busy: now().getTime(), name }); d.hold = "storage"; out.push({ act: "put", docId: d.id, provider: v.provider, key: d.fileKey, place: want, folder, name }); }
     }
     return out;
   }

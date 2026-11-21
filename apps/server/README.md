@@ -23,7 +23,7 @@ A new firm is not checked: nothing is sent or read until `npm run admin -- firm-
 
 | File | What it does |
 |---|---|
-| `src/server.ts` | Routes. `/auth/*` sign-in, `/api/state`, `/api/act`, `/api/users`, `/healthz`, the pages |
+| `src/server.ts` | Routes. `/auth/*` sign-in, `/api/state`, `/api/act`, `/api/clients/:id/plan`, `/api/users`, `/healthz`, the pages |
 | `src/signin.ts` | Emailed link, authenticator code, recovery codes, sessions. Uses `packages/core/auth.js` |
 | `src/authstore.ts` | Accounts, sessions and the audit log, in memory and in Postgres |
 | `src/actions.ts` | The engine functions a browser may call, and which role may call each |

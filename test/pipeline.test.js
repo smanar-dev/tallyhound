@@ -259,5 +259,5 @@ test("TH-RPL-7: a photo of the W-2 with \"the mortgage statement after the 15th\
   assert.deepEqual(r.docs, ["accepted"]); assert.equal(r.intent, "send_after_date");
   const T = x.state(), e = T.S.engs[0], m = T.S.msgs.filter((y) => y.engId === e.id && y.dir === "in").slice(-1)[0];
   assert.equal(T.itemsOf(e.id).find((i) => i.form === "W2").state, "received"); assert.match(m.line, /^Understood: will send .* after February 15/);
-  assert.ok(T.itemsOf(e.id).some((i) => i.laterUntil && new Date(i.laterUntil).getDate() === 15), "the other item is not waiting for the 15th");
+  assert.ok(T.itemsOf(e.id).some((i) => i.laterUntil && new Date(i.laterUntil).getDate() === 16), "the other item is not waiting until after the 15th");
 });

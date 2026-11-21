@@ -9,11 +9,13 @@ import { Page } from "./Shell";
 import { Modal } from "../components/Modal";
 import { Avatar, Chip, DocChip, Empty, Icon, Ring, StatusChip } from "../components/ui";
 import { Viewer } from "../components/Doc";
+import { PlanTab } from "./PlanTab";
+import { channelState } from "../../../server/src/plan";
 import { openTasks, type Row } from "../lib/select";
 import { cname, DOW, dshort, dt, DSTATE, fname, iname, ISTATE, phone, plural, rel, tm, when } from "../lib/fmt";
 import type { IconName } from "../lib/icons";
 
-const SRC: Record<string, string> = { prior_year: "From last year", last_season: "From last season", reply: "From a client reply", question: "From a client answer", arrived: "Arrived unasked", staff: "Added by staff", template: "From template", recommended: "Suggested" };
+const SRC: Record<string, string> = { prior_year: "From last year", last_season: "From last season", reply: "From a client reply", life_change: "From a life change the client mentioned", question: "From a client answer", arrived: "Arrived unasked", staff: "Added by staff", template: "From template", recommended: "Suggested" };
 // The engine's log lines, shown in the product's vocabulary (docs/UX.md).
 const houndWords = (t: string) => String(t || "").replace(/\bquiet hours\b/gi, "sending hours").replace(/\bStuck\b/g, "Needs you").replace(/\bstuck\b/g, "waiting on you").replace(/\b[Oo]utreach\b/g, "collecting").replace(/\bhandoffs?\b/gi, "question for you").replace(/\bqueue\b/gi, "Coming up").replace(/\b[Rr]eview\b/g, "a person's check").replace(/\b[Dd]eliver(ed|y)?\b/g, "hand-off").replace(/\bapprovals?\b/gi, "your OK").replace(/\bengagements?\b/gi, "file");
 const cap = (t: string) => String(t || "").replace(/^[a-zà-ÿ]/, (ch) => ch.toUpperCase());
@@ -190,12 +192,12 @@ function Documents({ T, e, c, openDoc }: Ctx & { openDoc: (id: string) => void }
 }
 
 function Conversation({ T, e, c, openDoc }: Ctx & { openDoc: (id: string) => void }) {
-  const { can, act, toast } = useFirm(), s = T.S, ms: Row[] = s.msgs.filter((m: Row) => m.engId === e.id && m.status !== "discarded"), ch = T.channelFor(c, e) || "email";
+  const { can, act, toast } = useFirm(), s = T.S, ms: Row[] = s.msgs.filter((m: Row) => m.engId === e.id && m.status !== "discarded"), cs = channelState(T, c), [via, setVia] = useState<"" | "text" | "email">(""), ch = (via && cs[via].available ? via : "") || T.channelFor(c, e) || "email";
   const [text, setText] = useState(""), [edits, setEdits] = useState<Record<string, string>>({}), thread = useRef<HTMLDivElement>(null), docOf = (id: string) => s.docs.find((d: Row) => d.id === id);
   useEffect(() => { const el = thread.current; if (el) el.scrollTop = el.scrollHeight; }, [ms.length]);
   // The engine's own check, run as the person types, so a word that would be refused is flagged before Send (T-18).
   const errs: string[] = text.trim() ? T.outputCheck(text, ch, { year: e.year }).filter((x: string) => !x.startsWith("digit run")) : [];
-  const send = async () => { const b = text.trim(); if (!b) return toast("Write a message first."); try { const r = await act("manual", e.id, b); if (r) toast("Not sent: " + r); else { setText(""); toast(s.firm.hound.mode === "copilot" ? "Sent." : "Sent."); } } catch { /* said */ } };
+  const send = async () => { const b = text.trim(); if (!b) return toast("Write a message first."); try { const r = await act("manual", e.id, b, via && cs[via].available ? via : null); if (r) toast("Not sent: " + r); else { setText(""); toast(s.firm.hound.mode === "copilot" ? "Sent." : "Sent."); } } catch { /* said */ } };
   const approve = async (m: Row) => { try { const r = await act("approveMsg", m.id, (edits[m.id] ?? m.body).trim()); toast(r ? "Not sent: " + r + "." : "Approved. It goes out now, or when sending hours begin for this client."); } catch { /* said */ } };
   let last: Date | null = null; const out: ReactNode[] = [];
   ms.forEach((m) => {
@@ -207,26 +209,42 @@ function Conversation({ T, e, c, openDoc }: Ctx & { openDoc: (id: string) => voi
     last = m.at; const d = m.docId ? docOf(m.docId) : null, att: Row[] = (m.attachments || []).map(docOf).filter(Boolean), cls = m.dir === "in" ? "in" : m.kind === "manual" ? "man" : "out";
     const docLink = (x: Row) => <button key={x.id} className="btn sm" onClick={() => openDoc(x.id)}><Icon name="file" small />{formLabel(x.form)}</button>;
     out.push(<div key={m.id} className={"bub " + cls}>{d ? docLink(d) : m.body}{att.length ? <div className="row" style={{ gap: 6, marginTop: 8 }}>{att.map(docLink)}</div> : null}</div>);
-    if (m.dir === "in" && m.line) out.push(<div key={m.id + "u"} className="meta l line">{m.line}</div>);   // TH-RPL-3: built by the engine from checked fields
+    if (m.dir === "in" && m.line) out.push(<Understood key={m.id + "u"} T={T} m={m} />);   // TH-RPL-3, TH-CNV-3: built by the engine from checked fields
     else if (m.dir === "in" && m.understood) out.push(<div key={m.id + "u"} className="meta l" style={{ color: "var(--info)", fontWeight: 600 }}>Understood{m.ai ? " by Claude" : ""}: {m.understood}{m.aiNote ? " · " + m.aiNote : ""}</div>);
-    out.push(<div key={m.id + "m"} className={"meta " + (m.dir === "in" ? "l" : "r")}>{m.dir === "in" ? c.first + (d ? " · " + (DSTATE[d.state] || [""])[0].toLowerCase() : "") : m.kind === "manual" ? m.by : "Tallyhound · " + (T.TPL_USE[m.tpl] || "") + (m.ai ? " · written by Claude" : "") + (m.approvedBy ? " · approved by " + m.approvedBy : "")} · {m.channel} · {tm(m.at)}{m.dir === "out" ? " · " + (m.failed ? "not sent" : m.status === "unconfirmed" ? "may not have gone" : "sent") : ""}</div>);
+    out.push(<div key={m.id + "m"} className={"meta " + (m.dir === "in" ? "l" : "r")}>{m.dir === "in" ? c.first + (d ? " · " + (DSTATE[d.state] || [""])[0].toLowerCase() : "") : m.kind === "manual" ? m.by : "Tallyhound · " + (T.TPL_USE[m.tpl] || "") + (m.ai ? " · written by Claude" : "") + (m.approvedBy ? " · approved by " + m.approvedBy : "")} · <span className="chan">{m.channel === "portal" ? "upload page" : m.channel}</span> · {tm(m.at)}{m.dir === "out" ? " · " + (m.failed ? "not sent" : m.status === "unconfirmed" ? "may not have gone" : "sent") : ""}</div>);
   });
   return <div className="card">
     <div className="convo" ref={thread}>{out.length ? out : <Empty small>No messages yet. Requests, replies and anything you write to {c.first} show up here.</Empty>}</div>
     {e.takeover ? <div className="note" style={{ margin: "0 18px 6px" }}><span className="grow">{e.takeover.by} has this conversation. The hound is reading and tracking, but sends nothing until it is handed back.</span>{can() ? <button className="btn sm" onClick={() => void act("handback", e.id, "").then(() => toast("Handed back. The hound picks up in about an hour."), () => {})}>Hand back</button> : null}</div> : null}
-    {can() ? <div className="composer"><div className="row small muted" style={{ gap: 6 }}><Icon name={ch === "text" ? "phone" : "mail"} small />Replying by {ch} as {s.user.first} · staff messages are checked for advice words before sending</div>
+    {can() ? <div className="composer"><div className="row small muted" style={{ gap: 6 }}><Icon name={ch === "text" ? "phone" : "mail"} small />Replying by {ch} as {s.user.first} · staff messages are checked for advice words before sending<span className="sp" /><div className="pills" role="group" aria-label="Reply by">{(["text", "email"] as const).map((k) => <button key={k} className={ch === k ? "on" : ""} aria-pressed={ch === k} disabled={!cs[k].available} title={cs[k].unavailable_reason || ""} onClick={() => setVia(k)}>{k === "text" ? "Text" : "Email"}</button>)}</div></div>
       <textarea aria-label={"Write to " + c.first} placeholder={"Write to " + c.first} value={text} onChange={(ev) => setText(ev.target.value)} />
       <div className="row"><div className="pills">{["Thanks, got it.", "Could you send a clearer photo of that one?", "I'll call you today to go over it."].map((q) => <button key={q} onClick={() => setText(q)}>{q}</button>)}</div><span className="sp" /><span className="warnline" role="status">{errs.length ? "Will not send: " + errs.join(", ") : ""}</span><button className="btn pri" disabled={errs.length > 0} onClick={send}><Icon name="send" small />Send</button></div></div> : null}
   </div>;
 }
 
-function Activity({ T, e }: Ctx) {
-  const tl: Row[] = e.timeline || [], ic = (t: string): IconName => /Accepted|Complete|All fetched/.test(t) ? "check" : /Stuck|Gone quiet|re-ask|Re-ask|Unreadable|Wrong/.test(t) ? "alert" : /Deliver/.test(t) ? "deliver" : "clock";
-  // A few of the engine's own log lines use older words. They are shown in the product's vocabulary.
-  const words = (t: string) => t.replace(/^(Stuck|Gone quiet): /, "Gone quiet: ").replace(/^Document sent to review: /, "Document sent to you to check: ").replace(/\bOutreach started\b/, "Collecting started").replace(/\bDelivered\b/g, "Files handed off").replace(/\bdelivered\b/g, "handed off");
-  return <div className="card"><div className="list">{tl.length ? tl.map((t, i) => <div className="li" key={i}><span className="ico"><Icon name={ic(t.text)} small /></span><div className="grow">{words(t.text)}<div className="small faint">{when(T, t.at)} · {t.actor}</div></div></div>) : <Empty small>Nothing has happened yet. Every request, reply and decision for this client is listed here.</Empty>}</div></div>;
+// TH-CNV-3: what Tallyhound understood from one reply, what it did, and what is left for a person. The engine builds every line.
+function Understood({ T, m }: { T: Engine; m: Row }) {
+  const P = T.panelOf(m), [more, setMore] = useState(false); if (!P) return <div className="meta l line">{m.line}</div>;
+  return <div className="upanel" role="group" aria-label="What Tallyhound understood"><div className="meta l line">{m.line}</div>
+    {P.fields.length ? <div className="chips">{P.fields.map((f: Row, i: number) => <span className="chip plain" key={i}>{f.label}: {f.display}</span>)}</div> : null}
+    <dl><dt>What Tallyhound did</dt><dd>{P.action.text}</dd><dt>What you need to do</dt><dd>{P.team.text}</dd></dl>
+    <button className="btn sm ghost" aria-expanded={more} onClick={() => setMore(!more)}>{more ? "Hide details" : "Details"}</button>
+    {more ? <div className="small muted">{P.model === "rules" ? "Read by Tallyhound's fixed rules." : "Read by Claude, then checked by Tallyhound's rules before anything was done."} {P.confidence === "low" ? "It was not sure, so nothing was changed." : P.confidence === "high" ? "It was sure." : "A fixed rule matched."}{P.shadow ? " Practice mode: this is what the new reading would have understood. Nothing was done with it." : ""}</div> : null}</div>;
 }
 
+const ic = (t: string): IconName => /Accepted|Complete|All fetched/.test(t) ? "check" : /Stuck|Gone quiet|re-ask|Re-ask|Unreadable|Wrong/.test(t) ? "alert" : /Deliver/.test(t) ? "deliver" : "clock";
+// A few of the engine's own log lines use older words. They are shown in the product's vocabulary.
+const words = (t: string) => t.replace(/^(Stuck|Gone quiet): /, "Gone quiet: ").replace(/^Document sent to review: /, "Document sent to you to check: ").replace(/\bOutreach started\b/, "Collecting started").replace(/\bDelivered\b/g, "Files handed off").replace(/\bdelivered\b/g, "handed off");
+const AKIND: [string, string][] = [["all", "Everything"], ["message", "Messages"], ["document", "Documents"], ["decision", "Decisions"]];
+function Activity({ T, c }: Ctx) {
+  const [kind, setKind] = useState("all"), rows: Row[] = T.activity(c.id, kind), WHO: Record<string, string> = { client: "client", user: "your firm", system: "automatic" };
+  // TH-LOG-5: the same rows as a file. A cell that a spreadsheet could read as a formula is written as plain words.
+  const csv = () => { const q = (v: string) => '"' + (/^[=+\-@\t\r]/.test(v) ? "'" : "") + v.replace(/"/g, '""') + '"', body = [["When", "Kind", "Who", "What"].join(",")].concat(T.activity(c.id, "all").map((r: Row) => [new Date(r.at).toISOString(), r.kind, r.actor, words(r.summary)].map((x) => q(String(x))).join(","))).join("\r\n");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([body], { type: "text/csv" })); a.download = "activity-" + c.last + "-" + c.first + ".csv"; a.click(); URL.revokeObjectURL(a.href); };
+  const ik = (r: Row): IconName => r.kind === "message" ? (r.actorType === "client" ? "msg" : "send") : r.kind === "document" ? "file" : ic(r.summary);
+  return <div className="card"><div className="hd"><div className="pills" role="group" aria-label="Show">{AKIND.map(([k, l]) => <button key={k} className={kind === k ? "on" : ""} aria-pressed={kind === k} onClick={() => setKind(k)}>{l}</button>)}</div><span className="sp" />{rows.length ? <button className="btn sm" onClick={csv}><Icon name="deliver" small />Download</button> : null}</div>
+    <div className="list">{rows.length ? rows.map((r, i) => <div className="li" key={i}><span className="ico"><Icon name={ik(r)} small /></span><div className="grow">{words(r.summary)}<div className="small faint">{when(T, r.at)} · {r.actor} ({WHO[r.actorType] || "automatic"})</div></div></div>) : <Empty small>{kind === "all" ? "Nothing has happened yet. Every request, reply and decision for this client is listed here." : "Nothing of this kind yet."}</Empty>}</div></div>;
+}
 function Details({ T, c }: Ctx) {
   const { can, act, toast } = useFirm(), s = T.S, ro = !can();
   const [v, setV] = useState({ first: c.first, last: c.last, mobile: phone(c.mobile), email: c.email || "", tz: c.tz || "", preparer: c.preparer || "", notes: c.notes || "" });
@@ -315,7 +333,7 @@ export function ClientPage() {
   const [handOff, setHandOff] = useState<{ folder: string; files: string[]; missing: string[] } | null>(null), [purge, setPurge] = useState(false), [typed, setTyped] = useState(""), [asClient, setAsClient] = useState(false);
   if (!e || !c) return <Page title="Client"><div className="card"><Empty><b>That client is not on your list.</b><br />They may have been removed, or the address is wrong.<br /><Link className="btn" style={{ marginTop: 12 }} to="/clients">Back to Clients</Link></Empty></div></Page>;
   const s = T.S, u = s.users.find((x: Row) => x.id === c.preparer), docs = s.docs.filter((d: Row) => d.engId === e.id).length, msgs = s.msgs.filter((m: Row) => m.engId === e.id && m.status !== "discarded").length, rc = T.recommend(e.id).add.length;
-  const TABS: [string, string, (string | number | null)?][] = [["checklist", "Checklist", T.verified(e.id).n + " of " + T.verified(e.id).m], ["suggested", "Suggested", rc ? rc + " to add" : null], ["documents", "Documents", docs], ["conversation", "Conversation", msgs], ["activity", "Activity"], ["details", "Details"]];
+  const TABS: [string, string, (string | number | null)?][] = [["checklist", "Checklist", T.verified(e.id).n + " of " + T.verified(e.id).m], ["suggested", "Suggested", rc ? rc + " to add" : null], ["documents", "Documents", docs], ["conversation", "Conversation", msgs], ["plan", "Plan"], ["activity", "Activity"], ["details", "Details"]];
   const tab = TABS.some((t) => t[0] === params.get("tab")) ? params.get("tab")! : "checklist", ctx = { T, e, c };
   // The viewer opens over the page and its address says which document, so a link to it can be shared with a colleague at the firm.
   const docIds: string[] = s.docs.filter((d: Row) => d.engId === e.id).sort((a: Row, b: Row) => a.at - b.at).map((d: Row) => d.id), viewing = params.get("doc");
@@ -343,7 +361,7 @@ export function ClientPage() {
     <div className="split">
       <div style={{ minWidth: 0 }}>
         <div className="tabs" role="tablist">{TABS.map((t) => <button key={t[0]} role="tab" aria-selected={tab === t[0]} className={tab === t[0] ? "on" : ""} onClick={() => setParams(t[0] === "checklist" ? {} : { tab: t[0] })}>{t[1]}{t[2] != null ? <span className="n">{t[2]}</span> : null}</button>)}</div>
-        {tab === "checklist" ? <Checklist {...ctx} openDoc={openDoc} /> : tab === "suggested" ? <Suggested {...ctx} /> : tab === "documents" ? <Documents {...ctx} openDoc={openDoc} /> : tab === "conversation" ? <Conversation {...ctx} openDoc={openDoc} /> : tab === "activity" ? <Activity {...ctx} /> : <Details key={c.id + ":" + (c.mobile || "") + (c.email || "")} {...ctx} />}
+        {tab === "checklist" ? <Checklist {...ctx} openDoc={openDoc} /> : tab === "suggested" ? <Suggested {...ctx} /> : tab === "documents" ? <Documents {...ctx} openDoc={openDoc} /> : tab === "conversation" ? <Conversation {...ctx} openDoc={openDoc} /> : tab === "plan" ? <PlanTab {...ctx} /> : tab === "activity" ? <Activity {...ctx} /> : <Details key={c.id + ":" + (c.mobile || "") + (c.email || "")} {...ctx} />}
       </div>
       <div className="col" style={{ gap: 16 }}>
         <HoundCard {...ctx} />

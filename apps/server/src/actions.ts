@@ -63,7 +63,14 @@ export const ACTIONS: Record<string, Rule> = {
   setSpouse: { role: "staff", n: 2, run: (T, [cid, other]) => T.setSpouse(String(cid || ""), other ? String(other) : "") },
   setClosedDays: { role: "owner", n: 1, run: (T, [list]) => T.setClosedDays((Array.isArray(list) ? list : []).slice(0, 100).map(String)) },
   // chase
-  start: staff(1), pause: staff(1), resume: staff(1), takeover: staff(2), handback: staff(2), approveMsg: staff(2), rejectMsg: staff(1), manual: staff(2), markHeadsUp: staff(1),
+  start: staff(1), pause: staff(1), resume: staff(1), takeover: staff(2), handback: staff(2), approveMsg: staff(2), rejectMsg: staff(1), markHeadsUp: staff(1),
+  // TH-CNV-2: staff choose text or email for one reply. The engine refuses a channel the client has not agreed to or that does not work.
+  manual: { role: "staff", n: 3, run: (T, [eid, body, via]) => T.manual(eid, body, false, via === "text" || via === "email" ? via : undefined) },
+  // TH-PLN-7: hold one document until a date, clear the hold, or ask for it now. Ask now still keeps to sending hours and one automatic message a day.
+  setHold: { role: "staff", n: 2, run: (T, [iid, day]) => T.setHold(String(iid || ""), String(day || "")) },
+  askNow: { role: "staff", n: 1, run: (T, [iid]) => T.askNow(String(iid || "")) },
+  // TH-BRK-14: who is the office manager, for the kinds of bark an owner sends there.
+  setDuty: { role: "owner", n: 2, run: (T, [uid, on]) => T.setDuty(String(uid || ""), on === true) },
   // The Hound's schedule and memory, as the demo's Coming up list and client panel change them.
   sendNow: { role: "staff", n: 1, run: (T, [eid]) => { const e = T.eng(eid); if (!e || !e.next) return "Nothing is planned for this client"; if (!T.allowed(T.S.now)) return "It is outside sending hours. The Hound waits until they begin."; e.lastAutoDay = null; e.next = new Date(T.S.now); T.step(e); T.hlog(e, "decide", T.S.user.name + " sent the next message now", "A person asked for it from Coming up", "Rules"); return null; } },
   snooze: { role: "staff", n: 1, run: (T, [eid]) => { const e = T.eng(eid); if (!e || !e.next) return "Nothing is planned for this client"; e.next = T.nextAllowed(new Date(new Date(e.next).getTime() + T.DAY)); T.hlog(e, "decide", T.S.user.name + " put the next message off by a day", "A person asked for it from Coming up", "Rules"); return null; } },

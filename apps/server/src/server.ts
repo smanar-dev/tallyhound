@@ -22,6 +22,7 @@ import { registerHooks, type HookDeps } from "./hooks.ts";
 import { pdfCount, pdfPage, ready } from "./files.ts";
 import { registerPublic, type PublicDeps } from "./public.ts";
 import type { PrepareOpts } from "./kit.ts";
+import { planFor } from "./plan.ts";
 
 export interface ServerDeps {
   app: App; auth: AuthStore; signIn: SignIn; firms: Firms;
@@ -184,6 +185,13 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
     return reply.header("content-security-policy", "default-src 'none'; sandbox").header("content-disposition", shown ? "inline" : "attachment").type(shown ? file.contentType : "application/octet-stream").send(file.bytes);
   });
 
+  // TH-PLN-3: one client's follow-up plan. Read only: it is worked out from the saved state by running the engine's own scheduler ahead
+  // on a copy, and nothing is saved or sent. The staff app works out the same plan in the browser from the state it already holds.
+  f.get("/api/clients/:id/plan", { preHandler: full }, async (req, reply) => {
+    const u = req.who!.user, eid = (req.params as { id: string }).id, json = await d.readState(u.firmId), T0 = createEngine(); if (!json) return reply.code(404).send({ error: "no_firm", message: "This firm's workspace could not be found." }); T0.load(json);
+    if (!T0.eng(eid)) return reply.code(404).send({ error: "no_client", message: "That client is not on your list." });
+    return planFor(T0, eid, createEngine);
+  });
   // T-46: a prior-year return in, a proposed checklist out. The file is read in memory and never kept; only the page count is recorded.
   f.post("/api/clients/:id/prior", { preHandler: full, bodyLimit: MAX_UPLOAD }, async (req, reply) => {
     const u = req.who!.user, eid = (req.params as { id: string }).id; if (u.role === "read_only") return reply.code(403).send({ error: "role", message: NO.read_only });

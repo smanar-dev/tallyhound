@@ -32,6 +32,7 @@ function readText(T, e, text) {
     '"person": for someone_else_has_it one of "spouse","employer","accountant","other" (a role, never a name), else null, ' +
     '"date": for send_after_date the day they mean as YYYY-MM-DD, else null (today is ' + new Date(T.S.now).toISOString().slice(0, 10) + '), ' +
     '"change": for life_change {"kind": "add" or "remove", "form_code": one of ' + JSON.stringify(Object.keys(T.FORMS).filter((k) => k !== "OTHER")) + ', "reason": one of "sold_home","account_closed","no_longer_employed","not_this_year","combined_elsewhere","other"}, else null, ' +
+    '"event": for life_change, when it clearly fits, one of ' + JSON.stringify(Object.keys(T.LIFE_SUGGEST)) + ', else null, ' +
     '"also_document": true if the same message says a document is attached or coming with it, else false, ' +
     '"item_id": the id of the document they mean from the list, or null, "later_days": number of days if they say when they will send it, or null, ' +
     '"summary": a plain summary in under 12 words, ' +

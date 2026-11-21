@@ -100,6 +100,19 @@ for (const kind of KINDS) {
     await H.close();
   });
 
+  test(name("TH-PLN-3: one client's plan is served to a signed-in member of that firm and to nobody else, and asking for it changes nothing"), async () => {
+    const H = await build(kind); const { firmId, ownerId } = await H.newFirm(); await H.newFirm(2);
+    await H.app.staff(firmId, ownerId, (T: Engine) => { T.S.firm.senderStatus = "approved"; T.S.firm.hound.mode = "autopilot"; T.importRows(T.parseCSV("First,Last,Email,Mobile\nJo,Day,jo@x.example,6155550111")); const e = T.S.engs[0]; e.confirmed = true; T.start(e.id); T.giveConsent(T.S.clients[0].id, "page"); });
+    const owner = await H.signInAs("pat1@firm1.test"), st = (await owner.get("/api/state")).json.state, eid = st.engs[0].id, before = st.msgs.length;
+    const r = await owner.get("/api/clients/" + eid + "/plan"); assert.equal(r.status, 200); const asks = r.json.events.filter((x: { status: string; preview?: { preview: boolean; body: string } }) => x.status === "planned" && x.preview);
+    assert.ok(asks.length >= 3, "no planned asks"); assert.ok(asks.every((x: { preview: { preview: boolean; body: string } }) => x.preview.preview === true && x.preview.body)); assert.equal(r.json.preset, "steady");
+    assert.equal((await owner.get("/api/state")).json.state.msgs.length, before, "asking for the plan created a message");
+    assert.equal((await owner.get("/api/clients/nobody/plan")).status, 404);
+    const stranger = await H.signInAs("pat2@firm2.test"); assert.equal((await stranger.get("/api/clients/" + eid + "/plan")).status, 404, "another firm can read this plan");
+    assert.equal((await H.browser().get("/api/clients/" + eid + "/plan")).status, 401);
+    await H.close();
+  });
+
   test(name("T-04: a read-only person's write requests return 403, staff cannot use owner actions, and unlisted engine functions cannot be reached"), async () => {
     const H = await build(kind); const { firmId } = await H.newFirm(); const owner = await H.signInAs("pat1@firm1.test");
     assert.equal((await owner.post("/api/users", { name: "Alex Staff", email: "alex@firm1.test", role: "staff" })).status, 200);

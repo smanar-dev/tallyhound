@@ -9,7 +9,7 @@ import type { Engine } from "../../server/src/kit.ts";
 after(closeBrowser);
 export const ROUTES = ["/", "/clients", "/needs-you", "/hound", "/add-clients", "/messages", "/progress", "/help", "/settings"];
 // Every screen for a firm with clients: the fixed ones plus each tab of one client's page.
-const TABS = ["", "?tab=suggested", "?tab=documents", "?tab=conversation", "?tab=activity", "?tab=details"];
+const TABS = ["", "?tab=suggested", "?tab=documents", "?tab=conversation", "?tab=plan", "?tab=activity", "?tab=details"];
 const routesFor = async (W: World, firmId: string) => { const T: Engine = await W.state(firmId); return ROUTES.concat(TABS.map((t) => "/clients/" + T.S.engs[0].id + t), ["/clients?do=add", "/clients?do=start", "/clients/nobody", "/messages?show=unknown", "/add-clients", "/hound?tab=next", "/hound?tab=ask", "/hound?tab=drafts", "/hound?tab=rules", "/settings?tab=people", "/settings?tab=checklists", "/settings?tab=wording", "/settings?tab=hours", "/settings?tab=plan", "/settings?tab=texting", "/settings?tab=domain", "/settings?tab=files", "/settings?tab=files&problem=declined", "/settings?tab=security", "/progress", "/needs-you?show=says_none", "/needs-you?show=document", "/clients/" + T.S.engs[0].id + "?tab=documents&doc=" + T.S.docs[0].id]); };
 const PAYLOAD = '"><img src=x onerror="window.__pwned=1"><script>window.__pwned=2</script><b>bold</b>';
 
@@ -44,7 +44,7 @@ scene("T-52: an HTML payload planted in every stored text field shows as text on
 // for a list; "approval" in a sentence about the carriers is ordinary English and stays.
 // "The review queue" is the brand's name for the one place work waits for a person, so that phrase is taken out before "review" and
 // "queue" are looked for on their own: a document is never "reviewed" by Tallyhound, and nothing else is a "queue".
-const BANNED = ["start outreach", "start collecting", "copilot", "autopilot", "review", "inbox", "unmatched tray", "unmatched", "stuck", "waiting on consent", "handoffs", "approvals", "queue", "playbook", "live log", "requirements", "deliver", "latest reasoning", "engagements?"];
+const BANNED = ["start outreach", "start collecting", "copilot", "autopilot", "review", "inbox", "unmatched tray", "unmatched", "stuck", "waiting on consent", "handoffs", "approvals", "queue", "playbook", "live log", "requirements", "deliver", "latest reasoning", "engagements?", "front desk", "unreachable"];
 for (const busy of [true, false]) scene("T-65: no screen uses a word the vocabulary table retired (" + (busy ? "a busy firm" : "an empty firm") + ")", async (W) => {
   const firmId = busy ? (await busyFirm(W)).firmId : (await W.newFirm()).firmId, page = await W.signIn("pat1@firm1.test");
   for (const route of busy ? await routesFor(W, firmId) : ROUTES) {

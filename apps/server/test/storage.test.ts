@@ -54,7 +54,7 @@ for (const kind of KINDS) {
     const jo = (await state()).S.clients[0].id; await H.app.clientUpload({ firmId, clientId: jo, files: [{ bytes: JPEG, contentType: "image/jpeg" }], providerId: "up1" });
     for (let i = 0; i < 4; i++) await H.worker.pass();
     const files = G.files(); assert.equal(files.length, 1, "one file in the drive, not a copy per step"); assert.match(files[0]!, /^Tax Docs\/2026 intake\/2026\/Day, Jo\//);
-    T = await state(); const d = T.S.docs[0]; assert.ok(d.master && d.master.id, "the document remembers where its original is"); if (d.deliveredAt) assert.equal(files[0], "Tax Docs/2026 intake/2026/Day, Jo/" + T.fileName(T.S.clients[0], T.S.engs[0], d));
+    T = await state(); const d = T.S.docs[0]; assert.ok(d.master && d.master.id, "the document remembers where its original is"); if (d.deliveredAt) assert.equal(files[0], "Tax Docs/2026 intake/2026/Day, Jo/" + T.filedName(T.S.clients[0], T.S.engs[0], d).replace(/\.pdf$/, ".jpg"));
     assert.ok(G.calls.includes("POST oauth2.googleapis.com/token"));
     // Disconnect: the permission is taken away at Google, the token is forgotten, and files go back to the zip.
     assert.equal((await alex.post("/api/storage/disconnect")).status, 403); assert.equal((await owner.post("/api/storage/disconnect")).status, 200);

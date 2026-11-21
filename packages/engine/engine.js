@@ -81,6 +81,7 @@
 
   const TPL = {
     en: {
+      M35Y: "You're right, we have it. Thank you, {first}.",
       M34: "Thanks, {first}. We'll ask them for it, or follow up with you.",
       M35: "Thanks, {first}. We have your {plain_name}{from_payer} and are checking it now.",
       M35R: "Thanks, {first}. We don't have your {plain_name}{from_payer} yet. Could you send it again? A photo by reply works, or use this page: {link}",
@@ -99,7 +100,7 @@
       M4: "Thanks, got it. Next: your {plain_name}{from_payer}. {where_hint}",
       M5: "Hi {first}, {firm} here. We still need your {plain_name}{from_payer} for {year}. A photo by reply works.",
       M6: "{firm}: we are still missing {k} documents for your {year} return. Reply here or call us on {firm_phone}. We'll pause reminders for now.",
-      M7: "Thanks. That one is for {doc_year}. We need the {year} version of your {plain_name}{from_payer}. {where_hint}",
+      M7: "Thanks. That one is for {doc_year}. We need the {year} version of your {plain_name}{from_payer}. {usual_issue}",
       M8: "Thanks. We can't read part of that photo. Could you retake it flat, in good light, with all four corners showing?",
       M8L: "Still hard to read, sorry. This page keeps full quality: {link}",
       M9: "Thanks. That looks like one page of a longer document. Please send the other pages too.",
@@ -128,6 +129,7 @@
       M31: "{firm} is not collecting documents here right now. Please contact {firm} directly: call {firm_phone} or email {firm_email}."
     },
     es: {
+      M35Y: "Tiene razón, ya lo tenemos. Gracias, {first}.",
       M34: "Gracias, {first}. Se lo pediremos a esa persona, o le escribiremos a usted.",
       M35: "Gracias, {first}. Tenemos su {plain_name}{from_payer} y lo estamos revisando.",
       M35R: "Gracias, {first}. Aún no tenemos su {plain_name}{from_payer}. ¿Podría enviarlo de nuevo? Puede responder con una foto o usar esta página: {link}",
@@ -146,7 +148,7 @@
       M4: "Gracias, recibido. Siguiente: su {plain_name}{from_payer}. {where_hint}",
       M5: "Hola {first}, le escribe {firm}. Aún necesitamos su {plain_name}{from_payer} de {year}. Puede responder con una foto.",
       M6: "{firm}: aún faltan {k} documentos para su declaración de {year}. Responda aquí o llámenos al {firm_phone}. Pausaremos los recordatorios por ahora.",
-      M7: "Gracias. Ese documento es de {doc_year}. Necesitamos el de {year}: su {plain_name}{from_payer}. {where_hint}",
+      M7: "Gracias. Ese documento es de {doc_year}. Necesitamos el de {year}: su {plain_name}{from_payer}. {usual_issue}",
       M8: "Gracias. No podemos leer parte de la foto. ¿Puede tomarla de nuevo sobre una superficie plana, con buena luz y mostrando las cuatro esquinas?",
       M8L: "Aún es difícil de leer, disculpe. Esta página mantiene la calidad completa: {link}",
       M9: "Gracias. Parece una página de un documento más largo. Por favor envíe también las otras páginas.",
@@ -175,7 +177,7 @@
       M31: "{firm} no está recibiendo documentos aquí por ahora. Comuníquese con {firm} directamente: llame al {firm_phone} o escriba a {firm_email}."
     }
   };
-  const TPL_USE = { M34: "Someone else has the document", M35: "Says it was already sent: we have it", M35R: "Says it was already sent: asked again", M36: "A change passed to the preparer", M37: "Says the messages are not theirs", M20D: "Will send after a date", M33: "Voicemail after the final reminder", M32: "The closing question", M31: "Auto-reply while the firm is paused", M30L: "Locked PDF", M30T: "A file we cannot open", M30K: "A link instead of a file", M1: "Invitation to text (email)", M1R: "Invitation reminder (email)", M2: "Texting turned on", M3: "First request", M4: "Next request", M5: "Reminder", M6: "Final reminder", M7: "Wrong year", M8: "Photo too hard to read", M8L: "Photo too hard to read, second time", M9: "Missing page", M10: "Did anything change this year?", M11: "Duplicate", M12: "Passed to your team", M13: "Everything is in", M14: "Question passed to a person", M15: "Where to find a form", M16: "Texting turned off (STOP)", M16H: "Reply to HELP", M19: "Client has none, next request", M19X: "Client has none", M20: "Will send later", M21: "Unknown sender", M26: "What is still needed", M27: "Document arrived before we asked", M28: "Check-in invitation", M28R: "Check-in reminder", M29: "Check-in thanks", M22: "Part of a document is missing", M22R: "Reminder for the missing part", M23: "One reply for several documents", M24: "Passed to a person", M25: "Pause when a client is upset" };
+  const TPL_USE = { M34: "Someone else has the document", M35: "Says it was already sent: we have it", M35R: "Says it was already sent: asked again", M35Y: "Says it was already sent: found under another item", M36: "A change passed to the preparer", M37: "Says the messages are not theirs", M20D: "Will send after a date", M33: "Voicemail after the final reminder", M32: "The closing question", M31: "Auto-reply while the firm is paused", M30L: "Locked PDF", M30T: "A file we cannot open", M30K: "A link instead of a file", M1: "Invitation to text (email)", M1R: "Invitation reminder (email)", M2: "Texting turned on", M3: "First request", M4: "Next request", M5: "Reminder", M6: "Final reminder", M7: "Wrong year", M8: "Photo too hard to read", M8L: "Photo too hard to read, second time", M9: "Missing page", M10: "Did anything change this year?", M11: "Duplicate", M12: "Passed to your team", M13: "Everything is in", M14: "Question passed to a person", M15: "Where to find a form", M16: "Texting turned off (STOP)", M16H: "Reply to HELP", M19: "Client has none, next request", M19X: "Client has none", M20: "Will send later", M21: "Unknown sender", M26: "What is still needed", M27: "Document arrived before we asked", M28: "Check-in invitation", M28R: "Check-in reminder", M29: "Check-in thanks", M22: "Part of a document is missing", M22R: "Reminder for the missing part", M23: "One reply for several documents", M24: "Passed to a person", M25: "Pause when a client is upset" };
   const COMPLIANCE = ["M1", "M1R", "M2", "M16", "M16H", "M21"];
   /* Voice (TH-VOI, docs/REBRAND.md section 5). How the firm's messages sound: Warm, Professional or Brief, for the firm or for one
      client. Professional is TPL above. Warm and Brief are written by hand below, one for one; nothing here is written by a model.
@@ -191,6 +193,7 @@
   const VOICE_TPL = {
     warm: {
       en: {
+        M35Y: "You're right, {first}, we have it. Thank you for checking.",
         M34: "Thank you for letting us know, {first}. We'll ask them for it, or follow up with you.",
         M35: "Thank you, {first}. We have your {plain_name}{from_payer} and are checking it now. We'll be in touch if anything is missing.",
         M35R: "Thank you, {first}. Sorry, we don't have your {plain_name}{from_payer} yet. Could you send it once more? A photo by reply is perfect, or use this page: {link}",
@@ -201,7 +204,7 @@
         M4: "Thank you, {first}, got it. Next on the list is your {plain_name}{from_payer}. {where_hint}",
         M5: "Hi {first}, {firm} here with a friendly reminder. We still need your {plain_name}{from_payer} for {year}. A photo by reply is perfect. Thank you. {sign_off}",
         M6: "Hi {first}, it's {firm}. We are still missing {k} documents for your {year} return. Whenever you are ready, reply here or call us on {firm_phone}. We'll pause the reminders for now. Thank you.",
-        M7: "Thank you, {first}. That one is for {doc_year}, and we need the {year} version of your {plain_name}{from_payer}. {where_hint}",
+        M7: "Thank you, {first}. That one is for {doc_year}, and we need the {year} version of your {plain_name}{from_payer}. {usual_issue}",
         M8: "Thank you, {first}. Part of that photo is hard to read. Could you take it again with the page flat, in good light, with all four corners showing?",
         M8L: "Sorry, {first}, it is still hard to read. This page keeps the photo at full quality: {link}",
         M9: "Thank you, {first}. That looks like one page of a longer document. Could you send the other pages too?",
@@ -229,6 +232,7 @@
         M32: "{firm} has every document on your list, {first}. Thank you. One last thing: did anything change this year that we have not asked about, such as a new job, a move or a sale? Reply YES or NO."
       },
       es: {
+        M35Y: "Tiene razón, {first}, ya lo tenemos. Gracias por avisarnos.",
         M34: "Gracias por avisarnos, {first}. Se lo pediremos a esa persona, o le escribiremos a usted.",
         M35: "Gracias, {first}. Tenemos su {plain_name}{from_payer} y lo estamos revisando. Le escribiremos si falta algo.",
         M35R: "Gracias, {first}. Disculpe, aún no tenemos su {plain_name}{from_payer}. ¿Podría enviarlo una vez más? Puede responder con una foto o usar esta página: {link}",
@@ -239,7 +243,7 @@
         M4: "Gracias, {first}, recibido. Lo siguiente en la lista es su {plain_name}{from_payer}. {where_hint}",
         M5: "Hola {first}, le escribe {firm} con un recordatorio amable. Aún necesitamos su {plain_name}{from_payer} de {year}. Una foto como respuesta es suficiente. Gracias. {sign_off}",
         M6: "Hola {first}, le escribe {firm}. Aún faltan {k} documentos para su declaración de {year}. Cuando pueda, responda aquí o llámenos al {firm_phone}. Pausaremos los recordatorios por ahora. Gracias.",
-        M7: "Gracias, {first}. Ese documento es de {doc_year} y necesitamos el de {year}: su {plain_name}{from_payer}. {where_hint}",
+        M7: "Gracias, {first}. Ese documento es de {doc_year} y necesitamos el de {year}: su {plain_name}{from_payer}. {usual_issue}",
         M8: "Gracias, {first}. Parte de la foto es difícil de leer. ¿Podría tomarla de nuevo sobre una superficie plana, con buena luz y mostrando las cuatro esquinas?",
         M8L: "Disculpe, {first}, aún es difícil de leer. Esta página mantiene la foto con calidad completa: {link}",
         M9: "Gracias, {first}. Parece una página de un documento más largo. ¿Podría enviar también las otras páginas?",
@@ -269,6 +273,7 @@
     },
     brief: {
       en: {
+        M35Y: "You're right, we have it. Thanks.",
         M34: "Thanks. We'll ask them, or follow up.",
         M35: "We have your {plain_name}{from_payer} and are checking it.",
         M35R: "We don't have your {plain_name}{from_payer} yet. Please send it again here: {link}",
@@ -279,7 +284,7 @@
         M4: "Got it, thanks. Next: your {plain_name}{from_payer}.",
         M5: "{firm}: still need your {plain_name}{from_payer} for {year}. A photo by reply works.",
         M6: "{firm}: {k} documents still missing for {year}. Reply here or call us on {firm_phone}. Reminders are paused.",
-        M7: "That one is for {doc_year}. Please send the {year} {plain_name}{from_payer}.",
+        M7: "That one is for {doc_year}. Please send the {year} {plain_name}{from_payer}. {usual_issue}",
         M8: "We can't read that photo. Please retake it flat, in good light, all four corners showing.",
         M8L: "Still hard to read. Please use this page: {link}",
         M9: "That is one page of a longer document. Please send the other pages.",
@@ -307,6 +312,7 @@
         M32: "{firm} has every document on your list. Did anything else change this year, such as a new job, a move or a sale? Reply YES or NO."
       },
       es: {
+        M35Y: "Tiene razón, ya lo tenemos. Gracias.",
         M34: "Gracias. Se lo pediremos, o le escribiremos.",
         M35: "Tenemos su {plain_name}{from_payer} y lo estamos revisando.",
         M35R: "Aún no tenemos su {plain_name}{from_payer}. Por favor envíelo de nuevo aquí: {link}",
@@ -317,7 +323,7 @@
         M4: "Recibido, gracias. Siguiente: su {plain_name}{from_payer}.",
         M5: "{firm}: aún necesitamos su {plain_name}{from_payer} de {year}. Puede responder con una foto.",
         M6: "{firm}: aún faltan {k} documentos de {year}. Responda aquí o llámenos al {firm_phone}. Los recordatorios quedan en pausa.",
-        M7: "Ese documento es de {doc_year}. Por favor envíe el de {year}: su {plain_name}{from_payer}.",
+        M7: "Ese documento es de {doc_year}. Por favor envíe el de {year}: su {plain_name}{from_payer}. {usual_issue}",
         M8: "No podemos leer la foto. Por favor tómela de nuevo, plana, con buena luz y las cuatro esquinas visibles.",
         M8L: "Aún es difícil de leer. Por favor use esta página: {link}",
         M9: "Es una página de un documento más largo. Por favor envíe las otras páginas.",
@@ -424,7 +430,7 @@
   const SCRUB_WORD = { ssn: "a Social Security number", card: "a card number", bank: "a bank account number" };
   function scrubIn(text, e) { const r = scrub(text); if (r.hit.length && e) { hlog(e, "guardrail", "Removed " + r.hit.map((k) => SCRUB_WORD[k]).join(" and ") + " from a message before storing it", "Tallyhound never keeps these. The rest of the message is unchanged.", "Rules"); audit("privacy.scrub", client(e.clientId).last + ": " + r.hit.join(", "), "Tallyhound"); } return r.text; }
   function remember(e, text, source) { if (!text) return; text = scrub(text).text; e.memory = e.memory || []; if (e.memory.some((m) => m.text === text)) return; e.memory.unshift({ at: new Date(S.now), text, source }); hlog(e, "memory", "Remembered: " + text, "Used to word and time future messages", source === "Claude" ? "Claude" : "Rules"); }
-  function releaseOf(it, e) { const r = RELEASE[it.form]; if (!r) return null; const d = new Date((e ? e.year : 2026) + 1, r[0], r[1]); d.setHours(S.firm.newDayHour, 0, 0, 0); return d; }
+  function releaseOf(it, e) { const r = RELEASE[it.form]; if (!r || it.holdOff) return null; const d = new Date((e ? e.year : 2026) + 1, r[0], r[1]); d.setHours(S.firm.newDayHour, 0, 0, 0); return d; }
   const expectYear = (form, e) => (form === "PRIOR" ? e.year - 1 : e.year);
   function missText(keys, lang, form) {
     const es = lang === "es", parts = keys.map((k) => MISSTXT[k] || [null, null, null, null]);
@@ -497,7 +503,7 @@
       plain_name: F ? (it.custom ? ((x) => (/^[A-ZÁÉÍÓÚ][a-záéíóúñ]/.test(x) ? x[0].toLowerCase() + x.slice(1) : x))(lang === "es" && it.customEs ? it.customEs : it.custom) : lang === "es" ? F.es : F.plain) : "", from_payer: it && it.payer ? (lang === "es" ? " de " : " from ") + it.payer : "",
       where_hint: F ? (lang === "es" ? F.hintEs : F.hint) : "", issuer: F ? (lang === "es" ? F.issuerEs : F.issuer) : "",
       link: linkFor(c, code.startsWith("M1") ? "c" : "u"), firm_phone: S.firm.phone, firm_email: S.firm.email,
-      how_send: LONGHOW[lang][it && LONGDOC.includes(it.form) ? 1 : 0],
+      how_send: LONGHOW[lang][it && LONGDOC.includes(it.form) ? 1 : 0], usual_issue: it ? usualIssue(it.form, lang) || (F ? (lang === "es" ? F.hintEs : F.hint) || "" : "") : "",
       // The firm's sign-off (up to 30 characters). With none set, Warm signs with the preparer's first name and Professional does not sign.
       sign_off: S.firm.signOff || (voice === "warm" && prep && prep !== S.firm.sender ? prep : "")
     }, extra || {});
@@ -626,13 +632,22 @@
   /* Fetch until verified (TH-CMP, docs/REBRAND.md section 5). A file that stops moving never just sits: it always has an item in
      the review queue. Where the reason already put one there (a question, a document to look at, an "I don't have it"), that is
      the item. Otherwise a "gone quiet" item is opened, saying what is still missing and how many times each was asked. */
+  const CALL_OUTCOMES = { reached_will_send: "Reached: will send", reached_has_none: "Reached: does not have some", voicemail: "Left a voicemail", no_answer: "No answer", wrong_number: "Wrong number" }, CALL_FOLLOW_UP_HOUR = 9;
   const BACKED = { question_waiting: "question", review_waiting: "document", client_says_none: "says_none" };
   const askedCount = (e, i) => S.msgs.filter((m) => m.engId === e.id && m.dir === "out" && m.itemId === i.id && !["discarded", "approval", "writing"].includes(m.status)).length;
   function callScript(e, c) { const open = openItems(e.id); return "Hi " + c.first + ", it's " + ((S.users.find((u) => u.id === c.preparer) || {}).first || "your preparer") + " at " + S.firm.name + ". We're still missing " + open.length + " document" + (open.length === 1 ? "" : "s") + " for your return: " + open.map((i) => (i.custom || FORMS[i.form].plain) + (i.payer ? " from " + i.payer : "")).join(", ") + ". Is there anything making these hard to get? You can text photos to the same number we've been using."; }
+  /* TH-BRK-12: no usable channel is left (texts stopped or failing with no email to fall back on, or email bounced with no texts).
+     A STOP that leaves email open is not this: it is a note on the client's activity and nothing more. */
+  function cantReach(e, c, reason) {
+    if (S.tasks.some((t) => t.status === "open" && t.engId === e.id && t.kind === "cant_reach")) return null;
+    const failed = []; if (c) { if (c.textConsent === "withdrawn") failed.push("Texts: " + c.first + " replied STOP"); else if (c.mobileBad) failed.push("Texts: the number is wrong or not a mobile"); else if (!c.mobile) failed.push("Texts: no mobile on file"); else if (c.textConsent !== "given") failed.push("Texts: " + c.first + " has not agreed to them"); if (c.emailOff) failed.push("Email: " + c.first + " unsubscribed"); else if (!c.email) failed.push("Email: no address on file"); else if (c.emailOk === false) failed.push("Email: the address bounced"); }
+    return addTask({ kind: "cant_reach", reason: "No way left to reach the client", why: reason, engId: e.id, context: { failed, missing: openItems(e.id).map((i) => ({ itemId: i.id, asked: askedCount(e, i) })) } });
+  }
   function quietTask(e, reason) {
     const mine = S.tasks.filter((t) => t.status === "open" && t.engId === e.id);
-    if (mine.some((t) => t.kind === "gone_quiet") || (BACKED[reason] && mine.some((t) => t.kind === BACKED[reason]))) return null;
+    if (mine.some((t) => t.kind === "gone_quiet" || t.kind === "cant_reach") || (BACKED[reason] && mine.some((t) => t.kind === BACKED[reason]))) return null;
     const c = client(e.clientId);
+    if (["opted_out", "not_delivering"].includes(reason)) return cantReach(e, c, reason);
     return addTask({ kind: "gone_quiet", reason: STUCK[reason][0], why: reason, engId: e.id, script: c ? callScript(e, c) : "",
       context: { missing: openItems(e.id).map((i) => ({ itemId: i.id, asked: askedCount(e, i) })), lastAsked: e.lastOut || null } });
   }
@@ -665,13 +680,31 @@
     return false;
   }
   function nextItem(e) {
-    const ok = (i) => !(i.laterUntil && i.laterUntil > S.now) && !(releaseOf(i, e) && releaseOf(i, e) > S.now);
+    const ok = (i) => !heldUntil(i, e);   // one rule for "is this item being held": the staff date, the client's date, or the catalogue's
     // TH-MEM-5: something already asked for stays first; otherwise what was slow last year is asked for before the rest.
     const L = itemsOf(e.id), open = (i) => (i.state === "requested" || i.state === "expected") && ok(i);
-    return L.find((i) => i.state === "partial" && ok(i)) || L.find((i) => i.state === "requested" && ok(i)) || L.find((i) => open(i) && i.carryNote === "Slow last year") || L.find(open);
+    return L.find((i) => i.askFirst && open(i)) || L.find((i) => i.state === "partial" && ok(i)) || L.find((i) => i.state === "requested" && ok(i)) || L.find((i) => open(i) && i.carryNote === "Slow last year") || L.find(open);
   }
   // Until when an item is held back: its form is not issued yet, or the client said when they will send it. null when it is not held.
-  function heldUntil(i, e) { const a = [releaseOf(i, e), i.laterUntil].filter((x) => x && x > S.now).map((x) => +new Date(x)); return a.length ? new Date(Math.max.apply(null, a)) : null; }
+  function heldUntil(i, e) { const a = [i.holdUntil || releaseOf(i, e), i.laterUntil].filter((x) => x && x > S.now).map((x) => +new Date(x)); return a.length ? new Date(Math.max.apply(null, a)) : null; }
+  /** Why an item is being held, for the plan: the staff's own date, the date the client gave, or when the form is usually issued. */
+  function holdOf(i, e) { const u = heldUntil(i, e); if (!u) return null; const lu = i.laterUntil && +new Date(i.laterUntil) === +u; return { until: u, reason: lu ? "client_date" : i.holdUntil ? "staff_date" : "catalogue_date" }; }
+  /* TH-PLN-7: staff hold one item until a date, clear the hold, or ask for it now. A date in the past is refused. "Ask now" still
+     keeps to sending hours and to one automatic message a day. */
+  function setHold(iid, day) {
+    const it = S.items.find((x) => x.id === iid), e = it && eng(it.engId); if (!it || !e) return "No such item"; if (!may()) return "Not allowed"; if (!OPEN.includes(it.state)) return "That item is not open";
+    if (!day) { delete it.holdUntil; delete it.laterUntil; it.holdOff = true; timeline(e, "Hold cleared: " + (it.custom || FORMS[it.form].plain), S.user.name); wakeFile(e); return null; }
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(day)); if (!m) return "Choose a date"; const d = new Date(+m[1], +m[2] - 1, +m[3], S.firm.newDayHour); if (d <= S.now) return "That date has passed. Choose a later one";
+    it.holdUntil = d; delete it.holdOff; delete it.laterUntil; if (it.state === "requested") it.state = "expected";
+    timeline(e, "Held until " + MONTHS[d.getMonth()] + " " + d.getDate() + ": " + (it.custom || FORMS[it.form].plain), S.user.name); wakeFile(e); return null;
+  }
+  function askNow(iid) {
+    const it = S.items.find((x) => x.id === iid), e = it && eng(it.engId), c = e && client(e.clientId); if (!it || !e) return "No such item"; if (!may()) return "Not allowed"; if (!OPEN.includes(it.state)) return "That item is not open";
+    if (e.status !== "in_progress") return "Fetching is not running for this client";
+    delete it.holdUntil; delete it.laterUntil; it.holdOff = true; it.askFirst = true; e.step = 0; e.next = nextAllowedC(S.now, c); timeline(e, "Asked for now: " + (it.custom || FORMS[it.form].plain), S.user.name); return null;
+  }
+  // After a hold changes, the file's next turn is whatever is now soonest.
+  function wakeFile(e) { if (e.status !== "in_progress") return; const c = client(e.clientId); if (nextItem(e)) { if (!e.next) e.next = nextAllowedC(new Date(S.now.getTime() + HOUR), c); } else { const wr = waitingRelease(e); e.next = wr ? nextAllowed(wr) : null; } }
   function waitingRelease(e) { const w = itemsOf(e.id).filter((i) => ["expected", "requested"].includes(i.state)).map((i) => heldUntil(i, e)).filter(Boolean); return w.length ? new Date(Math.min.apply(null, w)) : null; }
 
   /* ---------- outreach ---------- */
@@ -763,6 +796,7 @@
     if (!it) { const wr = waitingRelease(e); if (wr && !itemsOf(e.id).some((i) => ["requested", "expected", "partial"].includes(i.state) && !heldUntil(i, e))) { e.next = nextAllowed(wr); return; } e.next = null; if (!checkComplete(e)) { const sn = openItems(e.id).find((i) => i.state === "says_none"); if (sn) setStuck(e, "client_says_none"); } return; }
     let code;
     if (it.state === "partial") { if (e.step >= GAPS.length) { finalNote(e, c); return; } const x = Object.assign({ item: it, why: "Part of the " + FORMS[it.form].plain + " is still missing; reminder " + (e.step + 1) + " of " + GAPS.length }, missText(it.missing || [], c.lang, it.form)); send(e, "M22R", x); escalate(e, c, "M22R", x); schedule(e, GAPS[Math.min(e.step, GAPS.length - 1)], ""); e.step++; return; }
+    delete it.askFirst;
     if (it.state === "expected" || e.step === 0) { code = S.msgs.some((m) => m.engId === e.id && ["M3", "M4", "M19"].includes(m.tpl)) ? "M4" : "M3"; it.state = "requested"; e.step = 0; }
     else if (e.step >= GAPS.length) { finalNote(e, c); return; }
     else code = "M5";
@@ -798,6 +832,10 @@
     if (!access().ok && !S.firm.stopped) { S.engs.forEach((e) => { if (e.status === "closed" && e.purgeAfter && e.purgeAfter <= S.now && !e.purged) purge(e.id, "Tallyhound"); }); retentionSweep(); return; }
     closingSweep();
     S.engs.forEach((e) => { if (e.status !== "stuck") settleQuiet(e); });
+    // A can't-reach item is settled by the client becoming reachable again; a call card set aside for a day comes back on that day.
+    S.tasks.forEach((t) => { if (t.status !== "open") return; const e = t.engId && eng(t.engId), c = e && client(e.clientId);
+      if (t.kind === "cant_reach" && e && c && (channelFor(c, e) || ["complete", "closed"].includes(e.status))) { t.status = "decided"; t.decision = "reachable_again"; t.by = "Tallyhound"; t.decidedAt = new Date(S.now); }
+      if (t.snoozedUntil && t.snoozedUntil <= S.now) { delete t.snoozedUntil; t.reopenedAt = new Date(S.now); t.escalatedAt = null; (S.barks || []).forEach((b) => { if (b.status === "queued") b.taskIds = b.taskIds.filter((x) => x !== t.id); }); barkQueue(t, false); } });
     S.engs.forEach((e) => { if (e.next && e.next <= S.now) step(e); });
     S.msgs.forEach((m) => { if (m.status === "approved" && m.sendAt && m.sendAt <= S.now) { const e = eng(m.engId), c = e && client(e.clientId); if (!e || e.takeover || ["closed", "opted_out", "paused"].includes(e.status) || (m.channel === "text" && c.textConsent !== "given")) { m.status = "discarded"; m.note = "No longer needed when sending hours began"; } else if (!allowedC(S.now, c)) m.sendAt = nextAllowedC(S.now, c); else { m.status = "delivered"; m.at = new Date(S.now); e.lastOut = new Date(S.now); } }
       if (m.status === "approval" && S.now - m.at > S.firm.hound.slaHours * HOUR) { const e = eng(m.engId); if (e) alertx(e, "medium", "approval_wait", "A message to " + client(e.clientId).first + " " + client(e.clientId).last + " has waited over " + S.firm.hound.slaHours + " hours for approval. Nothing is sent until someone approves it.", "apw" + m.id); } });
@@ -836,18 +874,23 @@
          are one bark. Outside staff hours a bark is held and counted in the morning note instead.
        - again: an item nobody has dealt with after one working day barks once more, to the owners. */
   const BARK_BATCH_MIN = 30, BARK_SETTLE_MIN = 5, REVIEW_OVERDUE_HOURS = 24, STAFF_HOURS = { start: 8, end: 18 };
-  const BARK_KINDS = { document: "to check", question: "question", says_none: "says they don't have it", gone_quiet: "gone quiet", change_noted: "change noted", call: "call to make", output_check: "blocked message" }, BARK_SYSTEM = ["output_check"];
+  const BARK_KINDS = { document: "to check", question: "question", says_none: "says they don't have it", gone_quiet: "gone quiet", cant_reach: "can't reach", change_noted: "change noted", call: "call to make", output_check: "blocked message" }, BARK_SYSTEM = ["output_check"];
+  // TH-BRK-13: who each kind goes to unless the firm says otherwise. "front_desk" is a duty any owner or staff member can hold
+  // (shown as Office manager). With nobody on the front desk, a gone-quiet item goes to the preparer and the rest to the owners.
+  const BARK_TARGETS = ["client_preparer", "front_desk", "owners", "named_users"], BARK_DEFAULT = { document: "client_preparer", question: "client_preparer", says_none: "client_preparer", change_noted: "client_preparer", call: "client_preparer", gone_quiet: "front_desk", cant_reach: "front_desk", output_check: "owners" };
   const staffHours = () => { const h = S.firm.staffHours || {}, a = +h.start, b = +h.end; return a >= 0 && b <= 24 && a < b ? { start: a, end: b } : STAFF_HOURS; };
   const inStaffHours = (d) => { const h = staffHours(), day = d.getDay(); return day >= 1 && day <= 5 && d.getHours() >= h.start && d.getHours() < h.end && allowed(new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12)); };
   const barkPrefs = (u) => Object.assign({ app: true, email: true, text: false, kinds: null }, (u && u.bark) || {});
   /** Who hears about an item in the review queue. User ids. */
   function barkRoute(t) {
     const e = t.engId ? eng(t.engId) : null, c = e ? client(e.clientId) : null, live = S.users.filter((u) => u.role !== "read_only" && !u.support), owners = live.filter((u) => u.role === "owner");
-    const rule = (S.firm.barkRules || {})[t.kind] || {}, out = new Set();
-    const prep = c && live.find((u) => u.id === c.preparer);
-    if (BARK_SYSTEM.includes(t.kind) || !prep) owners.forEach((u) => out.add(u.id)); else out.add(prep.id);
-    if (rule.owners) owners.forEach((u) => out.add(u.id));
-    (rule.users || []).forEach((id) => { if (live.some((u) => u.id === id)) out.add(id); });
+    const rule = (S.firm.barkRules || {})[t.kind] || {}, target = BARK_TARGETS.includes(rule.target) ? rule.target : BARK_DEFAULT[t.kind] || "client_preparer", out = new Set();
+    const prep = c && live.find((u) => u.id === c.preparer), desk = live.filter((u) => (u.duties || []).includes("front_desk")), all = (L) => L.forEach((u) => out.add(u.id));
+    if (target === "front_desk" && desk.length) all(desk);
+    else if (target === "named_users") all(live.filter((u) => (rule.user_ids || []).includes(u.id)));
+    else if (target === "owners") all(owners);
+    else if ((target === "client_preparer" || (target === "front_desk" && t.kind === "gone_quiet" && !rule.target)) && prep) out.add(prep.id);
+    if (!out.size) all(owners);   // a target that resolves to nobody falls back to the owners
     return [...out].filter((id) => { const k = barkPrefs(S.users.find((u) => u.id === id)).kinds; return !k || k.includes(t.kind); });
   }
   function barkQueue(t, escalation) {
@@ -885,9 +928,11 @@
   function setMyBarks(p) { const u = S.users.find((x) => x.id === (S.user && S.user.id)); if (!u) return "Unknown user"; const kinds = Array.isArray(p && p.kinds) ? p.kinds.filter((k) => BARK_KINDS[k]) : null; u.bark = { app: true, email: !(p && p.email === false), text: !!(p && p.text === true), kinds: kinds && kinds.length < Object.keys(BARK_KINDS).length ? kinds : null }; return null; }
   function setBarkRules(rules) {
     if (!may("owner")) return "Only an owner can change this"; const out = {};
-    Object.keys(BARK_KINDS).forEach((k) => { const r = (rules || {})[k]; if (!r) return; const users = (Array.isArray(r.users) ? r.users : []).filter((id) => S.users.some((u) => u.id === id && u.role !== "read_only")); if (r.owners || users.length) out[k] = { owners: !!r.owners, users }; });
+    for (const k of Object.keys(BARK_KINDS)) { const r = (rules || {})[k]; if (!r) continue; if (!BARK_TARGETS.includes(r.target)) return "Choose who hears about each kind"; const ids = (Array.isArray(r.user_ids) ? r.user_ids : []).filter((id) => S.users.some((u) => u.id === id && u.role !== "read_only")); if (r.target === "named_users" && !ids.length) return "Name at least one person"; out[k] = r.target === "named_users" ? { target: r.target, user_ids: ids } : { target: r.target }; }
     S.firm.barkRules = out; audit("firm.bark_rules", "Who hears about each kind of item was changed"); return null;
   }
+  /* TH-BRK-14: an owner marks who is on the front desk (shown as Office manager). A duty, not a role: it changes who is barked, nothing else. */
+  function setDuty(uid, on) { if (!may("owner")) return "Only an owner can change this"; const u = S.users.find((x) => x.id === uid); if (!u || u.role === "read_only" || u.support) return "Choose an owner or a member of staff"; u.duties = on ? ["front_desk"] : []; audit("user.duty", u.name + (on ? " is an office manager" : " is no longer an office manager")); return null; }
   function setStaffHours(start, end) { if (!may("owner")) return "Only an owner can change this"; start = Math.round(+start); end = Math.round(+end); if (!(start >= 0 && end <= 24 && start < end)) return "Choose a start before the end"; S.firm.staffHours = { start, end }; audit("firm.staff_hours", start + ":00 to " + end + ":00"); return null; }
   function addTask(t) { const x = Object.assign({ id: id("t"), at: new Date(S.now), status: "open" }, t); S.tasks.push(x); barkQueue(x, false); return x; }
   function afterAccept(e, c) {
@@ -947,7 +992,7 @@
   }
   function decide(d, e, c) {
     const F = FORMS[d.form] || FORMS.OTHER, items = itemsOf(e.id);
-    const review = (reason, why) => { d.state = "in_review"; d.reasons.push(why); addTask({ kind: "document", reason, engId: e.id, docId: d.id }); send(e, "M12", {}); timeline(e, "Document sent to review: " + reason); };
+    const review = (reason, why) => { d.state = "in_review"; d.reasons.push(why); addTask({ kind: "document", reason, engId: e.id, docId: d.id }); if (reason !== "Wrong person") send(e, "M12", {});   /* SNF-2: nothing is said to a client about a document in someone else's name; a person looks first */ timeline(e, "Document sent to review: " + reason); };
     const dup = S.docs.find((x) => x !== d && x.engId === e.id && x.state === "accepted" && x.form === d.form && x.year === d.year && payerMatch(x.payer, d.payer));
     // A corrected form replaces the copy received earlier. The preparer is told, because the figures may have changed.
     if (dup && d.corrected && !dup.corrected && d.form !== "OTHER" && d.quality >= S.firm.qualityMin) {
@@ -1075,9 +1120,30 @@
      opens an item in the review queue with a suggested edit that a person accepts or dismisses.
      firm.hound.replyV2: "on" acts; "shadow" (a new firm's default) records what it would have understood and acts the old way. */
   const V2 = ["someone_else_has_it", "already_sent", "life_change", "send_after_date", "not_mine"], PERSONS = ["spouse", "employer", "accountant", "other"];
+  // TH-SNF-7: when each form is usually issued, for the wrong-year reply. For forms that are often later, the first date.
+  const USUAL = { W2: [0, 31], "1099NEC": [0, 31], "1099MISC": [0, 31], "1099K": [0, 31], "1099INT": [0, 31], "1099DIV": [0, 31], "1099R": [0, 31], SSA1099: [0, 31], "1099G": [0, 31], "1098": [0, 31], "1098T": [0, 31], "1098E": [0, 31], "1095A": [0, 31], "1099SA": [0, 31], "1099CONS": [1, 15], K1: [2, 15] };
+  const usualIssue = (form, lang) => { const u = USUAL[form]; if (!u) return ""; return lang === "es" ? "Suele llegar antes del " + u[1] + " de " + ["enero", "febrero", "marzo"][u[0]] + "." : "It usually arrives by " + MONTHS[u[0]] + " " + u[1] + "."; };
   const LATER_MAX_DAYS = 30, ALREADY_SENT_LOOKBACK_DAYS = 21;
   const WAIVE_REASONS = { sold_home: "Sold the home", account_closed: "Account closed", no_longer_employed: "No longer employed there", not_this_year: "Not this year", combined_elsewhere: "Combined on another document", other: "Other" }, LASTING = ["sold_home", "account_closed", "no_longer_employed"];
   const CHANGE_WORDS = { sold_home: "sold the house", account_closed: "closed the account", no_longer_employed: "no longer works there", not_this_year: "does not have it this year", combined_elsewhere: "it is on another document", other: "something changed" };
+  // TH-CNV-5: what each life change suggests. Suggestions only: a person ticks what to apply. A form not in the catalogue is suggested
+  // as a named item for staff to collect. "Left a job" suggests nothing: the old W-2 is still needed for the months worked.
+  const LIFE_SUGGEST = {
+    sold_home: { words: "sold the house", remove: [["1098", "sold_home"]], add: [["OTHER", "Form 1099-S for the sale of the home"], ["OTHER", "Closing statement for the sale"]] },
+    bought_home: { words: "bought a home", remove: [], add: [["1098", null], ["OTHER", "Closing statement for the purchase"]] },
+    new_job: { words: "started a new job", remove: [], add: [["W2", null]] },
+    left_job: { words: "left a job", remove: [], add: [] },
+    started_business: { words: "started a business", remove: [], add: [["1099NEC", null], ["1099K", null]] },
+    closed_account: { words: "closed an account", remove: [["1099INT", "account_closed"], ["1099DIV", "account_closed"]], add: [] },
+    married: { words: "got married", remove: [], add: [], note: "Check whether a spouse should be linked to this client" },
+    divorced: { words: "got divorced", remove: [], add: [], note: "Check the spouse link for this client" }
+  };
+  function suggestFor(event, e, named) {
+    const L = LIFE_SUGGEST[event], out = []; if (!L) return out;
+    L.remove.forEach(([form, reason]) => itemsOf(e.id).filter((i) => i.form === form && OPEN.includes(i.state) && (!named || named.form !== form || named.id === i.id)).forEach((i) => out.push({ kind: "remove", form, itemId: i.id, payer: i.payer || null, reason })));
+    L.add.forEach(([form, custom]) => { if (!itemsOf(e.id).some((i) => i.form === form && (i.custom || null) === custom && OPEN.concat(["received"]).includes(i.state) && form !== "W2")) out.push({ kind: "add", form, custom }); });
+    return out;
+  }
   const NOT_MINE = /\b(this|that|it) (is not|isn'?t|ain'?t) (me|mine|my account|my (tax|accountant))\b|\bnot my (account|accountant|taxes)\b|\bwrong person\b|\bi(?:'m| am) not (a |your )?(client|customer)\b|\bno soy (yo|su cliente|cliente)\b|\bpersona equivocada\b|\bno es mi cuenta\b/i;
   const SOMEONE = /\bmy (husband|wife|spouse|partner|employer|boss|company|accountant|bookkeeper)\b.{0,40}\b(has|have|had|keeps|holds|handles|got|sends)\b|\b(mi esposo|mi esposa|mi pareja|mi marido|mi mujer|mi jefe|mi contador)\b.{0,30}\b(tiene|lo tiene|la tiene|los tiene)\b/i;
   const ALREADY = /\balready (sent|emailed|texted|uploaded|mailed|gave)\b|\b(i|we) (sent|emailed|texted|uploaded|mailed) (it|that|this|them)\b.{0,40}\b(last week|yesterday|earlier|before|already|on (mon|tues|wednes|thurs|fri|satur|sun)day)\b|\bya (lo|la|los|las|se lo) (envi[eé]|mand[eé])(?![a-zñ])/i;
@@ -1090,7 +1156,10 @@
     let m = SOMEONE.exec(t);
     if (m) { const w = (m[1] || m[3] || "").toLowerCase(); return { intent: "someone_else_has_it", by: "Rules", person: /employer|boss|company|jefe/.test(w) ? "employer" : /accountant|bookkeeper|contador/.test(w) ? "accountant" : "spouse", item: formsIn(t, e)[0] || null }; }
     if (ALREADY.test(t)) return { intent: "already_sent", by: "Rules", item: formsIn(t, e)[0] || null };
-    if (/\b(we|i|we've|i've) (just |have )?sold (the|our|my) (house|home|condo)\b|\bvend(imos|[ií]) (la|mi|nuestra) casa\b/i.test(t)) return { intent: "life_change", by: "Rules", change: { kind: "remove", form: "1098", reason: "sold_home" } };
+    if (/\b(we|i|we've|i've) (just |have )?sold (the|our|my) (house|home|condo)\b|\bvend(imos|[ií]) (la|mi|nuestra) casa\b/i.test(t)) return { intent: "life_change", by: "Rules", event: "sold_home", change: { kind: "remove", form: "1098", reason: "sold_home" } };
+    if (/\b(we|i) (just )?bought (a|our|my) (new )?(house|home|condo)\b|\bcompr(amos|[eé]) (una|la|nuestra) casa\b/i.test(t)) return { intent: "life_change", by: "Rules", event: "bought_home", change: { kind: "add", form: "1098", reason: "other" } };
+    if (/\b(i|we) (just )?started (a|my|our) (own )?(business|company|llc)\b|\b(abr[ií]|empec[eé]) (un|mi) negocio\b/i.test(t)) return { intent: "life_change", by: "Rules", event: "started_business", change: { kind: "add", form: "1099NEC", reason: "other" } };
+    if (/\b(i|we) (just )?(started|got) a new job\b|\bempec[eé] un trabajo nuevo\b|\btengo (un )?trabajo nuevo\b/i.test(t)) return { intent: "life_change", by: "Rules", event: "new_job", change: { kind: "add", form: "W2", reason: "other" } };
     if (/\b(closed|cerr[eé]|cerramos) (the|that|my|our|la|mi|esa) (account|cuenta)\b/i.test(t)) { const it = formsIn(t, e)[0]; if (it) return { intent: "life_change", by: "Rules", change: { kind: "remove", form: it.form, reason: "account_closed" }, item: it }; }
     if (/\b(no longer|don'?t) work (there|for them)\b|\b(left|quit) (that|my) job\b|\bya no trabajo (ah[ií]|all[ií]|con ellos)\b/i.test(t) && itemsOf(e.id).filter((i) => i.form === "W2" && OPEN.includes(i.state)).length === 1) return { intent: "life_change", by: "Rules", change: { kind: "remove", form: "W2", reason: "no_longer_employed" } };
     m = NEXTDOW.exec(t);
@@ -1107,7 +1176,7 @@
       const ref = ai.item_ref || ai.item_id || null, it = ref ? S.items.find((i) => i.id === ref && i.engId === e.id && OPEN.includes(i.state)) : null;
       if (ref && !it) return { intent: ai.intent, low: true, by: "Claude" };   // the model named an item that was not on the list it was given
       const ch = ai.change && typeof ai.change === "object" ? { kind: ai.change.kind, form: ai.change.form_code || ai.change.form, reason: ai.change.reason } : null;
-      r = { intent: ai.intent, by: "Claude", item: it, person: PERSONS.includes(ai.person) ? ai.person : null, date: typeof ai.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(ai.date) ? new Date(+ai.date.slice(0, 4), +ai.date.slice(5, 7) - 1, +ai.date.slice(8, 10), 12) : null, change: ch };
+      r = { intent: ai.intent, by: "Claude", event: LIFE_SUGGEST[ai.event] ? ai.event : null, item: it, person: PERSONS.includes(ai.person) ? ai.person : null, date: typeof ai.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(ai.date) ? new Date(+ai.date.slice(0, 4), +ai.date.slice(5, 7) - 1, +ai.date.slice(8, 10), 12) : null, change: ch };
     } else if (!ai || !ai.intent) r = ruleV2(text, e);
     if (!r) return null;
     if (r.intent === "life_change") {
@@ -1152,27 +1221,148 @@
       send(e, "M34", { item: it }); next(); return v.intent;
     }
     if (v.intent === "already_sent") {
-      const since = S.now.getTime() - ALREADY_SENT_LOOKBACK_DAYS * DAY, mine = S.docs.filter((d) => d.engId === e.id && +new Date(d.at) >= since && !["discarded", "purged", "duplicate"].includes(d.state));
-      const hit = mine.find((d) => it && d.form === it.form) || mine.find((d) => ["in_review", "incomplete", "classified", "stored"].includes(d.state)) || null;
-      if (hit && ["in_review", "incomplete", "classified", "stored"].includes(hit.state)) { m.line = "Understood: says it was already sent. One arrived " + dlabel(new Date(hit.at)) + " and is waiting for you."; send(e, "M35", { item: it || { form: hit.form, payer: hit.payer } }); return v.intent; }
-      if (hit && hit.state === "accepted" && !(it && OPEN.includes(it.state) && hit.itemId !== it.id)) { m.line = "Understood: says it was already sent. It arrived " + dlabel(new Date(hit.at)) + " and passed the sniff test."; send(e, "M11", {}); return v.intent; }
-      m.line = "Understood: says it was already sent. Nothing matching arrived in the last " + ALREADY_SENT_LOOKBACK_DAYS + " days, so it was asked for again with the upload page.";
+      // TH-CNV-4. Inside the last 21 days, in this order: a document already matched to this item; one that matched nothing; one the
+      // system (never a person) matched to another item of this client that fits this item better. A fit is moved here, the item it
+      // leaves is asked for again, and the client is told they were right. What a person placed is never moved: a person is asked.
+      const since = S.now.getTime() - ALREADY_SENT_LOOKBACK_DAYS * DAY, mine = S.docs.filter((d) => d.engId === e.id && +new Date(d.at) >= since && !["discarded", "purged", "duplicate", "rejected"].includes(d.state));
+      const waiting = ["in_review", "incomplete", "classified", "stored"], byStaff = (d) => (d.reasons || []).some((r) => /^(Accepted|Corrected|Filed|Added) by /.test(r)) || (d.versions || []).some((x) => x.by && !["Tallyhound", "Rules", "Claude", "System", "system"].includes(x.by)) || d.source === "staff";
+      const own = it ? mine.find((d) => d.itemId === it.id) || mine.find((d) => !d.itemId && d.form === it.form) : null;
+      if (own && waiting.includes(own.state)) { m.line = "Understood: says it was already sent. One arrived " + dlabel(new Date(own.at)) + " and is waiting for you."; m.found = { docId: own.id, where: "this item" }; send(e, "M35", { item: it }); return v.intent; }
+      if (own && own.state === "accepted") { m.line = "Understood: says it was already sent. It arrived " + dlabel(new Date(own.at)) + " and passed the sniff test."; m.found = { docId: own.id, where: "this item" }; send(e, "M11", {}); return v.intent; }
+      const loose = mine.find((d) => !d.itemId && waiting.includes(d.state));
+      if (loose) { m.line = "Understood: says it was already sent. One arrived " + dlabel(new Date(loose.at)) + " that matched nothing on the list. It is waiting for you."; m.found = { docId: loose.id, where: "unmatched" }; send(e, "M35", { item: it || { form: loose.form, payer: loose.payer } }); return v.intent; }
+      const other = it && OPEN.includes(it.state) ? mine.find((d) => d.state === "accepted" && d.itemId && d.itemId !== it.id && d.form === it.form && (!it.payer || !d.payer || payerMatch(d.payer, it.payer))) : null;
+      if (other && byStaff(other)) {
+        addTask({ kind: "question", reason: "Says it was already sent", category: "other", engId: e.id, itemId: it.id, docId: other.id, msgId: m.id, summary: c.first + " says the " + name(it) + " was already sent. A document a person placed on another item may be it. It was not moved" });
+        m.line = "Understood: says it was already sent. A document a person placed on another item may be it, so it was not moved. Waiting for you."; m.found = { docId: other.id, where: "placed by staff" }; send(e, "M35", { item: it }); return v.intent;
+      }
+      if (other) {
+        const from = S.items.find((i) => i.id === other.itemId); other.itemId = it.id; if (!other.payer && it.payer) other.payer = it.payer; it.state = "received"; it.docId = other.id; delete it.laterUntil;
+        other.reasons.push("Moved to " + name(it) + ": the client said it was already sent, and it fits this item better."); other.moves = (other.moves || []).concat([{ at: new Date(S.now), from: from ? from.id : null, to: it.id }]);
+        if (from && from.docId === other.id) { from.docId = null; from.state = "expected"; }
+        timeline(e, "Document moved to " + name(it) + (from ? " from " + name(from) : "") + ": the client said it was already sent"); hlog(e, "decide", "Moved a document to " + name(it), "It was matched by Tallyhound to another item and fits this one better. The item it left is asked for again", v.by);
+        m.line = "Understood: says it was already sent. Found it under " + (from ? name(from) : "another item") + " and moved it here. The reminder is cancelled."; m.found = { docId: other.id, where: "another item", moved: true };
+        send(e, "M35Y", {}); e.step = 0; if (checkComplete(e)) finished(e); else next(); return v.intent;
+      }
+      m.line = "Understood: says it was already sent. Nothing matching arrived in the last " + ALREADY_SENT_LOOKBACK_DAYS + " days, so it was asked for again with the upload page."; m.found = null;
       linkFresh(c); send(e, "M35R", { item: it || { form: "OTHER", custom: c.lang === "es" ? "documento" : "document" } }); next(); return v.intent;
     }
     if (v.intent === "life_change") {
-      const ch = v.change, F = FORMS[ch.form];
-      addTask({ kind: "change_noted", reason: "Mentioned a change", engId: e.id, itemId: ch.kind === "remove" && it ? it.id : null, msgId: m.id, change: ch, summary: c.first + " says: " + CHANGE_WORDS[ch.reason] + ". Suggested: " + ch.kind + " " + F.plain });
+      const ch = v.change, F = FORMS[ch.form], ev = v.event || (ch.reason === "sold_home" ? "sold_home" : null), sug = ev ? suggestFor(ev, e, v.item) : [];
+      const changes = sug.length ? sug : [{ kind: ch.kind, form: ch.form, reason: ch.reason, itemId: ch.kind === "remove" && it ? it.id : null }];
+      addTask({ kind: "change_noted", reason: "Mentioned a change", engId: e.id, itemId: ch.kind === "remove" && it ? it.id : null, msgId: m.id, change: ch, changes, event: ev, note: ev && LIFE_SUGGEST[ev].note ? LIFE_SUGGEST[ev].note : null, summary: c.first + " says: " + CHANGE_WORDS[ch.reason] + ". Suggested: " + ch.kind + " " + F.plain });
       m.line = "Understood: " + CHANGE_WORDS[ch.reason] + ". Suggested: " + ch.kind + " " + F.plain + ". Waiting for you.";
       hlog(e, "decide", "Suggested a checklist change: " + ch.kind + " " + F.plain, "A reply never changes a checklist. A person accepts or dismisses it in the review queue", v.by);
       send(e, "M36", {}); next(); return v.intent;
     }
     if (v.intent === "send_after_date") {
-      if (it) { it.laterUntil = v.date; it.state = "expected"; }
+      // CNV-1: "after the 15th" means the 16th at the earliest. The hold is on the record, with who caused it.
+      if (it) { it.laterUntil = new Date(v.date.getFullYear(), v.date.getMonth(), v.date.getDate() + 1); it.state = "expected"; timeline(e, "Reminders for the " + name(it) + " wait until " + dateWords(it.laterUntil, "en") + ": the client named a day", c.first); }
       m.line = "Understood: will send " + (it ? "the " + name(it) + " " : "") + "after " + dateWords(v.date, "en") + ". Reminders for it wait until then.";
       send(e, "M20D", { date: dateWords(v.date, c.lang) }); e.step = 0; if (e.status === "in_progress") e.next = nextAllowedC(new Date(S.now.getTime() + DAY), c); return v.intent;
     }
     return null;
   }
+  /* The understood panel (TH-CNV-1 to 3). What Tallyhound made of a client's message, for staff, beside the message. Every word is
+     a fixed string filled with checked values: never the model's own text. It is worked out from what the engine recorded on the
+     message, so the same case always reads the same. Shape version 1. Never shown to a client. */
+  const PANEL = {
+    en: {
+      send_after_date: ["Will send it later", "Reminders for this document pause until {date1}. Everything else keeps its pace.", "Nothing to do."],
+      will_send_later: ["Will send it later", "Reminders for this document pause for a few days.", "Nothing to do."],
+      moved: ["Someone else has it", "Moved to {name}'s list. {name} is asked next.", "Nothing to do."],
+      someone_else_has_it: ["Someone else has it", "Noted on the document. Nobody else is asked.", "A question for you: the person is not on file."],
+      already_sent: ["Says it was already sent", "{found}", "{foundteam}"],
+      question: ["A question", "Passed to {preparer}. Never answered automatically.", "A question for {preparer}."],
+      life_change: ["A life change: {event}", "Suggests checklist changes. Nothing changes yet.", "A change to apply or dismiss."],
+      says_none: ["Doesn't have it", "Reminders for this document pause.", "A question for you: confirm it is not needed, or ask again."],
+      not_mine: ["Wrong person", "All automatic messages to this contact are paused.", "An urgent question for you."],
+      low: ["Not sure what this means", "Doesn't guess. Nothing changes.", "A question for you, with the reply."],
+      stop: ["Opt out of texts", "Texts stop at once.{email}", "{stopteam}"], start: ["Opted back in to texts", "Texts are on again.", "Nothing to do."], help: ["Asked for help", "The firm's contact details were sent.", "Nothing to do."],
+      where_to_find: ["Asked where to find a form", "Told where the form comes from.", "Nothing to do."], status: ["Asked what is still needed", "Sent the list of what is still open.", "Nothing to do."],
+      frustrated: ["Sounds frustrated", "Reminders pause for a few days.", "Worth a look."], shadow: ["No action needed", "Nothing changes.", "Nothing to do."], thanks: ["No action needed", "Nothing changes.", "Nothing to do."]
+    },
+    es: {
+      send_after_date: ["Lo enviará más tarde", "Los recordatorios de este documento se pausan hasta el {date1}. Lo demás sigue su ritmo.", "Nada que hacer."],
+      will_send_later: ["Lo enviará más tarde", "Los recordatorios de este documento se pausan unos días.", "Nada que hacer."],
+      moved: ["Otra persona lo tiene", "Se pasó a la lista de {name}. Se le pide a {name} a continuación.", "Nada que hacer."],
+      someone_else_has_it: ["Otra persona lo tiene", "Anotado en el documento. No se le pide a nadie más.", "Una pregunta para usted: la persona no está registrada."],
+      already_sent: ["Dice que ya lo envió", "{found}", "{foundteam}"],
+      question: ["Una pregunta", "Se pasó a {preparer}. Nunca se responde automáticamente.", "Una pregunta para {preparer}."],
+      life_change: ["Un cambio de vida: {event}", "Sugiere cambios en la lista. Aún no cambia nada.", "Un cambio para aplicar o descartar."],
+      says_none: ["No lo tiene", "Los recordatorios de este documento se pausan.", "Una pregunta para usted: confirme que no se necesita, o pida de nuevo."],
+      not_mine: ["Persona equivocada", "Todos los mensajes automáticos a este contacto están en pausa.", "Una pregunta urgente para usted."],
+      low: ["No está claro qué significa", "No adivina. No cambia nada.", "Una pregunta para usted, con la respuesta."],
+      stop: ["Dejó de recibir textos", "Los textos se detienen de inmediato.{email}", "{stopteam}"], start: ["Volvió a aceptar textos", "Los textos están activos de nuevo.", "Nada que hacer."], help: ["Pidió ayuda", "Se enviaron los datos de contacto de la firma.", "Nada que hacer."],
+      where_to_find: ["Preguntó dónde encontrar un formulario", "Se le dijo de dónde viene el formulario.", "Nada que hacer."], status: ["Preguntó qué falta", "Se envió la lista de lo que falta.", "Nada que hacer."],
+      frustrated: ["Suena molesto", "Los recordatorios se pausan unos días.", "Conviene revisarlo."], shadow: ["Sin acción necesaria", "No cambia nada.", "Nada que hacer."], thanks: ["Sin acción necesaria", "No cambia nada.", "Nada que hacer."]
+    }
+  };
+  const PANEL_CODES = { send_after_date: ["pause_item", "none"], will_send_later: ["pause_item", "none"], moved: ["move_item", "none"], someone_else_has_it: ["note_item", "question"], already_sent: ["search", "none"], question: ["hand_off", "question"], life_change: ["suggest", "change"], says_none: ["pause_item", "question"], not_mine: ["pause_contact", "urgent_question"], low: ["none", "question"], stop: ["stop_texts", "none"], start: ["start_texts", "none"], help: ["send_help", "none"], where_to_find: ["answer_where", "none"], status: ["answer_status", "none"], frustrated: ["pause_reminders", "look"], shadow: ["none", "none"], thanks: ["none", "none"] };
+  function panelOf(m, lang) {
+    if (!m || m.dir !== "in") return null; const L = lang === "es" ? "es" : "en", e = eng(m.engId), c = e ? client(e.clientId) : null, v = m.v2 || null;
+    const it = v && v.itemId ? S.items.find((i) => i.id === v.itemId) : null, sp = c && c.spouse ? client(c.spouse) : null, prep = c ? (S.users.find((u) => u.id === c.preparer) || {}).first || (L === "es" ? "su preparador" : "your preparer") : "";
+    let k = v ? v.intent : /^Not sure/.test(m.line || "") ? "low" : PANEL[L][m.intent] ? m.intent : m.intent === "wrong_number" ? "not_mine" : "thanks";
+    if (k === "someone_else_has_it" && /Moved to/.test(m.line || "")) k = "moved";
+    const row = PANEL[L][k], fields = [], d1 = v && v.date ? new Date(new Date(v.date).getTime() + DAY) : null, f = m.found || null;
+    if (v && v.date) fields.push({ label: L === "es" ? "Fecha" : "Date", value: new Date(v.date).toISOString().slice(0, 10), display: dateWords(new Date(v.date), L) });
+    if (v && v.person) fields.push({ label: L === "es" ? "Quién" : "Who", display: v.person === "spouse" && sp && k === "moved" ? sp.first : { spouse: L === "es" ? "Cónyuge" : "Spouse", employer: L === "es" ? "Empleador" : "Employer", accountant: L === "es" ? "Contador" : "Accountant", other: L === "es" ? "Otra persona" : "Someone else" }[v.person] });
+    if (it) fields.push({ label: L === "es" ? "Documento" : "Document", item_id: it.id, display: (it.custom || formDisplay(it.form)) + (it.payer ? ", " + it.payer : "") });
+    if (k === "already_sent") fields.push({ label: L === "es" ? "Encontrado" : "Found", display: !f ? (L === "es" ? "Nada en los últimos " + ALREADY_SENT_LOOKBACK_DAYS + " días" : "Nothing in the last " + ALREADY_SENT_LOOKBACK_DAYS + " days") : f.moved ? (L === "es" ? "Bajo otro documento; se movió aquí" : "Under another item; moved here") : f.where === "unmatched" ? (L === "es" ? "Uno que no coincidía con nada" : "One that matched nothing") : f.where === "placed by staff" ? (L === "es" ? "Uno que colocó una persona; no se movió" : "One a person placed; not moved") : (L === "es" ? "Sí, en este documento" : "Yes, on this item") });
+    const found = !f ? (L === "es" ? "No llegó nada que coincida. Se pidió de nuevo con la página para subirlo." : "Nothing matching arrived. Asked again with the upload page.") : f.moved ? (L === "es" ? "Se encontró bajo otro documento y se movió aquí. El recordatorio se canceló." : "Found under another item and moved here. The reminder is cancelled.") : (L === "es" ? "Ya lo tenemos. No se pide de nuevo." : "We have it. It is not asked for again.");
+    const foundteam = f && (f.where === "unmatched" || f.where === "placed by staff") ? (L === "es" ? "Una pregunta para usted." : "A question for you.") : (L === "es" ? "Nada que hacer." : "Nothing to do.");
+    const emailOn = c && c.email && c.emailOk && !c.emailOff, ev = m.v2 && m.v2.change ? (L === "es" ? { sold_home: "vendió la casa", account_closed: "cerró la cuenta", no_longer_employed: "ya no trabaja allí" }[m.v2.change.reason] || "algo cambió" : CHANGE_WORDS[m.v2.change.reason] || "something changed") : "";
+    const fill = (t) => t.replace("{date1}", d1 ? dateWords(d1, L) : "").replace(/\{name\}/g, sp ? sp.first : "").replace(/\{preparer\}/g, prep).replace("{event}", ev).replace("{found}", found).replace("{foundteam}", foundteam)
+      .replace("{email}", emailOn ? (L === "es" ? " El correo continúa." : " Email continues.") : "").replace("{stopteam}", emailOn ? (L === "es" ? "Nada que hacer." : "Nothing to do.") : (L === "es" ? "No queda forma de contactar al cliente." : "No way is left to reach the client."));
+    return { v: 1, intent: k === "moved" ? "someone_else_has_it" : k, summary: fill(row[0]), fields, action: { code: PANEL_CODES[k][0], text: fill(row[1]) }, team: { code: PANEL_CODES[k][1], text: fill(row[2]) },
+      confidence: k === "low" ? "low" : v || m.ai ? "high" : "rules", model: (v && v.by === "Claude") || m.ai ? "reply-v2" : "rules", shadow: m.shadow ? m.shadow.intent : null };
+  }
+
+  /* The sniff trace (TH-SNF-1 to 5). The eight steps of the sniff test in the order staff think about them, with what each found.
+     It decides nothing: it reads the verdict and the findings the check already recorded (T.verdict is still the only place the
+     three checks are computed). The first step that failed stops the trace and the rest show as skipped. Fixed strings only, and
+     never an amount or an identifier. */
+  const TRACE_STEPS = [["saved_original", "Saved as the original", "Guardado como original"], ["form_type", "Which form is it?", "¿Qué formulario es?"], ["on_checklist", "Is it on the checklist?", "¿Está en la lista?"], ["tax_year", "Which tax year?", "¿De qué año?"], ["recipient", "Whose is it?", "¿De quién es?"], ["complete", "Anything missing?", "¿Falta algo?"], ["legible", "Readable?", "¿Se puede leer?"], ["second_read", "Second reading", "Segunda lectura"]];
+  function traceOf(d, lang) {
+    const es = lang === "es", V = verdict(d), F = d.findings || [], e = d.engId ? eng(d.engId) : null, it = d.itemId ? S.items.find((i) => i.id === d.itemId) : null, prov = S.firm.delivery && S.firm.delivery.provider && S.firm.delivery.provider !== "Download" ? S.firm.delivery.provider : null;
+    const t = (en, sp) => (es ? sp : en), fm = FORMS[d.form] || FORMS.OTHER, pdf = /pdf/.test(String(d.contentType || "")) || (d.read && d.read.by === "text");
+    const R = {
+      saved_original: d.fileKey || d.master || d.image ? ["pass", prov && d.master ? t("In your " + prov + " the moment it arrived", "En su " + prov + " en cuanto llegó") : t("Kept safely the moment it arrived", "Guardado de forma segura en cuanto llegó")] : ["na", t("No file was kept for this one", "No se guardó archivo")],
+      form_type: d.form === "OTHER" || F.includes("other_document") ? ["fail", t("Not a form Tallyhound knows", "No es un formulario que Tallyhound conozca"), "other_document"] : ["pass", es ? fm.es : formDisplay(d.form) + ", " + fm.plain],
+      on_checklist: !d.engId ? ["fail", t("From a sender nobody has matched to a client", "De un remitente sin cliente asignado"), "unmatched"] : it && it.isNew ? ["pass", t("Not on the checklist, so it was added", "No estaba en la lista, así que se agregó")] : it ? ["pass", t("Matches an item on the checklist", "Coincide con un documento de la lista")] : d.state === "duplicate" ? ["fail", t("Already have this one", "Ya lo tenemos"), "duplicate"] : ["na", t("Not matched to an item yet", "Aún sin asignar a un documento")],
+      tax_year: F.includes("wrong_year") ? ["fail", d.year + t(", not ", ", no ") + (e ? e.year : ""), "wrong_year"] : d.year ? ["pass", String(d.year)] : ["na", t("No year found on the page", "No se encontró el año en la página")],
+      recipient: d.recipient === "other" || F.includes("wrong_person") ? ["fail", t("The name matches nobody on this return", "El nombre no coincide con nadie en esta declaración"), "wrong_person"] : ["pass", d.recipient === "spouse" ? t("The spouse on the return", "El cónyuge en la declaración") : d.recipient === "business" ? t("The business", "El negocio") : t("The client", "El cliente")],
+      complete: F.includes("incomplete") || (V.info && V.info.ok === false && d.recipient !== "other") ? ["fail", t("Part of it is missing", "Falta una parte"), "missing_page"] : ["pass", t("Every page and key part is there", "Están todas las páginas y partes clave")],
+      legible: F.includes("illegible") || (V.clear && V.clear.ok === false) ? ["fail", t("Parts of the page cannot be read", "Partes de la página no se pueden leer"), "illegible"] : V.clear && V.clear.ok === null ? ["na", t("Not checked yet", "Aún sin revisar")] : ["pass", t("Every key box can be read", "Se pueden leer todas las casillas clave")],
+      second_read: !pdf ? ["na", t("A photo has no text layer, so any doubt goes to a person", "Una foto no tiene texto propio, así que cualquier duda va a una persona")] : d.read && d.read.disagree ? ["fail", t("The PDF's own text and the reading disagree", "El texto del PDF y la lectura no coinciden"), "disagree"] : ["pass", t("The PDF's own text agrees on the form and the year", "El texto del PDF coincide en formulario y año")]
+    };
+    let stopped = false; const steps = TRACE_STEPS.map(([step, en, sp]) => { const r = R[step]; if (stopped) return { step, label: t(en, sp), status: "skip", display: "" }; if (r[0] === "fail") stopped = true; return Object.assign({ step, label: t(en, sp), status: r[0], display: r[1] }, r[2] ? { detail_code: r[2] } : {}); });
+    const e2 = e, c = e2 ? client(e2.clientId) : null, passed = d.state === "accepted";
+    return { steps, outcome: passed ? "passed" : stopped ? "stopped" : ["in_review", "incomplete"].includes(d.state) ? "to_a_person" : d.state, filed_path: passed && c && e2 && prov ? (S.firm.delivery.folder || "") + "/" + e2.year + "/" + (c.entity || c.last + ", " + c.first) + "/" + filedName(c, e2, d) : null, confidence: d.conf == null ? null : d.conf, at: d.at };
+  }
+  // A re-read or a correction keeps the trace as it stood before the change (TH-SNF-5).
+  function keepTrace(d, why) { (d.traces = d.traces || []).push({ at: new Date(S.now), why, by: S.user ? S.user.name : "Tallyhound", steps: traceOf(d).steps.map((x) => ({ step: x.step, status: x.status, display: x.display })) }); if (d.traces.length > 10) d.traces.shift(); }
+
+  /* The activity log (TH-LOG). Everything that happened with one client, newest first: every message, every document and every
+     decision, each with who did it. It is read from the records themselves, in the same save as the event, so it cannot miss one
+     or invent one. A client's words are quoted only because the same message is on this client's page anyway. */
+  function activity(cid, kind) {
+    const c = client(cid); if (!c) return []; const rows = [], es = S.engs.filter((e) => e.clientId === cid).map((e) => e.id), mine = (x) => es.includes(x.engId), nm = (i) => (i.custom || formDisplay(i.form)) + (i.payer ? " from " + i.payer : "");
+    S.msgs.filter(mine).forEach((m) => {
+      if (m.dir === "in") rows.push({ at: m.at, kind: "message", actorType: "client", actor: c.first, key: "msg.in", summary: c.first + " " + (m.channel === "portal" ? "used the upload page" : "replied by " + m.channel) + (m.body && m.channel !== "portal" ? ": “" + String(m.body).slice(0, 120) + (String(m.body).length > 120 ? "..." : "") + "”" : "") + (m.line ? " " + m.line : m.understood ? " Understood as " + String(m.understood).toLowerCase() + "." : ""), ref: m.id });
+      else { const staff = m.kind === "manual", st = m.failed ? "could not be sent" : m.status === "discarded" ? "cancelled" + (m.note ? ": " + String(m.note).toLowerCase() : "") : m.status === "approval" || m.status === "writing" ? "drafted, waiting for approval" : m.status === "approved" ? "approved, waiting for sending hours" : "sent";
+        rows.push({ at: m.at, kind: "message", actorType: staff ? "user" : "system", actor: staff ? m.by || "Staff" : "Tallyhound", key: "msg.out." + (m.failed ? "failed" : m.status), summary: (staff ? "A message from " + (m.by || "staff") : (TPL_USE[m.tpl] || "A message")) + " by " + (m.channel === "voice" ? "phone" : m.channel) + ": " + st + (m.voice && !staff ? " (" + VOICES[m.voice].label + ")" : ""), ref: m.id }); }
+    });
+    S.docs.filter(mine).forEach((d) => {
+      const what = formDisplay(d.form) + (d.payer ? " from " + d.payer : ""), how = d.channel === "text" ? "as a photo by text" : d.channel === "email" ? "by email" : d.channel === "portal" ? "from the upload page" : "from staff";
+      const then = d.state === "accepted" ? "Passed the sniff test" + (d.master && d.master.id ? " and filed" : "") : d.state === "rejected" ? "Did not pass the sniff test: asked again" : d.state === "in_review" || d.state === "incomplete" ? "Waiting for a person" : d.state === "discarded" ? "Discarded" : d.state === "purged" ? "Deleted on schedule" : d.state === "duplicate" ? "Already had it" : "Being sniffed";
+      rows.push({ at: d.at, kind: "document", actorType: d.source === "staff" ? "user" : "client", actor: d.source === "staff" ? d.by || "Staff" : c.first, key: "doc." + d.state, summary: what + " arrived " + how + ". " + then + ".", ref: d.id });
+      (d.moves || []).forEach((mv) => { const to = S.items.find((i) => i.id === mv.to); rows.push({ at: mv.at, kind: "document", actorType: "system", actor: "Tallyhound", key: "doc.moved", summary: what + " moved to " + (to ? nm(to) : "another item") + ".", ref: d.id }); });
+    });
+    S.engs.filter((e) => e.clientId === cid).forEach((e) => (e.timeline || []).forEach((t) => { const who = t.actor || "Tallyhound", isClient = who === c.first; rows.push({ at: t.at, kind: "decision", actorType: who === "Tallyhound" ? "system" : isClient ? "client" : "user", actor: who, key: "decision", summary: t.text, ref: e.id }); }));
+    return rows.filter((r) => !kind || kind === "all" || r.kind === kind).sort((a, b) => +new Date(b.at) - +new Date(a.at));
+  }
+
   function inboundText(cid, text, ai, from) {
     const c = cid ? client(cid) : null, e = c ? engOf(c.id) : null;
     text = scrubIn(text, e);
@@ -1225,7 +1415,7 @@
       c.textConsent = "withdrawn"; c.consentLog.push({ at: new Date(S.now), what: "Withdrawn by STOP", channel: "text" }); if (c.callOk) { c.callOk = false; c.consentLog.push({ at: new Date(S.now), what: "Reminder calls turned off by STOP", channel: "call" }); } send(e, "M16", {}, "text");
       S.msgs.forEach((x) => { if (x.engId === e.id && ["approval", "approved", "writing"].includes(x.status) && x.channel === "text") { x.status = "discarded"; x.note = "Client opted out of texts"; } });
       timeline(e, "Client opted out of texts", c.first); audit("consent.withdrawn", c.first + " " + c.last, c.first);
-      if (!(c.email && c.emailOk)) { e.status = "opted_out"; e.stuck = "opted_out"; e.next = null; } else if (e.status === "in_progress") e.next = nextAllowed(new Date(S.now.getTime() + DAY));
+      if (!(c.email && c.emailOk)) { e.status = "opted_out"; e.stuck = "opted_out"; e.next = null; cantReach(e, c, "opted_out"); } else if (e.status === "in_progress") e.next = nextAllowed(new Date(S.now.getTime() + DAY));
       return k;
     }
     if (k === "start") { giveConsent(c.id, "keyword"); return k; }
@@ -1445,7 +1635,7 @@
     if (e && e.stuck === "review_waiting") unstick(e);
     if (t.kind === "document" && d) {
       if (decision === "accept" || decision === "correct") {
-        if (decision === "correct" && p) { Object.assign(d, { form: p.form || d.form, year: +p.year || d.year, payer: p.payer || d.payer }); d.versions.push({ v: d.versions.length + 1, by: S.user.name, form: d.form, year: d.year, payer: d.payer }); }
+        if (decision === "correct" && p) { keepTrace(d, "Corrected"); Object.assign(d, { form: p.form || d.form, year: +p.year || d.year, payer: p.payer || d.payer }); d.versions.push({ v: d.versions.length + 1, by: S.user.name, form: d.form, year: d.year, payer: d.payer }); }
         const want = (p && p.itemId) || (d.form === "OTHER" ? d.matchItem : null);
         let item = (want && itemsOf(e.id).find((i) => i.id === want && OPEN.includes(i.state))) || itemsOf(e.id).find((i) => i.form === d.form && OPEN.includes(i.state) && (d.form !== "OTHER" || !i.custom || itemsOf(e.id).filter((x) => x.custom && OPEN.includes(x.state)).length === 1));
         if (!item) { item = { id: id("i"), engId: e.id, form: d.form, payer: d.payer, state: "expected", source: "staff" }; S.items.push(item); }
@@ -1466,13 +1656,32 @@
     if (t.kind === "change_noted" && e) {
       const ch = t.change || {}, F = FORMS[ch.form];
       if (decision === "apply_change" && F) {
-        if (ch.kind === "remove") { const tgt = (it && OPEN.includes(it.state) ? it : null) || itemsOf(e.id).find((i) => i.form === ch.form && OPEN.includes(i.state)); if (tgt) { tgt.state = "waived"; tgt.waiveReason = WAIVE_REASONS[ch.reason] ? ch.reason : "other"; tgt.note = WAIVE_REASONS[tgt.waiveReason] + " (the client said so)"; timeline(e, "Not needed this year: " + F.plain + " (" + CHANGE_WORDS[tgt.waiveReason] + ")", S.user.name); } }
-        else if (!itemsOf(e.id).some((i) => i.form === ch.form && OPEN.includes(i.state))) { S.items.push({ id: id("i"), engId: e.id, form: ch.form, payer: null, state: "expected", source: "reply", isNew: true }); timeline(e, "Added item: " + F.plain + " (the client mentioned it)", S.user.name); if (e.status === "complete") { e.status = "in_progress"; e.completedAt = null; } }
-        audit("checklist.change_from_reply", (c ? c.first + " " + c.last + ": " : "") + ch.kind + " " + F.plain);
+        const all = t.changes && t.changes.length ? t.changes : [ch], pick = p && Array.isArray(p.pick) ? all.filter((x, i) => p.pick.includes(i)) : all; let n = 0;
+        pick.forEach((x) => {
+          if (x.kind === "remove") { const tgt = (x.itemId && itemsOf(e.id).find((i) => i.id === x.itemId && OPEN.includes(i.state))) || (it && OPEN.includes(it.state) && it.form === x.form ? it : null) || itemsOf(e.id).find((i) => i.form === x.form && OPEN.includes(i.state)); if (!tgt) return; tgt.state = "waived"; tgt.waiveReason = WAIVE_REASONS[x.reason] ? x.reason : "other"; tgt.note = WAIVE_REASONS[tgt.waiveReason] + " (the client said so)"; timeline(e, "Not needed this year: " + (tgt.custom || FORMS[tgt.form].plain) + " (" + CHANGE_WORDS[tgt.waiveReason] + ")", S.user.name); n++; }
+          else if (FORMS[x.form] && !itemsOf(e.id).some((i) => i.form === x.form && (i.custom || null) === (x.custom || null) && OPEN.includes(i.state))) { S.items.push({ id: id("i"), engId: e.id, form: x.form, payer: null, custom: x.custom || null, state: "expected", source: "life_change", isNew: true }); timeline(e, "Added item: " + (x.custom || FORMS[x.form].plain) + " (the client mentioned a change)", S.user.name); n++; if (e.status === "complete") { e.status = "in_progress"; e.completedAt = null; } }
+        });
+        audit("checklist.change_from_reply", (c ? c.first + " " + c.last + ": " : "") + n + " of " + all.length + " suggested changes applied");
         if (checkComplete(e)) finished(e); else if (e.status === "in_progress" && !e.next) e.next = nextAllowedC(S.now, c);
       } else if (decision !== "dismiss_change") { t.status = "open"; t.decision = null; t.by = null; t.decidedAt = null; return "Choose: apply the change, or dismiss it"; }
     }
+    if ((t.kind === "gone_quiet" || t.kind === "call") && e && decision === "log_call") {
+      // TH-CAL-2, 5: what happened on the call. Voicemail and no answer need a day to try again; the card comes back that morning.
+      const o = p && p.outcome, note = String((p && p.note) || "").slice(0, 500), reopen = () => { t.status = "open"; t.decision = null; t.by = null; t.decidedAt = null; };
+      if (!CALL_OUTCOMES[o]) { reopen(); return "Choose what happened on the call"; }
+      let follow = null; if (p && p.followUp) { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(p.followUp)); follow = m ? new Date(+m[1], +m[2] - 1, +m[3], CALL_FOLLOW_UP_HOUR) : null; if (!follow || follow <= S.now) { reopen(); return "Choose a later day to try again"; } }
+      if ((o === "voicemail" || o === "no_answer") && !follow) { reopen(); return "Choose a day to try again"; }
+      (t.calls = t.calls || []).push({ at: new Date(S.now), by: S.user.name, outcome: o, note: note ? scrub(note).text : "", followUp: follow });
+      timeline(e, "Call logged: " + CALL_OUTCOMES[o].toLowerCase() + (follow ? ". Try again " + MONTHS[follow.getMonth()] + " " + follow.getDate() : ""), S.user.name); audit("call.logged", (c ? c.first + " " + c.last + ": " : "") + o);
+      if (note) remember(e, note, S.user.name);
+      if (o === "voicemail" || o === "no_answer") { reopen(); t.snoozedUntil = follow; return null; }
+      if (o === "reached_will_send") { reopen(); if (follow) t.snoozedUntil = follow; return null; }   // restart fetching is offered on the card
+      if (o === "reached_has_none") { const ids = Array.isArray(p.items) ? p.items : []; itemsOf(e.id).filter((i) => ids.includes(i.id) && OPEN.includes(i.state)).forEach((i) => { i.state = "says_none"; addTask({ kind: "says_none", reason: "Client says none", engId: e.id, itemId: i.id }); timeline(e, "Client says they don't have: " + (i.custom || FORMS[i.form].plain), S.user.name); }); if (e.status === "stuck") e.stuck = "client_says_none"; return null; }
+      if (o === "wrong_number") { c.mobileBad = true; c.phoneInvalidAt = new Date(S.now); if (c.textConsent === "given") { c.textConsent = "none"; c.consentLog.push({ at: new Date(S.now), what: "Texting stopped: a call found this is the wrong number", channel: "text" }); } if (!channelFor(c, e)) cantReach(e, c, "not_delivering"); return null; }
+    }
     if (t.kind === "gone_quiet" && e) {
+      if (decision === "restart" && e.status !== "stuck") { t.status = "open"; t.decision = null; t.by = null; t.decidedAt = null; return "Fetching can only be restarted for a client who has gone quiet"; }
+      if (decision === "restart" && p && p.preset && CADENCE_PRESETS[p.preset]) setClientIntensity(c.id, p.preset);
       if (decision === "call") { addTask({ kind: "call", reason: "Call the client", engId: e.id, script: t.script || callScript(e, c) }); timeline(e, "Call planned", S.user.name); }
       else if (decision === "restart") { e.status = "in_progress"; e.stuck = null; e.step = 0; e.next = nextAllowedC(S.now, c); timeline(e, "Fetching restarted", S.user.name); }
       else if (decision === "pause") { e.status = "in_progress"; pause(e.id); }
@@ -1486,9 +1695,11 @@
     }
     return null;
   }
-  function manual(eid, body, quiet) {
+  function manual(eid, body, quiet, via) {
     if (!access().ok) return access().reason;
-    const e = eng(eid), c = client(e.clientId), ch = channelFor(c, e) || "email";
+    const e = eng(eid), c = client(e.clientId), canText = c.textConsent === "given" && c.mobile && !c.mobileBad && S.firm.senderStatus === "approved", canEmail = !!(c.email && c.emailOk);
+    if (via === "text" && !canText) return c.first + " has not agreed to texts"; if (via === "email" && !canEmail) return "No working email address for " + c.first;
+    const ch = via === "text" || via === "email" ? via : channelFor(c, e) || "email";
     if (e.status === "opted_out" || c.textConsent === "withdrawn" && ch === "text") return "This client opted out of messages. Call them instead";
     if (ch === "email" && !(c.email && c.emailOk)) return "No working email or text number for this client";
     if (!String(body || "").trim()) return "The message is empty";
@@ -1513,6 +1724,10 @@
   }
   function pause(eid) { const e = eng(eid); if (["complete", "closed", "paused", "not_started"].includes(e.status)) return; e.prior = e.status; e.priorStuck = e.stuck; e.status = "paused"; e.next = null; settleQuiet(e); timeline(e, "Paused", S.user.name); audit("outreach.pause", client(e.clientId).last); }
   function resume(eid) { const e = eng(eid); if (e.status !== "paused") return; e.status = e.prior === "stuck" ? "in_progress" : e.prior || "in_progress"; e.stuck = null; e.step = 0; e.next = nextAllowed(new Date(S.now.getTime() + MIN)); timeline(e, "Resumed", S.user.name); }
+  const formDisplay = (form) => (form === "W2" ? "W-2" : form === "K1" ? "Schedule K-1" : form === "SSA1099" ? "SSA-1099" : form === "1099CONS" ? "Brokerage 1099" : /^\d{4}[A-Z]+$/.test(form) ? form.slice(0, 4) + "-" + form.slice(4) : /^\d{4}$/.test(form) ? form : (FORMS[form] || FORMS.OTHER).plain.replace(/^./, (x) => x.toUpperCase()));
+  const PAYER_SHORT_MAX = 40;
+  /** "2026 W-2 Acme Logistics.pdf", inside the client's own folder for the year. Characters a drive refuses are left out. */
+  function filedName(c, e, d) { const safe = (x) => String(x || "").replace(/[\\/:*?"<>|#%\u0000-\u001f]+/g, " ").replace(/\s+/g, " ").trim(); return [e.year, safe(d.custom || formDisplay(d.form)), safe(d.payer).slice(0, PAYER_SHORT_MAX).trim(), d.corrected ? "CORRECTED" : ""].filter(Boolean).join(" ") + ".pdf"; }
   function fileName(c, e, d) { const clean = (s) => String(s || "").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, ""); return [clean(c.last), clean(c.first), e.year, d.form, clean(d.payer)].filter(Boolean).join("_") + ".pdf"; }
   function deliver(eid, by) {
     const e = eng(eid), c = client(e.clientId), docs = S.docs.filter((d) => d.engId === eid && d.state === "accepted" && hasContent(d)), who = by || S.user.name;
@@ -1725,6 +1940,13 @@
   function T_items(c) { const e = engOf(c.id); return e ? S.items.filter((i) => i.engId === e.id) : []; }
   seed();
   /* ---------- save, load, blank workspace (used by the app's storage and by the production adapter) ---------- */
+  /** One client's file with the firm's settings and nothing of any other client, in the same form as dump(). The follow-up plan
+      loads it into a second engine and lets the real scheduler run ahead, so the plan can never differ from what is sent. */
+  function dumpOne(eid) {
+    const e = eng(eid); if (!e) return null; const mine = (x) => x.engId === eid, c = client(e.clientId), keep = S;
+    const one = Object.assign({}, S, { clients: [c], engs: [e], items: S.items.filter(mine), msgs: S.msgs.filter(mine), docs: S.docs.filter(mine), tasks: S.tasks.filter(mine), alerts: [], hlog: [], audit: [], tray: [], archive: [], barks: [], memory: [], held: [] });
+    try { S = one; return dump(); } finally { S = keep; }
+  }
   function dump() {
     const walk = (v) => { if (v instanceof Date) return { $d: v.toISOString() }; if (Array.isArray(v)) return v.map(walk); if (v && typeof v === "object") { const o = {}; for (const k in v) { if (k === "user" && v === S) continue; if (k === "hold" && v === S) continue; if (k.charAt(0) === "_") continue; if (k === "image" && typeof v[k] === "string" && v[k].indexOf("blob:") === 0) continue; o[k] = walk(v[k]); } return o; } return v; };
     return JSON.stringify({ v: 1, seq, userId: S.user ? S.user.id : null, state: walk(S) });
@@ -2018,7 +2240,7 @@
     if (e.status === "complete" && open) { e.status = "in_progress"; e.completedAt = null; e.step = 0; if (!e.next) e.next = nextAllowed(S.now); timeline(e, "Reopened: a document is outstanding again"); }
     else if (["in_progress", "stuck"].includes(e.status) && !open && any) { if (checkComplete(e)) finished(e); }
   }
-  window.TH = { SEND_HOUR_MIN_REPLIES, bestHour, SLOW_ITEM_ASKS, memoryWrite, memoryOf, clearMemory, setMemory, keepRemoved, confirmRemoved, addTask, BARK_KINDS, BARK_BATCH_MIN, BARK_SETTLE_MIN, REVIEW_OVERDUE_HOURS, barkRoute, barkDue, barkHeld, barkRead, barkWords, setMyBarks, setBarkRules, setStaffHours, staffHours, V2, WAIVE_REASONS, LASTING, CHANGE_WORDS, LATER_MAX_DAYS, ALREADY_SENT_LOOKBACK_DAYS, replyV2, setSpouse, VOICES, VOICE_TPL, VOICE_FIXED, voiceFor, setVoice, setClientVoice, setSignOff, previewVoice, verified, CADENCE_PRESETS, gapsOf, cadenceFor, setIntensity, setClientIntensity, undiscard, setClosedDays, startMany, deletionEvidence, setCallOk, plans, quoteFor, areaZone, zoneFor, addContact, removeContact, planEnded, setLine, isLandline, RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
+  window.TH = { panelOf, PANEL, traceOf, TRACE_STEPS, keepTrace, activity, LIFE_SUGGEST, suggestFor, dumpOne, setDuty, cantReach, BARK_TARGETS, BARK_DEFAULT, CALL_OUTCOMES, setHold, askNow, holdOf, heldUntil, releaseOf, usualIssue, USUAL, formDisplay, filedName, SEND_HOUR_MIN_REPLIES, bestHour, SLOW_ITEM_ASKS, memoryWrite, memoryOf, clearMemory, setMemory, keepRemoved, confirmRemoved, addTask, BARK_KINDS, BARK_BATCH_MIN, BARK_SETTLE_MIN, REVIEW_OVERDUE_HOURS, barkRoute, barkDue, barkHeld, barkRead, barkWords, setMyBarks, setBarkRules, setStaffHours, staffHours, V2, WAIVE_REASONS, LASTING, CHANGE_WORDS, LATER_MAX_DAYS, ALREADY_SENT_LOOKBACK_DAYS, replyV2, setSpouse, VOICES, VOICE_TPL, VOICE_FIXED, voiceFor, setVoice, setClientVoice, setSignOff, previewVoice, verified, CADENCE_PRESETS, gapsOf, cadenceFor, setIntensity, setClientIntensity, undiscard, setClosedDays, startMany, deletionEvidence, setCallOk, plans, quoteFor, areaZone, zoneFor, addContact, removeContact, planEnded, setLine, isLandline, RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
     dump, load, blank, setNow, setUser, linkFor, linkLive, LINK_DAYS, consentFromPage, declineTexts, stopEmail, unsubscribeLink, CONSENT_WORDING,
     get S() { return S; }, FORMS, TPL, TPL_USE, QUESTIONS, STUCK, DAY, HOUR, MIN,
     client, eng, engOf, itemsOf, openItems, progress, fill, outputCheck, channelFor, allowed, nextAllowed, live, nextItem,
