@@ -49,6 +49,10 @@ Every outside service has been tested only against a stand-in written from its d
 
 Also untested by anyone: a screen reader, a real phone, Safari and Firefox (the browser tests use Chromium only), and load beyond the engine's own scale script.
 
+## Since this run: the brand, the words and six features (November 21)
+
+Tickets T-148 to T-161 are built and recorded in `docs/TICKETS.md`, round 17, with what is still open. The automated checks now stand at 426 server and engine tests and 48 browser tests, all passing on Postgres 16. None of the new work has run against a live service: the bark emails and texts, like everything else that leaves the app, have only met stand-ins.
+
 ## Where the 147 tickets stand
 
 | State | Count | Tickets |

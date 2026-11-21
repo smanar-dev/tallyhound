@@ -664,3 +664,8 @@ test("TH-MEM: a waive records its reason, and only the lasting reasons are lasti
   const { T, e } = started(); T.setUser("u2"); const it = item(T, e, "1098"); T.setItem(it.id, "waived", "", "nonsense"); assert.equal(it.waiveReason, "other"); T.setItem(it.id, "expected"); assert.ok(!it.waiveReason);
   assert.deepEqual(T.LASTING, ["sold_home", "account_closed", "no_longer_employed"]); assert.deepEqual(Object.keys(T.WAIVE_REASONS), ["sold_home", "account_closed", "no_longer_employed", "not_this_year", "combined_elsewhere", "other"]);
 });
+test("TH-MEM-7: after three replies inside the same two-hour window, that client's reminders are planned for the start of it, inside sending hours", () => {
+  const { T, e } = started(); e.hours = [14, 9]; assert.equal(T.bestHour(e), null, "two replies are not a habit"); e.hours = [18, 19, 18, 9]; assert.equal(T.bestHour(e), 18);
+  e.hours = [23, 23, 23, 22]; assert.equal(T.bestHour(e), null, "replies in the night never move a send outside sending hours");
+  e.hours = [9, 18, 19, 18, 19]; assert.equal(T.bestHour(e), 18); e.hours = [8, 9, 9, 15]; assert.equal(T.bestHour(e), 8);
+});

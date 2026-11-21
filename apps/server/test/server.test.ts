@@ -330,4 +330,29 @@ for (const kind of KINDS) {
     assert.equal((await o2.del("/api/users/" + row.id)).status, 200); assert.equal((await sam2.get("/api/me")).status, 401);
     await H.close();
   });
+
+  test(name("TH-BRK-10: a person adds their own mobile with a code; a bark is then texted from Tallyhound's number with a count and nothing else; STOP removes the number"), async () => {
+    const H = await build(kind, { systemSms: true }), { firmId, ownerId } = await H.newFirm(), owner = await H.signInAs("pat1@firm1.test");
+    assert.equal((await owner.get("/api/features")).json.textBarks, true); assert.equal((await owner.get("/api/me")).json.mobile, null);
+    assert.equal((await owner.post("/api/me/mobile", { mobile: "555" })).status, 400);
+    assert.equal((await owner.post("/api/me/mobile", { mobile: "(615) 555-0177" })).status, 200); assert.equal(H.staffTexts.length, 1); assert.equal(H.staffTexts[0]!.to, "+16155550177");
+    const code = /code is (\d{6})/.exec(H.staffTexts[0]!.body)![1]!; assert.deepEqual((await owner.get("/api/me")).json.mobile, { ends: "0177", verified: false });
+    assert.equal((await owner.post("/api/me/mobile/verify", { code: code === "000000" ? "000001" : "000000" })).status, 400); assert.equal((await owner.post("/api/me/mobile/verify", { code })).status, 200);
+    assert.deepEqual((await owner.get("/api/me")).json.mobile, { ends: "0177", verified: true }); assert.equal((await owner.post("/api/act", { fn: "setMyBarks", args: [{ email: false, text: true }] })).status, 200);
+    // A client's question opens; the owner is this client's preparer.
+    await owner.post("/api/act", { fn: "addClient", args: [{ first: "Maria", last: "Garcia", email: "maria@x.example" }] });
+    await H.app.withFirm(firmId, (T: any) => { T.addTask({ kind: "question", reason: "Question", category: "other", engId: T.S.engs[0].id, summary: "Maria asked about her HSA" }); });   // eslint-disable-line @typescript-eslint/no-explicit-any
+    const mails = H.staffMails.length; H.advance(6 * 60); await H.worker.pass();
+    assert.equal(H.staffTexts.length, 2); assert.equal(H.staffTexts[1]!.to, "+16155550177"); assert.equal(H.staffTexts[1]!.body, "Tallyhound barked. 1 thing needs your team. Open the review queue to see. Reply STOP to end these texts.");
+    assert.doesNotMatch(H.staffTexts[1]!.body, /Maria|Garcia|HSA/); assert.equal(H.staffMails.slice(mails).filter((m) => /barked/.test(m.subject)).length, 0, "the email was switched off");
+    assert.ok(!H.sms.sent.some((m: { to: string }) => /0177/.test(m.to)), "a staff text went out through a firm's client sender");
+    // STOP to Tallyhound's number removes the mobile at once. A STOP from a number nobody verified does nothing.
+    await H.twilioPost("/hooks/twilio", { To: "+16155550999", From: "+16155550000", Body: "STOP", MessageSid: "SMs0" }); assert.ok((await owner.get("/api/me")).json.mobile);
+    const r = await H.twilioPost("/hooks/twilio", { To: "+16155550999", From: "+16155550177", Body: "stop", MessageSid: "SMs1" }); assert.equal(r.statusCode, 200); assert.equal((await owner.get("/api/me")).json.mobile, null);
+    await H.app.withFirm(firmId, (T: any) => { T.addTask({ kind: "document", reason: "Low confidence", engId: T.S.engs[0].id }); });   // eslint-disable-line @typescript-eslint/no-explicit-any
+    H.advance(40 * 60); await H.worker.pass(); assert.equal(H.staffTexts.length, 2, "texted after STOP"); void ownerId;
+    // Without Tallyhound's number configured the page says so and nothing is stored.
+    const H2 = await build(kind), f2 = await H2.newFirm(); void f2; const o2 = await H2.signInAs("pat1@firm1.test"); assert.equal((await o2.get("/api/features")).json.textBarks, false); assert.equal((await o2.post("/api/me/mobile", { mobile: "6155550177" })).status, 503);
+    await H.close(); await H2.close();
+  });
 }

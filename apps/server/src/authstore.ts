@@ -11,7 +11,9 @@ export interface User {
   lockedUntil: Date | null;   // too many wrong codes
   morningOff: boolean;        // no 7 am note
   urgentOff: boolean;         // no email at once when something urgent comes up
-  supportUntil: Date | null;  // T-107: a Tallyhound support person the owner let in, and when that ends
+  supportUntil: Date | null;
+  mobile: string | null;            // TH-BRK-10: the person's own mobile for text barks, ten digits
+  mobileVerifiedAt: Date | null;    // nothing is texted to it until this is set  // T-107: a Tallyhound support person the owner let in, and when that ends
 }
 export interface Session { hash: string; userId: string; stage: "link" | "full"; createdAt: Date; expiresAt: Date; fails: number }
 
@@ -27,6 +29,12 @@ export interface AuthStore {
   reactivateUser(id: string, o: { role: Role; name: string }): Promise<void>;
   setNotes(id: string, o: { morningOff: boolean; urgentOff: boolean }): Promise<void>;
   setSupport(id: string, until: Date | null): Promise<void>;
+  /** A number waiting for its code. Replaces any number the person had. */
+  setMobilePending(id: string, mobile: string, codeHash: string, until: Date): Promise<void>;
+  /** True when the code matches and has not run out; the number is then verified. */
+  verifyMobile(id: string, codeHash: string, now: Date): Promise<boolean>;
+  clearMobile(id: string): Promise<void>;
+  userByMobile(mobile: string): Promise<User | null>;
   /** Support people whose time has run out and who are not yet switched off. */
   supportDue(now: Date): Promise<User[]>;
   noteFail(userId: string, at: Date): Promise<void>;
@@ -69,6 +77,7 @@ const lower = (s: string) => String(s || "").trim().toLowerCase();
 
 export function memoryAuthStore(firmIds: () => string[] = () => []): AuthStore & { auditRows: { firmId: string; actor: string; action: string; detail?: string }[] } {
   const users = new Map<string, User>(), sessions = new Map<string, Session>(), links = new Map<string, Date>();
+  const codes = new Map<string, { codeHash: string; until: Date }>();
   const recovery = new Map<string, Map<string, Date | null>>(), requests: { h: string; at: Date }[] = [];
   const auditRows: { firmId: string; actor: string; action: string; detail?: string }[] = [], slugs = new Map<string, string>(), fails: { u: string; at: Date }[] = [], keys = new Map<string, { at: Date; response: unknown }>();
   const copy = <T>(v: T | undefined): T | null => (v ? { ...v } : null);
@@ -79,7 +88,7 @@ export function memoryAuthStore(firmIds: () => string[] = () => []): AuthStore &
     async usersOfFirm(firmId) { return [...users.values()].filter((u) => u.firmId === firmId).map((u) => ({ ...u })); },
     async createUser(u) {
       const email = lower(u.email); if ([...users.values()].some((x) => x.email === email)) throw new Error("That email address already has an account");
-      users.set(u.id, { ...u, email, mfaSecret: null, mfaPending: null, totpStep: null, leftAt: null, lockedUntil: null, morningOff: false, urgentOff: false, supportUntil: null });
+      users.set(u.id, { ...u, email, mfaSecret: null, mfaPending: null, totpStep: null, leftAt: null, lockedUntil: null, morningOff: false, urgentOff: false, supportUntil: null, mobile: null, mobileVerifiedAt: null });
     },
     async setRole(id, role) { const u = users.get(id); if (u) u.role = role; },
     async removeUser(id) { users.delete(id); recovery.delete(id); for (const [h, s] of sessions) if (s.userId === id) sessions.delete(h); },
@@ -87,6 +96,10 @@ export function memoryAuthStore(firmIds: () => string[] = () => []): AuthStore &
     async reactivateUser(id, o) { const u = users.get(id); if (u) Object.assign(u, { leftAt: null, role: o.role, name: o.name }); },
     async setNotes(id, o) { const u = users.get(id); if (u) Object.assign(u, { morningOff: !!o.morningOff, urgentOff: !!o.urgentOff }); },
     async setSupport(id, until) { const u = users.get(id); if (u) u.supportUntil = until; },
+    async setMobilePending(id, mobile, codeHash, until) { const u = users.get(id); if (u) { Object.assign(u, { mobile, mobileVerifiedAt: null }); codes.set(id, { codeHash, until }); } },
+    async verifyMobile(id, codeHash, now) { const u = users.get(id), c = codes.get(id); if (!u || !c || c.until <= now || c.codeHash !== codeHash) return false; codes.delete(id); u.mobileVerifiedAt = now; return true; },
+    async clearMobile(id) { const u = users.get(id); if (u) Object.assign(u, { mobile: null, mobileVerifiedAt: null }); codes.delete(id); },
+    async userByMobile(mobile) { const u = [...users.values()].find((x) => x.mobile === mobile && x.mobileVerifiedAt && !x.leftAt); return u ? { ...u } : null; },
     async supportDue(now) { return [...users.values()].filter((u) => !u.leftAt && u.supportUntil && u.supportUntil <= now).map((u) => ({ ...u })); },
     async noteFail(userId, at) { fails.push({ u: userId, at }); },
     async failsSince(userId, since) { return fails.filter((f) => f.u === userId && f.at >= since).length; },
@@ -130,7 +143,7 @@ export function postgresAuthStore(pool: Db): AuthStore {
   const toUser = (r: Record<string, unknown> | null): User | null => r && {
     id: r.id as string, firmId: r.firm_id as string, email: r.email as string, role: r.role as Role, name: (r.name as string) || "",
     mfaSecret: buf(r.mfa_secret), mfaPending: buf(r.mfa_pending), totpStep: r.totp_step == null ? null : Number(r.totp_step),
-    leftAt: (r.left_at as Date) || null, lockedUntil: (r.locked_until as Date) || null, morningOff: !!r.morning_off, urgentOff: !!r.urgent_off, supportUntil: (r.support_until as Date) || null
+    leftAt: (r.left_at as Date) || null, lockedUntil: (r.locked_until as Date) || null, morningOff: !!r.morning_off, urgentOff: !!r.urgent_off, supportUntil: (r.support_until as Date) || null, mobile: (r.mobile as string) || null, mobileVerifiedAt: (r.mobile_verified_at as Date) || null
   };
   const toSession = (r: Record<string, unknown> | null): Session | null => r && {
     hash: Buffer.from(r.token_hash as Buffer).toString("hex"), userId: r.user_id as string, stage: r.stage as "link" | "full",
@@ -153,6 +166,10 @@ export function postgresAuthStore(pool: Db): AuthStore {
     },
     async reactivateUser(id, o) { await pool.query("update users set left_at = null, role = $2, name = $3 where id = $1", [id, o.role, o.name]); },
     async setSupport(id, until) { await pool.query("update users set support_until = $2 where id = $1", [id, until]); },
+    async setMobilePending(id, mobile, codeHash, until) { await pool.query("update users set mobile = $2, mobile_verified_at = null, mobile_code = $3, mobile_code_until = $4 where id = $1", [id, mobile, codeHash, until]); },
+    async verifyMobile(id, codeHash, now) { const r = await pool.query("update users set mobile_verified_at = $3, mobile_code = null, mobile_code_until = null where id = $1 and mobile_code = $2 and mobile_code_until > $3", [id, codeHash, now]); return (r.rowCount || 0) > 0; },
+    async clearMobile(id) { await pool.query("update users set mobile = null, mobile_verified_at = null, mobile_code = null, mobile_code_until = null where id = $1", [id]); },
+    async userByMobile(mobile) { return toUser(await one("select * from users where mobile = $1 and mobile_verified_at is not null and left_at is null limit 1", [mobile])); },
     async supportDue(now) { return (await pool.query("select * from users where left_at is null and support_until is not null and support_until <= $1", [now])).rows.map((r) => toUser(r)!); },
     async setNotes(id, o) { await pool.query("update users set morning_off = $2, urgent_off = $3 where id = $1", [id, !!o.morningOff, !!o.urgentOff]); },
     async noteFail(userId, at) { await pool.query("insert into signin_fails (user_id, at) values ($1, $2)", [userId, at]); },

@@ -44,6 +44,7 @@ export function handlers({ app, twilio, prepare, cleanup }: { app: App; twilio: 
 export interface HookDeps {
   cleanup?: Cleanup;
   app: App; store: KitStore; inbox: Inbox; publicUrl: string;
+  systemNumber?: string; staffStop?: (mobile: string) => Promise<boolean>;   // TH-BRK-10: Tallyhound's own number, for staff texts
   twilioAuthToken?: string;                          // without it the Twilio routes do not exist
   postmarkHook?: { user: string; pass: string };     // the name and password in the webhook address given to Postmark
   log?: (event: string, ...ids: unknown[]) => void;
@@ -64,7 +65,10 @@ export function registerHooks(f: FastifyInstance, d: HookDeps): void {
     const params = (req: FastifyRequest) => req.body as Record<string, string>;
     // A text or picture message. The fallback address does exactly the same: store, answer.
     const text = async (req: FastifyRequest, reply: FastifyReply) => {
-      const p = params(req), firmId = await d.store.firmIdByNumber(last10(p.To)); if (!firmId) { say("unknown_number"); return xml(reply); }
+      const p = params(req);
+      // A reply to Tallyhound's own number is from a member of staff, never a client. STOP removes their number at once; nothing else is read.
+      if (d.systemNumber && last10(p.To) === last10(d.systemNumber)) { if (d.staffStop && /^\s*(stop|stopall|unsubscribe|cancel|end|quit)\b/i.test(p.Body || "")) { const done = await d.staffStop(last10(p.From)); say("staff_stop", done ? "removed" : "unknown"); } return xml(reply); }
+      const firmId = await d.store.firmIdByNumber(last10(p.To)); if (!firmId) { say("unknown_number"); return xml(reply); }
       const r = await d.inbox.accept("twilio", p.MessageSid || p.SmsSid || null, firmId, "sms", Buffer.from(JSON.stringify(p)));
       if (r === "queued") void d.inbox.drain(); else say("hook_repeat", "twilio", firmId);
       return xml(reply);   // an empty answer: replies are sent by the pipeline, never from here

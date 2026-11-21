@@ -233,7 +233,11 @@ Each step ends with `npm run check` passing and a merge to `main`.
 | 13 | T-160 | The V1 items: text barks, send-time learning, intent plus document, Persistent in Progress |
 | 14 | T-161 | End-to-end scenarios 1 to 12 from the spec's section 14, as browser and engine tests |
 
-## 8. What code cannot finish
+## 8. Where it stands
+
+Built and merged, steps 1 to 13: see `docs/TICKETS.md`, round 17, entries 49 to 56. Step 14 is covered by tests named after the requirement IDs in `test/engine.test.js`, `test/pipeline.test.js`, `apps/server/test/server.test.ts` and `apps/web/e2e`. The same entry lists what is still open.
+
+## 9. What code cannot finish
 
 - A fluent Spanish speaker reviewing the Spanish versions (T-31).
 - Counsel on Persistent and on the four new templates.

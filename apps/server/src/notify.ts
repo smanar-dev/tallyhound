@@ -7,7 +7,9 @@ import { needsYou } from "./needs.ts";
 
 export const DIGEST_HOUR = 7;      // firm time
 export const DIGEST_UNTIL = 12;    // a timer that was down at 7 still sends, but not after midday
-export interface StaffMail { to: string; kind: "digest" | "urgent" | "allowance" | "bark"; subject: string; body: string }
+export interface StaffMail { to: string; kind: "digest" | "urgent" | "allowance" | "bark"; subject: string; body: string; text?: { to: string; body: string }; noEmail?: boolean }
+/** TH-BRK-10: Tallyhound's own number for texting staff. Never a firm's client number. */
+export interface SystemSms { number: string; send(to: string, body: string): Promise<void> }
 export interface StaffMailer { staff(to: string, subject: string, body: string): Promise<void> }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -39,9 +41,12 @@ export function createNotifier({ appUrl }: { appUrl: string }) {
       }
       // TH-BRK: barks. The engine decides who is due one and marks it; this only words the email. Counts by kind and a link to that
       // person's part of the review queue. No client, no document. An escalation names the client by first name and last initial.
-      for (const b of T.barkDue() as { id: string; userId: string; escalation: boolean; who: string | null; words: { n: number; line: string; parts: string[] } }[]) {
+      for (const b of T.barkDue() as { id: string; userId: string; byEmail: boolean; byText: boolean; escalation: boolean; who: string | null; words: { n: number; line: string; parts: string[] } }[]) {
         const u = staff.find((x) => x.id === b.userId); if (!u) continue;
-        out.push({ to: u.email, kind: "bark", subject: b.escalation ? "Tallyhound barked again. " + (b.who || "Something") + " has waited more than a working day." : "Tallyhound barked. " + b.words.line,
+        // A text only to a number its owner has verified, and it says even less than the email: a count, and how to stop.
+        const text = b.byText && u.mobile && u.mobileVerifiedAt ? { to: "+1" + u.mobile, body: (b.escalation ? "Tallyhound barked again. Something has waited more than a working day." : "Tallyhound barked. " + b.words.line) + " Open the review queue to see. Reply STOP to end these texts." } : undefined;
+        if (!b.byEmail && !text) continue;
+        out.push({ to: u.email, kind: "bark", text, noEmail: !b.byEmail, subject: b.escalation ? "Tallyhound barked again. " + (b.who || "Something") + " has waited more than a working day." : "Tallyhound barked. " + b.words.line,
           body: "Hi " + firstName(u) + ",\n\n" + (b.escalation ? "Something for " + (b.who || "a client") + " has waited in the review queue for more than a working day." : b.words.parts.map((x) => "  " + x).join("\n")) + "\n\nOpen the review queue: " + url + "/needs-you?mine=1&bark=" + b.id + "\n\nNo client details are sent by email.\n\n" + S.firm.name + ", by Tallyhound" });
       }
       // T-95: the plan's yearly allowance. The owners are emailed when the firm reaches 80% and 100% of it, as well as seeing it in the

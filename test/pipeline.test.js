@@ -249,3 +249,15 @@ test("T-106: an email a staff member forwarded is still credited to the client w
   const r = await x.app.inboundEmail({ to: "docs@test.example", from: "pat@test.example", body: "fwd", attachments: [{ bytes: Buffer.from("pdf-1"), contentType: "application/pdf" }], providerId: "c1", trusted: true, forwarded: { from: "jo@x.example", body: "my w2" } });
   assert.equal(r.forwardedBy, "pat@test.example"); assert.equal(r.client, x.state().S.clients[0].id);
 });
+
+// ---- TH-RPL-7: one message that carries a document and says something about another ----
+test("TH-RPL-7: a photo of the W-2 with \"the mortgage statement after the 15th\" does both: the document is checked, and the other item waits for the date", async () => {
+  const x = await setup(model((p) => (p.startsWith("You read text messages") ? { intent: "send_after_date", confidence: "high", legacy_intent: "will_send_later", item_id: null, date: "2027-02-15", also_document: true, summary: "W-2 now, mortgage later", scope: "documents", sentiment: "calm" } : undefined)));
+  await x.app.staff("f1", "u1", (T) => { T.S.firm.hound.replyV2 = "on"; }); await x.app.inboundSms({ to: FIRM_NO, from: JO, body: "START", media: [], providerId: "v0" });
+  const T0 = x.state(), e0 = T0.S.engs[0], other = T0.itemsOf(e0.id).find((i) => i.form !== "W2");
+  const r = await x.app.inboundSms({ to: FIRM_NO, from: JO, body: "here's the W-2, the " + T0.FORMS[other.form].plain + " after the 15th", media: [{ bytes: Buffer.from("photo-w2"), contentType: "image/jpeg" }], providerId: "v1" });
+  assert.deepEqual(r.docs, ["accepted"]); assert.equal(r.intent, "send_after_date");
+  const T = x.state(), e = T.S.engs[0], m = T.S.msgs.filter((y) => y.engId === e.id && y.dir === "in").slice(-1)[0];
+  assert.equal(T.itemsOf(e.id).find((i) => i.form === "W2").state, "received"); assert.match(m.line, /^Understood: will send .* after February 15/);
+  assert.ok(T.itemsOf(e.id).some((i) => i.laterUntil && new Date(i.laterUntil).getDate() === 15), "the other item is not waiting for the 15th");
+});

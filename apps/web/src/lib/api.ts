@@ -17,8 +17,8 @@ async function once<T>(body: unknown): Promise<T> {
   try { return await call<T>("POST", "/api/act", body, key); }
   catch (err) { if (!(err instanceof ApiError) || err.status !== 0) throw err; await new Promise((r) => setTimeout(r, 1200)); return call<T>("POST", "/api/act", body, key); }
 }
-export interface Features { prior: boolean; signup: boolean; ask: boolean; billing: boolean; domain: boolean; voice: boolean; storage: string[] }
-export interface Me { id: string; name: string; email: string; role: "owner" | "staff" | "read_only"; firmId: string; notes?: { morning: boolean; urgent: boolean } }
+export interface Features { prior: boolean; signup: boolean; ask: boolean; billing: boolean; domain: boolean; voice: boolean; textBarks?: boolean; storage: string[] }
+export interface Me { id: string; name: string; email: string; role: "owner" | "staff" | "read_only"; firmId: string; notes?: { morning: boolean; urgent: boolean }; mobile?: { ends: string; verified: boolean } | null }
 export const api = {
   me: () => call<Me>("GET", "/api/me"),
   /** The firm's workspace exactly as the engine saved it, as text, ready for the engine to load. */

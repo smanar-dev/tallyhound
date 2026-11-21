@@ -8,6 +8,8 @@ Tallyhound does one job: client list, checklist, chase, check. `docs/SCOPE.md` d
 Every document must pass three checks, and `T.verdict(doc)` is the only place they are computed: right document, right information, clear to read. Screens, logs and client messages all read from it. Do not re-implement the checks anywhere else.
 
 ## Ease of use
+`docs/REBRAND.md` is the brand, the words and the six features (fetch intensity, fetch until verified, voice, barks, reply understanding, season memory) as they apply here. The hound never appears beside an error or on anything a firm's client sees; Fox orange is a fill, never text; a bark is for staff only.
+
 `docs/UX.md` has ten rules and a vocabulary table. They are acceptance criteria for every screen. If a screen needs explaining, change the screen.
 
 ## Ground rules

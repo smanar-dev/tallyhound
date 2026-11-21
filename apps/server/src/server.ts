@@ -1,9 +1,10 @@
 // The web service. Sign-in, the firm's state for the web app, and one endpoint per kind of staff action.
 // It holds no product rules: every action runs the engine through the pipeline (app.staff), which loads, decides, saves and sends.
+import { randomInt } from "node:crypto";
 import { PriorError, priorOn, type ReadPrior } from "./prior.ts";
 import { DomainError, type Domains } from "./domain.ts";
 import { registerSignup, type SignupDeps } from "./signup.ts";
-import { kitRegistration } from "./kit.ts";
+import { kitAuth, kitRegistration } from "./kit.ts";
 import { BillingError, type Billing } from "./billing.ts";
 import { SLUG, StorageError, type Storage } from "./storage.ts";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
@@ -27,6 +28,7 @@ export interface ServerDeps {
   readState(firmId: string): Promise<string | null>;
   getFile(firmId: string, key: string): Promise<{ bytes: Buffer; contentType: string } | null>;
   appUrl: string; secureCookies: boolean; webDir: string; prepare?: PrepareOpts;
+  systemSms?: import("./notify.ts").SystemSms;   // TH-BRK-10: without it nobody can add a mobile for text barks
   /** The client's own pages. Present whenever there is a queue to put uploads on. */
   clientPages?: Omit<PublicDeps, "app" | "auth" | "log">;
   /** Gives one firm its turn on the timer now, after a staff action that may have made something due. */
@@ -93,7 +95,7 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
 
   // 503 when the service says it is not well (the timer has stopped), so an uptime check pages someone.
   f.get("/healthz", async (_req, reply) => { const h = d.health ? await d.health() : {}, ok = h.ok !== false; return reply.code(ok ? 200 : 503).send({ ...h, ok }); });
-  if (d.hooks) registerHooks(f, { ...d.hooks, app: d.app, publicUrl: d.appUrl, log: d.log });
+  if (d.hooks) registerHooks(f, { ...d.hooks, app: d.app, publicUrl: d.appUrl, log: d.log, systemNumber: d.systemSms ? d.systemSms.number : undefined, staffStop: async (mobile) => { const u = await d.auth.userByMobile(mobile); if (!u) return false; await d.auth.clearMobile(u.id); await d.auth.audit(u.firmId, u.id, "mobile.stopped"); return true; } });
   if (d.signup) registerSignup(f, { ...d.signup, auth: d.auth, firms: d.firms, app: d.app, appUrl: d.appUrl, log: d.log, requestSignInLink: (email) => d.signIn.requestLink(email) });
   if (d.clientPages) await registerPublic(f, { ...d.clientPages, app: d.app, auth: d.auth, log: d.log });
 
@@ -108,7 +110,18 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
 
   // ---- the web app ----
   const me = (u: User) => ({ id: u.id, name: u.name, email: u.email, role: u.role, firmId: u.firmId });
-  f.get("/api/me", { preHandler: full }, async (req) => { const u = req.who!.user; return { ...me(u), notes: { morning: !u.morningOff, urgent: !u.urgentOff } }; });
+  f.get("/api/me", { preHandler: full }, async (req) => { const u = req.who!.user; return { ...me(u), notes: { morning: !u.morningOff, urgent: !u.urgentOff }, mobile: u.mobile ? { ends: u.mobile.slice(-4), verified: !!u.mobileVerifiedAt } : null }; });
+  // TH-BRK-10: a person adds their own mobile for text barks. A six-digit code goes to it from Tallyhound's number; nothing else is
+  // ever texted to it until the code comes back. Only a hash of the code is kept, for ten minutes.
+  f.post("/api/me/mobile", { preHandler: full }, async (req, reply) => {
+    const u = req.who!.user, m = str(body(req).mobile).replace(/\D/g, "").replace(/^1(\d{10})$/, "$1"); if (!d.systemSms) return reply.code(503).send({ error: "not_connected", message: "Text alerts are not switched on for Tallyhound yet." });
+    if (u.role === "read_only") return reply.code(403).send({ error: "role", message: NO.read_only }); if (!/^[2-9]\d{9}$/.test(m)) return reply.code(400).send({ error: "mobile", message: "Enter a ten-digit US mobile number." });
+    const code = String(randomInt(0, 1000000)).padStart(6, "0"); await d.auth.setMobilePending(u.id, m, kitAuth.hashToken(u.id + ":" + code), new Date(Date.now() + 10 * 60000));
+    try { await d.systemSms.send("+1" + m, "Tallyhound: your code is " + code + ". It lets Tallyhound text you when your review queue needs you. Reply STOP to end."); } catch { await d.auth.clearMobile(u.id); return reply.code(502).send({ error: "send_failed", message: "That number could not be texted. Check it and try again." }); }
+    await d.auth.audit(u.firmId, u.id, "mobile.code_sent"); return { ok: true, ends: m.slice(-4) };
+  });
+  f.post("/api/me/mobile/verify", { preHandler: full }, async (req, reply) => { const u = req.who!.user, code = str(body(req).code).replace(/\D/g, ""); if (!(await d.auth.verifyMobile(u.id, kitAuth.hashToken(u.id + ":" + code), new Date()))) return reply.code(400).send({ error: "code", message: "That code is not right, or it has run out. Send a new one." }); await d.auth.audit(u.firmId, u.id, "mobile.verified"); return { ok: true }; });
+  f.delete("/api/me/mobile", { preHandler: full }, async (req) => { const u = req.who!.user; await d.auth.clearMobile(u.id); await d.auth.audit(u.firmId, u.id, "mobile.removed"); return { ok: true }; });
   // Which emails Tallyhound sends this person. Their own choice, for themselves only.
   f.post("/api/me/notes", { preHandler: full }, async (req) => { const u = req.who!.user, b = body(req), next = { morningOff: typeof b.morning === "boolean" ? !b.morning : u.morningOff, urgentOff: typeof b.urgent === "boolean" ? !b.urgent : u.urgentOff }; await d.auth.setNotes(u.id, next); await d.auth.audit(u.firmId, u.id, "me.notes", (next.morningOff ? "no" : "") + "morning " + (next.urgentOff ? "no" : "") + "urgent"); return { notes: { morning: !next.morningOff, urgent: !next.urgentOff } }; });
   // The firm's whole workspace, as the engine saves it. File bytes are never in it, only their keys.
@@ -217,7 +230,7 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
   // The one thing the sign-in page needs to know before anyone has signed in: whether a firm can sign itself up.
   f.get("/api/site", async () => ({ signup: !!(d.signup && d.signup.open) }));
   // What this installation has connected, so the screens show only what works (T-45): no tab, switch or button for a service that is not set up.
-  f.get("/api/features", { preHandler: full }, async () => ({ ask: !!d.ask, prior: !!d.prior, signup: !!(d.signup && d.signup.open), billing: !!d.billing, domain: !!d.domains, voice: !!d.voice, storage: d.storage ? d.storage.offered() : [] }));
+  f.get("/api/features", { preHandler: full }, async () => ({ ask: !!d.ask, prior: !!d.prior, signup: !!(d.signup && d.signup.open), billing: !!d.billing, domain: !!d.domains, voice: !!d.voice, textBarks: !!d.systemSms, storage: d.storage ? d.storage.offered() : [] }));
   // The note a firm sends its own clients before Tallyhound's first message, worded for this firm. Read only.
   f.get("/api/headsup", { preHandler: full }, async (req, reply) => {
     const json = await d.readState(req.who!.user.firmId); if (!json) return reply.code(404).send({ error: "no_firm", message: "This firm's workspace could not be found." });

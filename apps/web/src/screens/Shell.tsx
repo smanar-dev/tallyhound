@@ -1,5 +1,6 @@
 // What every staff screen sits in: the menu, the bar with client search and alerts, and the banners (docs/UX.md rule 4: four things in the main menu).
 import { Logo } from "../components/brand";
+import { useFeatures } from "../lib/firm";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useFirm } from "../lib/firm";
@@ -17,11 +18,22 @@ function EmailNotes() {
   const { me, toast } = useFirm(), [open, setOpen] = useState(false), [n, setN] = useState(me.notes || { morning: true, urgent: true });
   const set = async (k: "morning" | "urgent", on: boolean) => { const was = n; setN({ ...n, [k]: on }); try { const r = await api.post<{ notes: { morning: boolean; urgent: boolean } }>("/api/me/notes", { [k]: on }); setN(r.notes); me.notes = r.notes; toast("Saved."); } catch (e) { setN(was); toast((e as Error).message); } };
   const { T, act } = useFirm(), mine = (T.S.users.find((u: Row) => u.id === me.id) || {}).bark || {}, kinds: string[] | null = mine.kinds || null, KIND: Record<string, string> = { document: "Documents to check", question: "Client questions", says_none: "Client has none", gone_quiet: "Gone quiet", change_noted: "Changes noted", call: "Calls to make", output_check: "Blocked messages" };
-  const bark = (p: { email?: boolean; kinds?: string[] | null }) => void act("setMyBarks", { email: p.email ?? mine.email !== false, kinds: p.kinds === undefined ? kinds : p.kinds }).then(() => toast("Saved."), () => {});
+  const bark = (p: { email?: boolean; text?: boolean; kinds?: string[] | null }) => void act("setMyBarks", { email: p.email ?? mine.email !== false, text: p.text ?? mine.text === true, kinds: p.kinds === undefined ? kinds : p.kinds }).then(() => toast("Saved."), () => {});
+  // TH-BRK-10: a text as well, to this person's own mobile once they have typed back the code sent to it.
+  const feat = useFeatures(), [mob, setMob] = useState(me.mobile || null), [num, setNum] = useState(""), [code, setCode] = useState(""), [mobWhy, setMobWhy] = useState("");
+  const sendCode = async () => { setMobWhy(""); try { const r = await api.post<{ ends: string }>("/api/me/mobile", { mobile: num }); setMob({ ends: r.ends, verified: false }); me.mobile = { ends: r.ends, verified: false }; setCode(""); } catch (e) { setMobWhy((e as Error).message); } };
+  const verify = async () => { setMobWhy(""); try { await api.post("/api/me/mobile/verify", { code }); const v = { ends: mob!.ends, verified: true }; setMob(v); me.mobile = v; bark({ text: true }); } catch (e) { setMobWhy((e as Error).message); } };
+  const forget = async () => { try { await api.del("/api/me/mobile"); setMob(null); me.mobile = null; setNum(""); bark({ text: false }); } catch (e) { setMobWhy((e as Error).message); } };
   return <><button className="btn sm ghost notesbtn" onClick={() => setOpen(true)}>My alerts</button>
     {open ? <Modal title="My alerts" onClose={() => setOpen(false)} footer={<button className="btn pri" onClick={() => setOpen(false)}>Done</button>}><div className="col" style={{ gap: 12 }}>
       <p className="small muted">Who gets an alert when something needs a person. A bark tells you how many things in the review queue are yours. It always shows in the app, under the bell.</p>
       <label className="row"><span className="toggle"><input type="checkbox" checked={mine.email !== false} onChange={(ev) => bark({ email: ev.target.checked })} /><span /></span>Email me a bark too, at most one every half hour, and never outside office hours</label>
+      {feat.textBarks ? <div className="col" style={{ gap: 8 }}>
+        {mob && mob.verified ? <><label className="row"><span className="toggle"><input type="checkbox" checked={mine.text === true} onChange={(ev) => bark({ text: ev.target.checked })} /><span /></span>Text me a bark too, on the mobile ending {mob.ends}</label><div><button className="btn sm ghost" onClick={() => void forget()}>Remove my mobile</button></div></>
+          : mob ? <div className="row" style={{ alignItems: "flex-end" }}><label className="f" style={{ flex: 1 }}>The code texted to the mobile ending {mob.ends}<input type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(ev) => setCode(ev.target.value)} /></label><button className="btn" disabled={code.replace(/\D/g, "").length !== 6} onClick={() => void verify()}>Confirm</button><button className="btn ghost" onClick={() => void forget()}>Cancel</button></div>
+          : <div className="row" style={{ alignItems: "flex-end" }}><label className="f" style={{ flex: 1 }}>Text me a bark too: my mobile<input type="tel" autoComplete="tel" placeholder="(615) 555-0100" value={num} onChange={(ev) => setNum(ev.target.value)} /></label><button className="btn" disabled={num.replace(/\D/g, "").length < 10} onClick={() => void sendCode()}>Send me a code</button></div>}
+        {mobWhy ? <div className="note bad" role="alert">{mobWhy}</div> : null}
+        <p className="small muted">Texts come from Tallyhound's own number, never your firm's client number, and say only how many things are waiting. Reply STOP to end them.</p></div> : null}
       <fieldset className="kinds"><legend className="small b">Bark me about</legend>{Object.keys(KIND).map((k) => <label key={k} className="row"><input type="checkbox" checked={!kinds || kinds.includes(k)} onChange={(ev) => { const all = Object.keys(KIND), cur = kinds || all, next = ev.target.checked ? [...new Set([...cur, k])] : cur.filter((x) => x !== k); bark({ kinds: next.length === all.length ? null : next }); }} />{KIND[k]}</label>)}</fieldset>
       <label className="row"><span className="toggle"><input type="checkbox" checked={n.morning} onChange={(ev) => void set("morning", ev.target.checked)} /><span /></span>A note at 7 am on working days when something is waiting for you</label>
       <label className="row"><span className="toggle"><input type="checkbox" checked={n.urgent} onChange={(ev) => void set("urgent", ev.target.checked)} /><span /></span>A note at once when something urgent comes up</label>

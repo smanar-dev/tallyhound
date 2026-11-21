@@ -387,7 +387,14 @@
   function timeline(e, text, actor) { e.timeline.unshift({ at: new Date(S.now), text, actor: actor || "Tallyhound" }); }
   function hlog(e, kind, text, why, model) { S.hlog.unshift({ id: id("h"), at: new Date(S.now), engId: e ? e.id : null, kind, text, why: why || "", model: model || "Rules" }); if (S.hlog.length > 800) S.hlog.length = 800; }
   function alertx(e, level, kind, text, key) { if (key && S.alerts.some((a) => a.key === key)) return; S.alerts.unshift({ id: id("a"), at: new Date(S.now), engId: e ? e.id : null, level, kind, text, key: key || null, read: false }); hlog(e, "alert", text, "", "Rules"); }
-  function bestHour(e) { const h = (e.hours || []).filter((x) => x >= S.firm.quietStart && x < S.firm.quietEnd); if (h.length < 2) return null; const n = {}; h.forEach((x) => { n[x] = (n[x] || 0) + 1; }); return +Object.keys(n).sort((a, b) => n[b] - n[a] || a - b)[0]; }
+  /* TH-MEM-7: when a client tends to reply. After SEND_HOUR_MIN_REPLIES replies inside the same two-hour window, that client's
+     reminders are planned for the start of the window, always inside sending hours. One number; nothing else is kept. */
+  const SEND_HOUR_MIN_REPLIES = 3;
+  function bestHour(e) {
+    const h = (e.hours || []).filter((x) => x >= S.firm.quietStart && x < S.firm.quietEnd); if (h.length < SEND_HOUR_MIN_REPLIES) return null;
+    let best = null, top = 0; for (let a = S.firm.quietStart; a < S.firm.quietEnd; a++) { const n = h.filter((x) => x === a || x === a + 1).length; if (n > top) { top = n; best = a; } }
+    return top >= SEND_HOUR_MIN_REPLIES ? best : null;
+  }
   const hourLabel = (h) => (h % 12 || 12) + (h >= 12 ? " pm" : " am");
   const dlabel = (d) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()] + " " + (d.getMonth() + 1) + "/" + d.getDate() + " " + hourLabel(d.getHours());
   function schedule(e, days, why) {
@@ -832,7 +839,7 @@
   const BARK_KINDS = { document: "to check", question: "question", says_none: "says they don't have it", gone_quiet: "gone quiet", change_noted: "change noted", call: "call to make", output_check: "blocked message" }, BARK_SYSTEM = ["output_check"];
   const staffHours = () => { const h = S.firm.staffHours || {}, a = +h.start, b = +h.end; return a >= 0 && b <= 24 && a < b ? { start: a, end: b } : STAFF_HOURS; };
   const inStaffHours = (d) => { const h = staffHours(), day = d.getDay(); return day >= 1 && day <= 5 && d.getHours() >= h.start && d.getHours() < h.end && allowed(new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12)); };
-  const barkPrefs = (u) => Object.assign({ app: true, email: true, kinds: null }, (u && u.bark) || {});
+  const barkPrefs = (u) => Object.assign({ app: true, email: true, text: false, kinds: null }, (u && u.bark) || {});
   /** Who hears about an item in the review queue. User ids. */
   function barkRoute(t) {
     const e = t.engId ? eng(t.engId) : null, c = e ? client(e.clientId) : null, live = S.users.filter((u) => u.role !== "read_only" && !u.support), owners = live.filter((u) => u.role === "owner");
@@ -868,14 +875,14 @@
       if (!b.escalation && (S.now - new Date(b.at) < BARK_SETTLE_MIN * MIN || S.now - last < BARK_BATCH_MIN * MIN)) continue;
       b.status = "sent"; b.sentAt = new Date(S.now);
       const u = S.users.find((x) => x.id === b.userId), t0 = b.escalation ? S.tasks.find((t) => t.id === b.taskIds[0]) : null, e0 = t0 && t0.engId ? eng(t0.engId) : null, c0 = e0 ? client(e0.clientId) : null;
-      if (u && barkPrefs(u).email) out.push({ id: b.id, userId: b.userId, email: u.email, first: u.first, escalation: b.escalation, counts: b.counts, words: barkWords(b.counts), who: c0 ? c0.first + " " + String(c0.last || "")[0] + "." : null });
+      if (u && (barkPrefs(u).email || barkPrefs(u).text)) out.push({ id: b.id, userId: b.userId, byEmail: !!barkPrefs(u).email, byText: !!barkPrefs(u).text, email: u.email, first: u.first, escalation: b.escalation, counts: b.counts, words: barkWords(b.counts), who: c0 ? c0.first + " " + String(c0.last || "")[0] + "." : null });
     }
     return out;
   }
   /** For the morning note: what was held overnight for this person, as counts by kind. Marks it as counted. */
   function barkHeld(uid) { const counts = {}; (S.barks || []).forEach((b) => { if (b.userId === uid && b.status === "held") { b.status = "digest"; b.sentAt = new Date(S.now); b.taskIds.forEach((tid) => { const t = S.tasks.find((x) => x.id === tid && x.status === "open"); if (t) counts[t.kind] = (counts[t.kind] || 0) + 1; }); } }); return counts; }
   function barkRead(bid) { const me = S.user && S.user.id; let n = 0; (S.barks || []).forEach((b) => { if (b.userId === me && !b.readAt && (bid === "all" || b.id === bid)) { b.readAt = new Date(S.now); n++; } }); return n; }
-  function setMyBarks(p) { const u = S.users.find((x) => x.id === (S.user && S.user.id)); if (!u) return "Unknown user"; const kinds = Array.isArray(p && p.kinds) ? p.kinds.filter((k) => BARK_KINDS[k]) : null; u.bark = { app: true, email: !(p && p.email === false), kinds: kinds && kinds.length < Object.keys(BARK_KINDS).length ? kinds : null }; return null; }
+  function setMyBarks(p) { const u = S.users.find((x) => x.id === (S.user && S.user.id)); if (!u) return "Unknown user"; const kinds = Array.isArray(p && p.kinds) ? p.kinds.filter((k) => BARK_KINDS[k]) : null; u.bark = { app: true, email: !(p && p.email === false), text: !!(p && p.text === true), kinds: kinds && kinds.length < Object.keys(BARK_KINDS).length ? kinds : null }; return null; }
   function setBarkRules(rules) {
     if (!may("owner")) return "Only an owner can change this"; const out = {};
     Object.keys(BARK_KINDS).forEach((k) => { const r = (rules || {})[k]; if (!r) return; const users = (Array.isArray(r.users) ? r.users : []).filter((id) => S.users.some((u) => u.id === id && u.role !== "read_only")); if (r.owners || users.length) out[k] = { owners: !!r.owners, users }; });
@@ -1073,7 +1080,7 @@
   const CHANGE_WORDS = { sold_home: "sold the house", account_closed: "closed the account", no_longer_employed: "no longer works there", not_this_year: "does not have it this year", combined_elsewhere: "it is on another document", other: "something changed" };
   const NOT_MINE = /\b(this|that|it) (is not|isn'?t|ain'?t) (me|mine|my account|my (tax|accountant))\b|\bnot my (account|accountant|taxes)\b|\bwrong person\b|\bi(?:'m| am) not (a |your )?(client|customer)\b|\bno soy (yo|su cliente|cliente)\b|\bpersona equivocada\b|\bno es mi cuenta\b/i;
   const SOMEONE = /\bmy (husband|wife|spouse|partner|employer|boss|company|accountant|bookkeeper)\b.{0,40}\b(has|have|had|keeps|holds|handles|got|sends)\b|\b(mi esposo|mi esposa|mi pareja|mi marido|mi mujer|mi jefe|mi contador)\b.{0,30}\b(tiene|lo tiene|la tiene|los tiene)\b/i;
-  const ALREADY = /\balready (sent|emailed|texted|uploaded|mailed|gave)\b|\b(i|we) (sent|emailed|texted|uploaded|mailed) (it|that|this|them)\b.{0,40}\b(last week|yesterday|earlier|before|already|on (mon|tues|wednes|thurs|fri|satur|sun)day)\b|\bya (lo|la|los|las|se lo) (envi[eé]|mand[eé])\b/i;
+  const ALREADY = /\balready (sent|emailed|texted|uploaded|mailed|gave)\b|\b(i|we) (sent|emailed|texted|uploaded|mailed) (it|that|this|them)\b.{0,40}\b(last week|yesterday|earlier|before|already|on (mon|tues|wednes|thurs|fri|satur|sun)day)\b|\bya (lo|la|los|las|se lo) (envi[eé]|mand[eé])(?![a-zñ])/i;
   const AFTERDAY = /\b(?:after|on|by|until) (?:the )?(\d{1,2})(?:st|nd|rd|th)?\b(?! ?(?:am|pm|:|\/))|\bdespu[eé]s del? (\d{1,2})\b|\b(?:el|hasta el) (\d{1,2})\b/i, NEXTDOW = /\bnext (sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b|\bel pr[oó]ximo (domingo|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado)\b/i;
   const DOWS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"], DOWS_ES = ["domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"];
   // The patterns used when there is no model. Deliberately narrow: they fire on plain statements and leave the rest to the old rules.
@@ -2011,7 +2018,7 @@
     if (e.status === "complete" && open) { e.status = "in_progress"; e.completedAt = null; e.step = 0; if (!e.next) e.next = nextAllowed(S.now); timeline(e, "Reopened: a document is outstanding again"); }
     else if (["in_progress", "stuck"].includes(e.status) && !open && any) { if (checkComplete(e)) finished(e); }
   }
-  window.TH = { SLOW_ITEM_ASKS, memoryWrite, memoryOf, clearMemory, setMemory, keepRemoved, confirmRemoved, addTask, BARK_KINDS, BARK_BATCH_MIN, BARK_SETTLE_MIN, REVIEW_OVERDUE_HOURS, barkRoute, barkDue, barkHeld, barkRead, barkWords, setMyBarks, setBarkRules, setStaffHours, staffHours, V2, WAIVE_REASONS, LASTING, CHANGE_WORDS, LATER_MAX_DAYS, ALREADY_SENT_LOOKBACK_DAYS, replyV2, setSpouse, VOICES, VOICE_TPL, VOICE_FIXED, voiceFor, setVoice, setClientVoice, setSignOff, previewVoice, verified, CADENCE_PRESETS, gapsOf, cadenceFor, setIntensity, setClientIntensity, undiscard, setClosedDays, startMany, deletionEvidence, setCallOk, plans, quoteFor, areaZone, zoneFor, addContact, removeContact, planEnded, setLine, isLandline, RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
+  window.TH = { SEND_HOUR_MIN_REPLIES, bestHour, SLOW_ITEM_ASKS, memoryWrite, memoryOf, clearMemory, setMemory, keepRemoved, confirmRemoved, addTask, BARK_KINDS, BARK_BATCH_MIN, BARK_SETTLE_MIN, REVIEW_OVERDUE_HOURS, barkRoute, barkDue, barkHeld, barkRead, barkWords, setMyBarks, setBarkRules, setStaffHours, staffHours, V2, WAIVE_REASONS, LASTING, CHANGE_WORDS, LATER_MAX_DAYS, ALREADY_SENT_LOOKBACK_DAYS, replyV2, setSpouse, VOICES, VOICE_TPL, VOICE_FIXED, voiceFor, setVoice, setClientVoice, setSignOff, previewVoice, verified, CADENCE_PRESETS, gapsOf, cadenceFor, setIntensity, setClientIntensity, undiscard, setClosedDays, startMany, deletionEvidence, setCallOk, plans, quoteFor, areaZone, zoneFor, addContact, removeContact, planEnded, setLine, isLandline, RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
     dump, load, blank, setNow, setUser, linkFor, linkLive, LINK_DAYS, consentFromPage, declineTexts, stopEmail, unsubscribeLink, CONSENT_WORDING,
     get S() { return S; }, FORMS, TPL, TPL_USE, QUESTIONS, STUCK, DAY, HOUR, MIN,
     client, eng, engOf, itemsOf, openItems, progress, fill, outputCheck, channelFor, allowed, nextAllowed, live, nextItem,
