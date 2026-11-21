@@ -16,7 +16,7 @@ function NeedRow({ x }: { x: Need }) {
   let acts: ReactNode = null;
   if (can()) {
     if (x.t) acts = x.t.kind === "document" ? <Link className="btn sm pri" to={"/needs-you?task=" + x.t.id}>Check it</Link>
-      : x.t.kind === "gone_quiet" ? <Link className="btn sm" to={"/needs-you?task=" + x.t.id}>Decide what next</Link>
+      : x.t.kind === "gone_quiet" || x.t.kind === "change_noted" ? <Link className="btn sm" to={"/needs-you?task=" + x.t.id}>Decide what next</Link>
       : x.t.kind === "question" || x.t.kind === "call" ? <Link className="btn sm pri" to={"/clients/" + x.e.id + "?tab=conversation"}>{x.t.kind === "call" ? "Call script" : "Reply"}</Link>
       : x.t.kind === "says_none" ? <><button className="btn sm" onClick={() => decide("waive")}>Not needed this year</button><button className="btn sm" onClick={() => decide("reask")}>Ask again</button></>
       : <button className="btn sm" onClick={() => decide("handled")}>Dismiss</button>;

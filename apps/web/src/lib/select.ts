@@ -3,15 +3,15 @@
 import type { Engine } from "virtual:engine";
 
 // The one list of what is waiting for a person lives beside the server, which uses the same list for the morning email.
-import { needsYou, openTasks, type Need, type Row } from "../../../server/src/needs";
-export { needsYou, openTasks, type Need, type Row };
+import { knows, needsYou, nextStep, openTasks, type Need, type Row } from "../../../server/src/needs";
+export { knows, needsYou, nextStep, openTasks, type Need, type Row };
 export const draftsToApprove = (T: Engine): Row[] => T.S.msgs.filter((m: Row) => m.status === "approval");
 
 // Why something is waiting, in the words a preparer would use.
-const WHY: Record<string, string> = { "Low confidence": "Tallyhound was not sure what this is", "Client says none": "Says they don't have it", Question: "Asked a question", "Call the client": "A call to make", "Arrived after close": "Arrived after the file was closed", "Email after close": "Emailed after the file was closed", "File after close": "Sent a file after the file was closed" };
+const WHY: Record<string, string> = { "Low confidence": "Tallyhound was not sure what this is", "Client says none": "Says they don't have it", Question: "Asked a question", "Call the client": "A call to make", "Mentioned a change": "Mentioned a change", "Says someone else has it": "Says someone else has it", "Says this is not theirs": "Urgent: says the messages are not theirs", "Arrived after close": "Arrived after the file was closed", "Email after close": "Emailed after the file was closed", "File after close": "Sent a file after the file was closed" };
 export const why = (t: Row): string => WHY[t.reason] || t.reason || "";
 export function needReason(T: Engine, x: Need): string {
-  if (x.t) return ({ document: "A document to check: " + why(x.t).toLowerCase(), question: "Asked a " + (x.t.category && x.t.category !== "other" ? String(T.SCOPE[x.t.category]).toLowerCase() : "question") + " that needs a person", says_none: "Says they don't have a document", gone_quiet: "Gone quiet: " + String(x.t.reason || "").replace(/^./, (ch) => ch.toLowerCase()), output_check: x.t.reason, call: "No reply to 4 reminders: call script ready" } as Record<string, string>)[x.t.kind] || why(x.t);
+  if (x.t) return ({ document: "A document to check: " + why(x.t).toLowerCase(), question: "Asked a " + (x.t.category && x.t.category !== "other" ? String(T.SCOPE[x.t.category]).toLowerCase() : "question") + " that needs a person", says_none: "Says they don't have a document", change_noted: "Mentioned a change: a suggested checklist edit is waiting", gone_quiet: "Gone quiet: " + String(x.t.reason || "").replace(/^./, (ch) => ch.toLowerCase()), output_check: x.t.reason, call: "No reply to 4 reminders: call script ready" } as Record<string, string>)[x.t.kind] || why(x.t);
   if (x.checkin) return "Finished the check-in: " + x.e.checkin.adds.length + " to add, " + x.e.checkin.drops.length + " may no longer apply";
   if (x.suggest) return "Mentioned something new: a suggested document is waiting";
   return T.STUCK[x.stuck!][0];

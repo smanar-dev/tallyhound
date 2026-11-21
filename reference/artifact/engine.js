@@ -81,6 +81,12 @@
 
   const TPL = {
     en: {
+      M34: "Thanks, {first}. We'll ask them for it, or follow up with you.",
+      M35: "Thanks, {first}. We have your {plain_name}{from_payer} and are checking it now.",
+      M35R: "Thanks, {first}. We don't have your {plain_name}{from_payer} yet. Could you send it again? A photo by reply works, or use this page: {link}",
+      M36: "Thanks for letting us know, {first}. I've passed that to {preparer}.",
+      M37: "Sorry about that. {firm} will check and stop these messages.",
+      M20D: "No rush. I'll check back after {date}.",
       M22: "Thanks, we got your {plain_name}{from_payer}, but {missing}. Could you send {fix}?",
       M22R: "Hi {first}, {firm} here. We still need {fix} for your {plain_name}{from_payer}. A photo by reply works.",
       M23: "{summary}",
@@ -122,6 +128,12 @@
       M31: "{firm} is not collecting documents here right now. Please contact {firm} directly: call {firm_phone} or email {firm_email}."
     },
     es: {
+      M34: "Gracias, {first}. Se lo pediremos a esa persona, o le escribiremos a usted.",
+      M35: "Gracias, {first}. Tenemos su {plain_name}{from_payer} y lo estamos revisando.",
+      M35R: "Gracias, {first}. Aún no tenemos su {plain_name}{from_payer}. ¿Podría enviarlo de nuevo? Puede responder con una foto o usar esta página: {link}",
+      M36: "Gracias por avisarnos, {first}. Se lo pasé a {preparer}.",
+      M37: "Disculpe. {firm} lo revisará y dejará de enviar estos mensajes.",
+      M20D: "Sin prisa. Le escribiré después del {date}.",
       M24: "Gracias, {first}. Se lo pasé a {preparer} de {firm}, quien le responderá.",
       M25: "Disculpe tantos recordatorios, {first}. Los pausaré unos días. {preparer} le escribirá si algo es urgente.",
       M22: "Gracias, recibimos su {plain_name}{from_payer}, pero {missing}. ¿Podría enviar {fix}?",
@@ -163,7 +175,7 @@
       M31: "{firm} no está recibiendo documentos aquí por ahora. Comuníquese con {firm} directamente: llame al {firm_phone} o escriba a {firm_email}."
     }
   };
-  const TPL_USE = { M33: "Voicemail after the final reminder", M32: "The closing question", M31: "Auto-reply while the firm is paused", M30L: "Locked PDF", M30T: "A file we cannot open", M30K: "A link instead of a file", M1: "Invitation to text (email)", M1R: "Invitation reminder (email)", M2: "Texting turned on", M3: "First request", M4: "Next request", M5: "Reminder", M6: "Final reminder", M7: "Wrong year", M8: "Photo too hard to read", M8L: "Photo too hard to read, second time", M9: "Missing page", M10: "Did anything change this year?", M11: "Duplicate", M12: "Passed to your team", M13: "Everything is in", M14: "Question passed to a person", M15: "Where to find a form", M16: "Texting turned off (STOP)", M16H: "Reply to HELP", M19: "Client has none, next request", M19X: "Client has none", M20: "Will send later", M21: "Unknown sender", M26: "What is still needed", M27: "Document arrived before we asked", M28: "Check-in invitation", M28R: "Check-in reminder", M29: "Check-in thanks", M22: "Part of a document is missing", M22R: "Reminder for the missing part", M23: "One reply for several documents", M24: "Passed to a person", M25: "Pause when a client is upset" };
+  const TPL_USE = { M34: "Someone else has the document", M35: "Says it was already sent: we have it", M35R: "Says it was already sent: asked again", M36: "A change passed to the preparer", M37: "Says the messages are not theirs", M20D: "Will send after a date", M33: "Voicemail after the final reminder", M32: "The closing question", M31: "Auto-reply while the firm is paused", M30L: "Locked PDF", M30T: "A file we cannot open", M30K: "A link instead of a file", M1: "Invitation to text (email)", M1R: "Invitation reminder (email)", M2: "Texting turned on", M3: "First request", M4: "Next request", M5: "Reminder", M6: "Final reminder", M7: "Wrong year", M8: "Photo too hard to read", M8L: "Photo too hard to read, second time", M9: "Missing page", M10: "Did anything change this year?", M11: "Duplicate", M12: "Passed to your team", M13: "Everything is in", M14: "Question passed to a person", M15: "Where to find a form", M16: "Texting turned off (STOP)", M16H: "Reply to HELP", M19: "Client has none, next request", M19X: "Client has none", M20: "Will send later", M21: "Unknown sender", M26: "What is still needed", M27: "Document arrived before we asked", M28: "Check-in invitation", M28R: "Check-in reminder", M29: "Check-in thanks", M22: "Part of a document is missing", M22R: "Reminder for the missing part", M23: "One reply for several documents", M24: "Passed to a person", M25: "Pause when a client is upset" };
   const COMPLIANCE = ["M1", "M1R", "M2", "M16", "M16H", "M21"];
   /* Voice (TH-VOI, docs/REBRAND.md section 5). How the firm's messages sound: Warm, Professional or Brief, for the firm or for one
      client. Professional is TPL above. Warm and Brief are written by hand below, one for one; nothing here is written by a model.
@@ -179,6 +191,12 @@
   const VOICE_TPL = {
     warm: {
       en: {
+        M34: "Thank you for letting us know, {first}. We'll ask them for it, or follow up with you.",
+        M35: "Thank you, {first}. We have your {plain_name}{from_payer} and are checking it now. We'll be in touch if anything is missing.",
+        M35R: "Thank you, {first}. Sorry, we don't have your {plain_name}{from_payer} yet. Could you send it once more? A photo by reply is perfect, or use this page: {link}",
+        M36: "Thank you for letting us know, {first}. I've passed that to {preparer}, who will take it from here.",
+        M37: "We're sorry about that. {firm} will check and stop these messages.",
+        M20D: "No rush, {first}. I'll check back after {date}.",
         M3: "Hi {first}, it's {firm}. Hope the new year is going well. We need {n} documents for your {year} return{for_entity}. Could you start with your {plain_name}{from_payer}? {how_send} Thank you. {sign_off}",
         M4: "Thank you, {first}, got it. Next on the list is your {plain_name}{from_payer}. {where_hint}",
         M5: "Hi {first}, {firm} here with a friendly reminder. We still need your {plain_name}{from_payer} for {year}. A photo by reply is perfect. Thank you. {sign_off}",
@@ -211,6 +229,12 @@
         M32: "{firm} has every document on your list, {first}. Thank you. One last thing: did anything change this year that we have not asked about, such as a new job, a move or a sale? Reply YES or NO."
       },
       es: {
+        M34: "Gracias por avisarnos, {first}. Se lo pediremos a esa persona, o le escribiremos a usted.",
+        M35: "Gracias, {first}. Tenemos su {plain_name}{from_payer} y lo estamos revisando. Le escribiremos si falta algo.",
+        M35R: "Gracias, {first}. Disculpe, aún no tenemos su {plain_name}{from_payer}. ¿Podría enviarlo una vez más? Puede responder con una foto o usar esta página: {link}",
+        M36: "Gracias por avisarnos, {first}. Se lo pasé a {preparer}, quien se encargará.",
+        M37: "Le pedimos una disculpa. {firm} lo revisará y dejará de enviar estos mensajes.",
+        M20D: "Sin prisa, {first}. Le escribiré de nuevo después del {date}.",
         M3: "Hola {first}, le escribe {firm}. Esperamos que el año haya empezado bien. Necesitamos {n} documentos para su declaración de {year}{for_entity}. ¿Podría empezar con su {plain_name}{from_payer}? {how_send} Gracias. {sign_off}",
         M4: "Gracias, {first}, recibido. Lo siguiente en la lista es su {plain_name}{from_payer}. {where_hint}",
         M5: "Hola {first}, le escribe {firm} con un recordatorio amable. Aún necesitamos su {plain_name}{from_payer} de {year}. Una foto como respuesta es suficiente. Gracias. {sign_off}",
@@ -245,6 +269,12 @@
     },
     brief: {
       en: {
+        M34: "Thanks. We'll ask them, or follow up.",
+        M35: "We have your {plain_name}{from_payer} and are checking it.",
+        M35R: "We don't have your {plain_name}{from_payer} yet. Please send it again here: {link}",
+        M36: "Thanks. Passed to {preparer}.",
+        M37: "Sorry. {firm} will stop these messages.",
+        M20D: "No rush. We'll check back after {date}.",
         M3: "{firm}: please send your {plain_name}{from_payer} for your {year} return{for_entity}. {how_send}",
         M4: "Got it, thanks. Next: your {plain_name}{from_payer}.",
         M5: "{firm}: still need your {plain_name}{from_payer} for {year}. A photo by reply works.",
@@ -277,6 +307,12 @@
         M32: "{firm} has every document on your list. Did anything else change this year, such as a new job, a move or a sale? Reply YES or NO."
       },
       es: {
+        M34: "Gracias. Se lo pediremos, o le escribiremos.",
+        M35: "Tenemos su {plain_name}{from_payer} y lo estamos revisando.",
+        M35R: "Aún no tenemos su {plain_name}{from_payer}. Por favor envíelo de nuevo aquí: {link}",
+        M36: "Gracias. Se lo pasé a {preparer}.",
+        M37: "Disculpe. {firm} dejará de enviar estos mensajes.",
+        M20D: "Sin prisa. Le escribiremos después del {date}.",
         M3: "{firm}: por favor envíe su {plain_name}{from_payer} para su declaración de {year}{for_entity}. {how_send}",
         M4: "Recibido, gracias. Siguiente: su {plain_name}{from_payer}.",
         M5: "{firm}: aún necesitamos su {plain_name}{from_payer} de {year}. Puede responder con una foto.",
@@ -625,7 +661,9 @@
     const ok = (i) => !(i.laterUntil && i.laterUntil > S.now) && !(releaseOf(i, e) && releaseOf(i, e) > S.now);
     return itemsOf(e.id).find((i) => i.state === "partial" && ok(i)) || itemsOf(e.id).find((i) => (i.state === "requested" || i.state === "expected") && ok(i));
   }
-  function waitingRelease(e) { const w = itemsOf(e.id).filter((i) => ["expected", "requested"].includes(i.state) && releaseOf(i, e) && releaseOf(i, e) > S.now).map((i) => releaseOf(i, e)); return w.length ? new Date(Math.min.apply(null, w)) : null; }
+  // Until when an item is held back: its form is not issued yet, or the client said when they will send it. null when it is not held.
+  function heldUntil(i, e) { const a = [releaseOf(i, e), i.laterUntil].filter((x) => x && x > S.now).map((x) => +new Date(x)); return a.length ? new Date(Math.max.apply(null, a)) : null; }
+  function waitingRelease(e) { const w = itemsOf(e.id).filter((i) => ["expected", "requested"].includes(i.state)).map((i) => heldUntil(i, e)).filter(Boolean); return w.length ? new Date(Math.min.apply(null, w)) : null; }
 
   /* ---------- outreach ---------- */
   function start(eid) {
@@ -713,7 +751,7 @@
       else { e.next = new Date(e.qAsked.getTime() + 2 * DAY); return; }
     }
     const it = nextItem(e);
-    if (!it) { const wr = waitingRelease(e); if (wr && !itemsOf(e.id).some((i) => ["requested", "expected", "partial"].includes(i.state) && !(releaseOf(i, e) > S.now))) { e.next = nextAllowed(wr); return; } e.next = null; if (!checkComplete(e)) { const sn = openItems(e.id).find((i) => i.state === "says_none"); if (sn) setStuck(e, "client_says_none"); } return; }
+    if (!it) { const wr = waitingRelease(e); if (wr && !itemsOf(e.id).some((i) => ["requested", "expected", "partial"].includes(i.state) && !heldUntil(i, e))) { e.next = nextAllowed(wr); return; } e.next = null; if (!checkComplete(e)) { const sn = openItems(e.id).find((i) => i.state === "says_none"); if (sn) setStuck(e, "client_says_none"); } return; }
     let code;
     if (it.state === "partial") { if (e.step >= GAPS.length) { finalNote(e, c); return; } const x = Object.assign({ item: it, why: "Part of the " + FORMS[it.form].plain + " is still missing; reminder " + (e.step + 1) + " of " + GAPS.length }, missText(it.missing || [], c.lang, it.form)); send(e, "M22R", x); escalate(e, c, "M22R", x); schedule(e, GAPS[Math.min(e.step, GAPS.length - 1)], ""); e.step++; return; }
     if (it.state === "expected" || e.step === 0) { code = S.msgs.some((m) => m.engId === e.id && ["M3", "M4", "M19"].includes(m.tpl)) ? "M4" : "M3"; it.state = "requested"; e.step = 0; }
@@ -898,7 +936,7 @@
     if (/^(thanks|thank you|ok|okay|gracias|great)\b/.test(t)) return "thanks";
     return "question";
   }
-  const KLABEL = { stop: "Opt out", start: "Opt back in", help: "Asked for help", yes: "Answered yes", no: "Answered no", where_to_find: "Asked where to find a form", status: "Asked what is still needed", says_none: "Says they don't have it", will_send_later: "Will send it later", thanks: "Thanks, no action", question: "Asked a question", other_update: "Update, no action needed", frustrated: "Frustrated: reminders paused" };
+  const KLABEL = { stop: "Opt out", start: "Opt back in", help: "Asked for help", yes: "Answered yes", no: "Answered no", where_to_find: "Asked where to find a form", status: "Asked what is still needed", says_none: "Says they don't have it", will_send_later: "Will send it later", thanks: "Thanks, no action", question: "Asked a question", other_update: "Update, no action needed", frustrated: "Frustrated: reminders paused", someone_else_has_it: "Says someone else has it", already_sent: "Says it was already sent", life_change: "Mentioned a change", send_after_date: "Will send after a date", not_mine: "Says this is not theirs" };
   // Nothing goes to a client until the firm itself has been checked: a tool that asks people for W-2s is exactly what a fraudster wants.
   const FIRMCHECK = "Your firm is still being checked. This usually takes one business day. You can finish setting up in the meantime.";
   // The firm's legal details for the carriers. Filed as soon as the firm check has passed, plan or no plan, because approval takes weeks.
@@ -959,16 +997,131 @@
   // A key for the unsubscribe link. It never changes, so a link in an old email keeps working.
   function emailKey(c) { if (!c.ekey) c.ekey = linkKey(); return c.ekey; }
   function unsubscribeLink(c) { return S.firm.linkBase && c ? S.firm.linkBase + "/e/" + (S.firm.slug ? S.firm.slug + "-" : "") + emailKey(c) : ""; }
+  /* Reply understanding, second version (TH-RPL, docs/REBRAND.md section 5). Five more things a reply can mean. The model (or, with
+     no model, a few plain patterns) says which; code checks every field against what it was given and then acts only through
+     templates and state changes. Anything it is not sure of goes to a person. A reply never changes a checklist: a life change
+     opens an item in the review queue with a suggested edit that a person accepts or dismisses.
+     firm.hound.replyV2: "on" acts; "shadow" (a new firm's default) records what it would have understood and acts the old way. */
+  const V2 = ["someone_else_has_it", "already_sent", "life_change", "send_after_date", "not_mine"], PERSONS = ["spouse", "employer", "accountant", "other"];
+  const LATER_MAX_DAYS = 30, ALREADY_SENT_LOOKBACK_DAYS = 21;
+  const WAIVE_REASONS = { sold_home: "Sold the home", account_closed: "Account closed", no_longer_employed: "No longer employed there", not_this_year: "Not this year", combined_elsewhere: "Combined on another document", other: "Other" }, LASTING = ["sold_home", "account_closed", "no_longer_employed"];
+  const CHANGE_WORDS = { sold_home: "sold the house", account_closed: "closed the account", no_longer_employed: "no longer works there", not_this_year: "does not have it this year", combined_elsewhere: "it is on another document", other: "something changed" };
+  const NOT_MINE = /\b(this|that|it) (is not|isn'?t|ain'?t) (me|mine|my account|my (tax|accountant))\b|\bnot my (account|accountant|taxes)\b|\bwrong person\b|\bi(?:'m| am) not (a |your )?(client|customer)\b|\bno soy (yo|su cliente|cliente)\b|\bpersona equivocada\b|\bno es mi cuenta\b/i;
+  const SOMEONE = /\bmy (husband|wife|spouse|partner|employer|boss|company|accountant|bookkeeper)\b.{0,40}\b(has|have|had|keeps|holds|handles|got|sends)\b|\b(mi esposo|mi esposa|mi pareja|mi marido|mi mujer|mi jefe|mi contador)\b.{0,30}\b(tiene|lo tiene|la tiene|los tiene)\b/i;
+  const ALREADY = /\balready (sent|emailed|texted|uploaded|mailed|gave)\b|\b(i|we) (sent|emailed|texted|uploaded|mailed) (it|that|this|them)\b.{0,40}\b(last week|yesterday|earlier|before|already|on (mon|tues|wednes|thurs|fri|satur|sun)day)\b|\bya (lo|la|los|las|se lo) (envi[eé]|mand[eé])\b/i;
+  const AFTERDAY = /\b(?:after|on|by|until) (?:the )?(\d{1,2})(?:st|nd|rd|th)?\b(?! ?(?:am|pm|:|\/))|\bdespu[eé]s del? (\d{1,2})\b|\b(?:el|hasta el) (\d{1,2})\b/i, NEXTDOW = /\bnext (sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b|\bel pr[oó]ximo (domingo|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado)\b/i;
+  const DOWS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"], DOWS_ES = ["domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"];
+  // The patterns used when there is no model. Deliberately narrow: they fire on plain statements and leave the rest to the old rules.
+  function ruleV2(text, e) {
+    const t = String(text || "");
+    if (NOT_MINE.test(t)) return { intent: "not_mine", by: "Rules" };
+    let m = SOMEONE.exec(t);
+    if (m) { const w = (m[1] || m[3] || "").toLowerCase(); return { intent: "someone_else_has_it", by: "Rules", person: /employer|boss|company|jefe/.test(w) ? "employer" : /accountant|bookkeeper|contador/.test(w) ? "accountant" : "spouse", item: formsIn(t, e)[0] || null }; }
+    if (ALREADY.test(t)) return { intent: "already_sent", by: "Rules", item: formsIn(t, e)[0] || null };
+    if (/\b(we|i|we've|i've) (just |have )?sold (the|our|my) (house|home|condo)\b|\bvend(imos|[ií]) (la|mi|nuestra) casa\b/i.test(t)) return { intent: "life_change", by: "Rules", change: { kind: "remove", form: "1098", reason: "sold_home" } };
+    if (/\b(closed|cerr[eé]|cerramos) (the|that|my|our|la|mi|esa) (account|cuenta)\b/i.test(t)) { const it = formsIn(t, e)[0]; if (it) return { intent: "life_change", by: "Rules", change: { kind: "remove", form: it.form, reason: "account_closed" }, item: it }; }
+    if (/\b(no longer|don'?t) work (there|for them)\b|\b(left|quit) (that|my) job\b|\bya no trabajo (ah[ií]|all[ií]|con ellos)\b/i.test(t) && itemsOf(e.id).filter((i) => i.form === "W2" && OPEN.includes(i.state)).length === 1) return { intent: "life_change", by: "Rules", change: { kind: "remove", form: "W2", reason: "no_longer_employed" } };
+    m = NEXTDOW.exec(t);
+    if (m) { const w = (m[1] || m[2] || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, ""), want = DOWS.indexOf(w) >= 0 ? DOWS.indexOf(w) : DOWS_ES.indexOf(w), d = new Date(S.now); d.setHours(12, 0, 0, 0); do d.setDate(d.getDate() + 1); while (d.getDay() !== want); return { intent: "send_after_date", by: "Rules", date: d, item: formsIn(t, e)[0] || null }; }
+    m = AFTERDAY.exec(t);
+    if (m && /\b(send|get|have|after|despu[eé]s|until|hasta|payday|back|return|mand|envi)\b/i.test(t)) { const day = +(m[1] || m[2] || m[3]); if (day >= 1 && day <= 31) { const d = new Date(S.now); d.setHours(12, 0, 0, 0); if (d.getDate() >= day) d.setMonth(d.getMonth() + 1, 1); d.setDate(day); if (d.getDate() === day) return { intent: "send_after_date", by: "Rules", date: d, item: formsIn(t, e)[0] || null }; } }
+    return null;
+  }
+  // What the reply was understood as, with every field checked in code. null: nothing new. { low: true }: not sure, so a person decides.
+  function replyV2(text, ai, e) {
+    let r = null;
+    if (ai && V2.includes(ai.intent)) {
+      if (ai.confidence !== "high") return { intent: ai.intent, low: true, by: "Claude" };
+      const ref = ai.item_ref || ai.item_id || null, it = ref ? S.items.find((i) => i.id === ref && i.engId === e.id && OPEN.includes(i.state)) : null;
+      if (ref && !it) return { intent: ai.intent, low: true, by: "Claude" };   // the model named an item that was not on the list it was given
+      const ch = ai.change && typeof ai.change === "object" ? { kind: ai.change.kind, form: ai.change.form_code || ai.change.form, reason: ai.change.reason } : null;
+      r = { intent: ai.intent, by: "Claude", item: it, person: PERSONS.includes(ai.person) ? ai.person : null, date: typeof ai.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(ai.date) ? new Date(+ai.date.slice(0, 4), +ai.date.slice(5, 7) - 1, +ai.date.slice(8, 10), 12) : null, change: ch };
+    } else if (!ai || !ai.intent) r = ruleV2(text, e);
+    if (!r) return null;
+    if (r.intent === "life_change") {
+      const ch = r.change; if (!ch || !["add", "remove"].includes(ch.kind) || !Object.hasOwn(FORMS, ch.form) || ch.form === "OTHER") return { intent: r.intent, low: true, by: r.by };
+      r.change = { kind: ch.kind, form: ch.form, reason: WAIVE_REASONS[ch.reason] ? ch.reason : "other" };
+      if (ch.kind === "remove" && !r.item) r.item = itemsOf(e.id).find((i) => i.form === ch.form && OPEN.includes(i.state)) || null;
+    }
+    if (r.intent === "send_after_date") {
+      const d = r.date instanceof Date && !isNaN(r.date) ? r.date : null;
+      if (!d || d <= S.now || d - S.now > 60 * DAY) return { intent: "will_send_later", fallback: true, by: r.by, item: r.item || null };   // no date we can trust: the old "will send later"
+      r.date = new Date(Math.min(d.getTime(), S.now.getTime() + LATER_MAX_DAYS * DAY));
+    }
+    return r;
+  }
+  const dateWords = (d, lang) => (lang === "es" ? d.getDate() + " de " + ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"][d.getMonth()] : MONTHS[d.getMonth()] + " " + d.getDate());
+  const linked = (c) => (c && c.spouse ? client(c.spouse) : null);
+  /* A spouse or partner who is also a client of the firm, linked by staff. A reply that says "my wife has it" can then move the
+     document to her list, if she has agreed to be contacted. The link is the only thing a name in a reply is ever matched to. */
+  function setSpouse(cid, other) {
+    const c = client(cid), o = other ? client(other) : null; if (!c) return "Unknown client"; if (!may()) return "Not allowed"; if (other && (!o || o.id === c.id)) return "Choose another client";
+    const was = linked(c); if (was) delete was.spouse; if (o) { const theirs = linked(o); if (theirs && theirs.id !== c.id) delete theirs.spouse; c.spouse = o.id; o.spouse = c.id; } else delete c.spouse;
+    audit("client.spouse", c.first + " " + c.last + (o ? " linked with " + o.first + " " + o.last : " unlinked")); return null;
+  }
+  // Acts on what was understood. Returns the intent when it has dealt with the reply, or null to let the old rules carry on.
+  function actV2(e, c, m, v, cur) {
+    const it = v.item || cur || null, name = (i) => (i ? (i.custom || FORMS[i.form].plain) + (i.payer ? " from " + i.payer : "") : "the document"), prep = (S.users.find((u) => u.id === c.preparer) || {}).first || "your preparer";
+    const next = () => { e.step = 0; if (e.status === "in_progress") e.next = nextAllowedC(new Date(S.now.getTime() + DAY), c); };
+    m.v2 = { intent: v.intent, itemId: it ? it.id : null, person: v.person || null, date: v.intent === "send_after_date" ? v.date : null, change: v.change || null, by: v.by };
+    if (v.intent === "someone_else_has_it") {
+      const who = v.person || "other", sp = who === "spouse" ? linked(c) : null, se = sp ? engOf(sp.id) : null, reach = sp && (sp.textConsent === "given" || (sp.email && sp.emailOk));
+      if (it && sp && se && reach && !["closed", "opted_out", "paused"].includes(se.status)) {
+        it.engId = se.id; it.state = "expected"; it.ownerHint = "spouse"; it.movedFrom = c.id; delete it.laterUntil;
+        timeline(e, "Moved to " + sp.first + "'s list: " + name(it) + " (" + c.first + " says " + sp.first + " has it)"); timeline(se, "Added from " + c.first + "'s list: " + name(it));
+        if (se.status === "complete") { se.status = "in_progress"; se.completedAt = null; } if (["in_progress", "stuck"].includes(se.status)) { if (se.status === "stuck") unstick(se); if (!se.next || se.next > S.now.getTime() + DAY) se.next = nextAllowedC(new Date(S.now.getTime() + HOUR), sp); }
+        m.line = "Understood: " + sp.first + " has the " + name(it) + ". Moved to " + sp.first + "'s list; " + sp.first + " is asked next.";
+        hlog(e, "decide", "Moved " + name(it) + " to " + sp.first + " " + sp.last, c.first + " said their spouse has it, and " + sp.first + " is a client who has agreed to be contacted", v.by);
+        send(e, "M34", { item: it }); if (!checkComplete(e)) next(); else finished(e); return v.intent;
+      }
+      if (it) it.ownerHint = who;
+      addTask({ kind: "question", reason: "Says someone else has it", category: "other", engId: e.id, itemId: it ? it.id : null, msgId: m.id, summary: c.first + " says their " + (who === "other" ? "someone else" : who) + " has the " + name(it) + (who === "spouse" && !sp ? ". No spouse is linked to this client" : who === "spouse" && sp && !reach ? ". " + sp.first + " has not agreed to be contacted" : "") });
+      m.line = "Understood: " + (who === "other" ? "someone else" : "their " + who) + " has the " + name(it) + ". Noted on the item. Waiting for you.";
+      send(e, "M34", { item: it }); next(); return v.intent;
+    }
+    if (v.intent === "already_sent") {
+      const since = S.now.getTime() - ALREADY_SENT_LOOKBACK_DAYS * DAY, mine = S.docs.filter((d) => d.engId === e.id && +new Date(d.at) >= since && !["discarded", "purged", "duplicate"].includes(d.state));
+      const hit = mine.find((d) => it && d.form === it.form) || mine.find((d) => ["in_review", "incomplete", "classified", "stored"].includes(d.state)) || null;
+      if (hit && ["in_review", "incomplete", "classified", "stored"].includes(hit.state)) { m.line = "Understood: says it was already sent. One arrived " + dlabel(new Date(hit.at)) + " and is waiting for you."; send(e, "M35", { item: it || { form: hit.form, payer: hit.payer } }); return v.intent; }
+      if (hit && hit.state === "accepted" && !(it && OPEN.includes(it.state) && hit.itemId !== it.id)) { m.line = "Understood: says it was already sent. It arrived " + dlabel(new Date(hit.at)) + " and passed the sniff test."; send(e, "M11", {}); return v.intent; }
+      m.line = "Understood: says it was already sent. Nothing matching arrived in the last " + ALREADY_SENT_LOOKBACK_DAYS + " days, so it was asked for again with the upload page.";
+      linkFresh(c); send(e, "M35R", { item: it || { form: "OTHER", custom: c.lang === "es" ? "documento" : "document" } }); next(); return v.intent;
+    }
+    if (v.intent === "life_change") {
+      const ch = v.change, F = FORMS[ch.form];
+      addTask({ kind: "change_noted", reason: "Mentioned a change", engId: e.id, itemId: ch.kind === "remove" && it ? it.id : null, msgId: m.id, change: ch, summary: c.first + " says: " + CHANGE_WORDS[ch.reason] + ". Suggested: " + ch.kind + " " + F.plain });
+      m.line = "Understood: " + CHANGE_WORDS[ch.reason] + ". Suggested: " + ch.kind + " " + F.plain + ". Waiting for you.";
+      hlog(e, "decide", "Suggested a checklist change: " + ch.kind + " " + F.plain, "A reply never changes a checklist. A person accepts or dismisses it in the review queue", v.by);
+      send(e, "M36", {}); next(); return v.intent;
+    }
+    if (v.intent === "send_after_date") {
+      if (it) { it.laterUntil = v.date; it.state = "expected"; }
+      m.line = "Understood: will send " + (it ? "the " + name(it) + " " : "") + "after " + dateWords(v.date, "en") + ". Reminders for it wait until then.";
+      send(e, "M20D", { date: dateWords(v.date, c.lang) }); e.step = 0; if (e.status === "in_progress") e.next = nextAllowedC(new Date(S.now.getTime() + DAY), c); return v.intent;
+    }
+    return null;
+  }
   function inboundText(cid, text, ai, from) {
     const c = cid ? client(cid) : null, e = c ? engOf(c.id) : null;
     text = scrubIn(text, e);
     if (!e) { S.tray.push({ id: id("y"), text, from: from || "(615) 555-0199", at: new Date(S.now), channel: "text" }); return "unknown"; }   // the placeholder is the demo's; the pipeline always gives the real sender
-    let k = ai && KLABEL[ai.intent] ? ai.intent : intent(text);
+    let k = ai && KLABEL[ai.intent] && !V2.includes(ai.intent) ? ai.intent : ai && V2.includes(ai.intent) && KLABEL[ai.legacy_intent] && !V2.includes(ai.legacy_intent) ? ai.legacy_intent : intent(text);
     if (OPTOUT.test(text)) k = "stop";
     meter("segIn", segs(text)); if (ai && ai.intent) meter("textRead");
     if (!access().ok && !["stop", "start", "help"].includes(k)) { S.msgs.push({ id: id("m"), engId: e.id, dir: "in", kind: "client", body: text, channel: "text", at: new Date(S.now), intent: k, understood: "Arrived while the firm was not collecting" }); e.lastIn = new Date(S.now); awayReply(e, c); return "away"; }
     const cl = classify(text), scope = ai && SCOPE[ai.scope] ? ai.scope : cl.scope, senti = ai && ai.sentiment ? ai.sentiment : cl.sentiment, model = ai && ai.intent ? "Claude" : "Rules";
     const m = { id: id("m"), engId: e.id, dir: "in", kind: "client", body: text, channel: "text", at: new Date(S.now), intent: k, ai: !!(ai && ai.intent), aiNote: ai && ai.summary, scope, sentiment: senti }; S.msgs.push(m);
+    const v2mode = S.firm.hound.replyV2 === "on" ? "on" : "shadow", v2 = ["stop", "start", "help"].includes(k) ? null : replyV2(text, ai, e);
+    if (v2 && v2.intent !== "will_send_later" && v2mode !== "on") { m.shadow = { intent: v2.intent, low: !!v2.low, by: v2.by }; hlog(e, "read", "Shadow: the new reply reading would have understood this as \u201c" + KLABEL[v2.intent].toLowerCase() + "\u201d" + (v2.low ? ", not sure" : ""), "Recorded only. The reply was handled the old way", v2.by); }
+    if (v2 && v2mode === "on" && v2.intent === "not_mine" && !v2.low) {
+      // TH-RPL: "this isn't me". Everything automatic on this conversation stops at once, before any person has looked.
+      m.understood = KLABEL.not_mine; m.v2 = { intent: "not_mine", by: v2.by }; m.line = "Understood: says these messages are not theirs. Automatic messages stopped. Waiting for you."; e.lastIn = new Date(S.now);
+      S.msgs.forEach((x) => { if (x.engId === e.id && ["approval", "approved", "writing"].includes(x.status)) { x.status = "discarded"; x.note = "The person says these messages are not theirs"; } });
+      send(e, "M37", {}); addTask({ kind: "question", urgent: true, reason: "Says this is not theirs", category: "other", engId: e.id, msgId: m.id, summary: c.first + " " + c.last + "'s number or address replied that the messages are not theirs: \u201c" + text.slice(0, 100) + "\u201d" });
+      e.notMine = new Date(S.now); pause(e.id); hlog(e, "guardrail", "Stopped automatic messages to " + c.first, "The reply says the messages are not theirs. Nothing more is sent until a person has checked.", v2.by);
+      alertx(e, "high", "not_mine", "A reply on " + c.first + " " + c.last + "'s conversation says the messages are not theirs. Automatic messages have stopped. Check the number and the email address.", "nm" + m.id);
+      return "not_mine";
+    }
     if (k !== "stop" && k !== "start" && k !== "help" && WRONGNO.test(text)) {
       m.understood = "Says this is the wrong number"; e.lastIn = new Date(S.now); c.mobileBad = true;
       if (c.textConsent === "given") { c.textConsent = "none"; c.consentLog.push({ at: new Date(S.now), what: "Texting stopped: the person at this number says it is the wrong number", channel: "text" }); }
@@ -979,7 +1132,7 @@
     if (LINKRE.test(text) && k !== "stop" && !e.takeover && e.status !== "closed") { m.understood = "Sent a link instead of a file"; e.lastIn = new Date(S.now); hlog(e, "read", c.first + " sent a link", "Tallyhound never opens links. It asked for the photo or PDF itself."); send(e, "M30K", {}); return "link"; }
     e.hours = (e.hours || []).concat([S.now.getHours()]).slice(-12);
     remember(e, (ai && ai.memory) || cl.memory, (ai && ai.memory) ? "Claude" : "Rules");
-    if (!OPTOUT.test(text) && ["in_progress", "stuck", "awaiting_consent", "not_started", "complete"].includes(e.status)) noticeTopics(e, c, text, ai && ai.topics, ai && ai.new_document);
+    if (!OPTOUT.test(text) && !(v2 && v2mode === "on" && v2.intent === "life_change" && !v2.low) && ["in_progress", "stuck", "awaiting_consent", "not_started", "complete"].includes(e.status)) noticeTopics(e, c, text, ai && ai.topics, ai && ai.new_document);
     if (scope !== "documents" && !["stop", "start", "help"].includes(k)) k = "question";
     if ((senti === "frustrated" || senti === "upset") && k === "question" && scope === "documents" && !/\?/.test(text)) k = "frustrated";
     const target = (ai && ai.item_id ? S.items.find((i) => i.id === ai.item_id && i.engId === e.id && OPEN.includes(i.state)) : null) || (!ai && ["will_send_later", "says_none", "where_to_find"].includes(k) ? formsIn(text, e)[0] : null) || null;
@@ -1013,6 +1166,11 @@
       e.qIdx++; e.qAsked = null; e.lastAutoDay = null; step(e); return k;
     }
     const cur = target || itemsOf(e.id).find((i) => i.state === "requested" || i.state === "partial");
+    if (v2 && v2mode === "on" && !e.takeover) {
+      if (v2.low) { k = "question"; m.understood = "Not sure what this means"; m.line = "Not sure what this means (" + KLABEL[v2.intent].toLowerCase() + "?). Passed to you."; }   // TH-RPL-4
+      else if (v2.intent === "will_send_later") k = "will_send_later";
+      else { const done = actV2(e, c, m, v2, v2.item || target || cur); if (done) { m.intent = done; m.understood = KLABEL[done] + (m.v2 && m.v2.itemId ? ": " + ((S.items.find((i) => i.id === m.v2.itemId) || {}).custom || FORMS[(S.items.find((i) => i.id === m.v2.itemId) || { form: "OTHER" }).form].plain) : ""); return done; } }
+    }
     if (k === "status") {
       const open = openItems(e.id).filter((i) => i.state !== "says_none"), es = c.lang === "es";
       if (!open.length) { send(e, itemsOf(e.id).some((i) => i.state === "says_none" || i.state === "in_review") ? "M12" : "M13", {}); return k; }
@@ -1233,6 +1391,15 @@
       else { it.state = "requested"; if (e.stuck === "client_says_none") unstick(e); sendSoon(e, "M5", { item: it }); if (!(e.queue && e.queue.length)) e.next = nextAllowed(new Date(S.now.getTime() + 2 * DAY)); }
     }
     if (t.kind === "call") { timeline(e, "Called by " + S.user.name + (p && p.note ? ": " + p.note : ""), S.user.name); if (p && p.note) remember(e, p.note, S.user.name); if (e.stuck === "no_reply") { unstick(e); e.step = 0; e.next = nextAllowed(new Date(S.now.getTime() + DAY)); } hlog(e, "decide", "Call logged; the Hound resumes tomorrow", p && p.note ? p.note : "", "Rules"); }
+    if (t.kind === "change_noted" && e) {
+      const ch = t.change || {}, F = FORMS[ch.form];
+      if (decision === "apply_change" && F) {
+        if (ch.kind === "remove") { const tgt = (it && OPEN.includes(it.state) ? it : null) || itemsOf(e.id).find((i) => i.form === ch.form && OPEN.includes(i.state)); if (tgt) { tgt.state = "waived"; tgt.waiveReason = WAIVE_REASONS[ch.reason] ? ch.reason : "other"; tgt.note = WAIVE_REASONS[tgt.waiveReason] + " (the client said so)"; timeline(e, "Not needed this year: " + F.plain + " (" + CHANGE_WORDS[tgt.waiveReason] + ")", S.user.name); } }
+        else if (!itemsOf(e.id).some((i) => i.form === ch.form && OPEN.includes(i.state))) { S.items.push({ id: id("i"), engId: e.id, form: ch.form, payer: null, state: "expected", source: "reply", isNew: true }); timeline(e, "Added item: " + F.plain + " (the client mentioned it)", S.user.name); if (e.status === "complete") { e.status = "in_progress"; e.completedAt = null; } }
+        audit("checklist.change_from_reply", (c ? c.first + " " + c.last + ": " : "") + ch.kind + " " + F.plain);
+        if (checkComplete(e)) finished(e); else if (e.status === "in_progress" && !e.next) e.next = nextAllowedC(S.now, c);
+      } else if (decision !== "dismiss_change") { t.status = "open"; t.decision = null; t.by = null; t.decidedAt = null; return "Choose: apply the change, or dismiss it"; }
+    }
     if (t.kind === "gone_quiet" && e) {
       if (decision === "call") { addTask({ kind: "call", reason: "Call the client", engId: e.id, script: t.script || callScript(e, c) }); timeline(e, "Call planned", S.user.name); }
       else if (decision === "restart") { e.status = "in_progress"; e.stuck = null; e.step = 0; e.next = nextAllowedC(S.now, c); timeline(e, "Fetching restarted", S.user.name); }
@@ -1463,7 +1630,7 @@
     const dana = S.clients[0]; Object.assign(dana.profile, { childcare: true, charity: true });
     const ben = S.clients.find((c) => c.last === "Carter"); if (ben) Object.assign(ben.profile, { newJob: true, hsa: true });
     S.firm.docCheck = true; S.firm.elemOff = {};
-    S.firm.hound = { mode: "autopilot", aiLive: false, aiWrite: true, intensity: "steady", voice: "professional", tone: "warm", persona: "Tallyhound", emailAfter: 2, slaHours: 4, pauseDays: 3, callTask: true };
+    S.firm.hound = { mode: "autopilot", aiLive: false, aiWrite: true, replyV2: "on", intensity: "steady", voice: "professional", tone: "warm", persona: "Tallyhound", emailAfter: 2, slaHours: 4, pauseDays: 3, callTask: true };
     S.alerts = []; S.hlog = [];
     T_eng(dana).memory = [{ at: new Date(now - 4 * DAY), text: "Sam handles the bank and brokerage paperwork", source: "Claude" }]; T_eng(dana).target = new Date(2027, 1, 12, 17); T_eng(dana).hours = [19, 20, 19, 18];
     const wei = S.clients.find((c) => c.last === "Chen"); if (wei) { T_eng(wei).memory = [{ at: new Date(now - 2 * DAY), text: "Prefers texts in the evening", source: "Claude" }]; T_eng(wei).hours = [19, 19, 20]; S.tasks.filter((t) => t.kind === "question").forEach((t) => { t.category = "tax_question"; t.reason = "Tax question"; t.summary = "Wei asked whether an HSA contribution is deductible."; t.suggest = "Hi Wei, good question. HSA contributions are something I'll go over with you when we review your return. For now, if you have your HSA statement (Form 5498-SA), please send a photo."; t.suggestBy = "Claude"; }); }
@@ -1498,7 +1665,7 @@
     ["tray", "audit", "alerts", "hlog", "archive"].forEach((k) => { if (!Array.isArray(N[k])) N[k] = []; });
     if (!N.usage || typeof N.usage !== "object") N.usage = {};
     if (N.firm) N.firm.retain = Object.assign({}, RETAIN_DEFAULT, N.firm.retain);
-    const HD = { mode: "copilot", aiLive: false, aiWrite: true, intensity: "steady", voice: "professional", tone: "warm", persona: "", emailAfter: 2, slaHours: 4, pauseDays: 3, callTask: true }; N.firm.hound = N.firm.hound || {}; Object.keys(HD).forEach((k) => { if (N.firm.hound[k] === undefined) N.firm.hound[k] = HD[k]; });
+    const HD = { mode: "copilot", aiLive: false, aiWrite: true, replyV2: "shadow", intensity: "steady", voice: "professional", tone: "warm", persona: "", emailAfter: 2, slaHours: 4, pauseDays: 3, callTask: true }; N.firm.hound = N.firm.hound || {}; Object.keys(HD).forEach((k) => { if (N.firm.hound[k] === undefined) N.firm.hound[k] = HD[k]; });
     N.firm.templates = N.firm.templates || {}; if (!N.firm.templates.en) N.firm.templates.en = {}; if (!N.firm.templates.es) N.firm.templates.es = {}; if (!(N.now instanceof Date)) N.now = new Date();
     S = N; seq = +o.seq || 0; S.hold = null; S.user = S.users.find((u) => u.id === o.userId) || S.users[0];
     S.msgs.forEach((m) => { if (m.status === "writing") m.status = m.after || "delivered"; });
@@ -1511,7 +1678,7 @@
     seq = 0; S.now = opt.now || new Date(); S.firm.createdAt = new Date(S.now); S.firm.taxYear = opt.taxYear || S.firm.taxYear || 2026;
     if (opt.plan && PLANS.some((p) => p[0] === opt.plan)) { S.firm.plan = opt.plan; S.firm.billing = { state: "active", plan: opt.plan, since: new Date(S.now) }; } else { S.firm.plan = "Trial"; S.firm.billing = { state: "trial", plan: null, trialEnds: new Date(S.now.getTime() + TRIAL_DAYS * DAY) }; }
     Object.assign(S.firm, { name: opt.name || "New firm", sender: opt.sender || opt.name || "New firm", phone: opt.phone || "", email: opt.email || "", senderStatus: opt.senderStatus || (opt.plan ? "submitted" : "none"), stopped: false, templates: { en: {}, es: {} } });
-    S.firm.hound.mode = opt.mode || "copilot";
+    S.firm.hound.mode = opt.mode || "copilot"; S.firm.hound.replyV2 = opt.replyV2 === "on" ? "on" : "shadow";   // a real firm starts in shadow (docs/REBRAND.md): the new reply reading is recorded, not acted on, until an owner switches it on
     S.users = (opt.users && opt.users.length ? opt.users : [{ id: "u1", first: "Owner", name: "Owner", role: "owner", email: opt.email || "" }]); S.user = S.users[0];
     return S;
   }
@@ -1743,7 +1910,7 @@
     if (e.status === "complete" && open) { e.status = "in_progress"; e.completedAt = null; e.step = 0; if (!e.next) e.next = nextAllowed(S.now); timeline(e, "Reopened: a document is outstanding again"); }
     else if (["in_progress", "stuck"].includes(e.status) && !open && any) { if (checkComplete(e)) finished(e); }
   }
-  window.TH = { VOICES, VOICE_TPL, VOICE_FIXED, voiceFor, setVoice, setClientVoice, setSignOff, previewVoice, verified, CADENCE_PRESETS, gapsOf, cadenceFor, setIntensity, setClientIntensity, undiscard, setClosedDays, startMany, deletionEvidence, setCallOk, plans, quoteFor, areaZone, zoneFor, addContact, removeContact, planEnded, setLine, isLandline, RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
+  window.TH = { V2, WAIVE_REASONS, LASTING, CHANGE_WORDS, LATER_MAX_DAYS, ALREADY_SENT_LOOKBACK_DAYS, replyV2, setSpouse, VOICES, VOICE_TPL, VOICE_FIXED, voiceFor, setVoice, setClientVoice, setSignOff, previewVoice, verified, CADENCE_PRESETS, gapsOf, cadenceFor, setIntensity, setClientIntensity, undiscard, setClosedDays, startMany, deletionEvidence, setCallOk, plans, quoteFor, areaZone, zoneFor, addContact, removeContact, planEnded, setLine, isLandline, RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
     dump, load, blank, setNow, setUser, linkFor, linkLive, LINK_DAYS, consentFromPage, declineTexts, stopEmail, unsubscribeLink, CONSENT_WORDING,
     get S() { return S; }, FORMS, TPL, TPL_USE, QUESTIONS, STUCK, DAY, HOUR, MIN,
     client, eng, engOf, itemsOf, openItems, progress, fill, outputCheck, channelFor, allowed, nextAllowed, live, nextItem,

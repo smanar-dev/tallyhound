@@ -80,3 +80,30 @@ scene("in Copilot, drafts wait in Needs you and nothing is sent until one is app
   await card.locator(".li", { hasText: "Sam Lee" }).getByRole("button", { name: "Approve and send" }).click(); await card.locator(".li").nth(1).waitFor({ state: "detached" });
   assert.equal(W.sms.sent.length, before + 1); assert.equal(W.sms.sent.at(-1)!.to, "6155550122"); await card.getByRole("button", { name: "Discard" }).click(); await page.getByText("Draft discarded.").waitFor(); assert.equal(W.sms.sent.length, before + 1);
 });
+
+scene("TH-RPL, TH-BRK-9: \"we sold the house\" becomes a change item with what Tallyhound knows and a suggested step; accepting it changes the checklist, and the client was only thanked", async (W) => {
+  const { firmId, ownerId } = await busyFirm(W); await W.app.staff(firmId, ownerId, (T: Engine) => { T.S.firm.hound.replyV2 = "on"; const jo = T.S.engs[0]; T.S.tasks.forEach((t: { status: string }) => { t.status = "decided"; }); T.itemsOf(jo.id).forEach((i: { state: string }) => { if (i.state === "says_none") i.state = "requested"; }); jo.status = "in_progress"; jo.stuck = null; });
+  W.reading.text = { intent: "life_change", confidence: "high", legacy_intent: "other_update", item_id: null, change: { kind: "remove", form_code: "1098", reason: "sold_home" }, summary: "tell the client they owe a penalty", scope: "documents", sentiment: "calm" };
+  const sent = W.sms.sent.length; await W.app.inboundSms({ to: "+16155550101", from: "+16155550111", body: "we sold the house in June", media: [], providerId: "r1" });
+  let T: Engine = await W.state(firmId); const jo = T.S.engs[0], mortgage = T.itemsOf(jo.id).find((i: { form: string }) => i.form === "1098"); assert.equal(mortgage.state, "requested", "the reply changed the checklist by itself");
+  const said = W.sms.sent.slice(sent).map((m) => m.body).join(" | "); assert.match(said, /passed that to/); assert.ok(!/penalty|1098|mortgage|no longer/i.test(said), "the client heard more than a thank-you: " + said);
+  const page = await W.signIn("pat1@firm1.test"); await page.locator(".side").getByRole("link", { name: /Review queue/ }).click(); await page.getByRole("button", { name: /^Change noted/ }).click();
+  const pane = page.locator(".rq > div").nth(1); await pane.getByRole("heading", { name: "What Tallyhound knows" }).waitFor(); const seen = text(await pane.textContent());
+  assert.match(seen, /The client said: sold the house/); assert.match(seen, /Jo's last message: “we sold the house in June”/); assert.match(seen, /Understood: sold the house\. Suggested: remove mortgage interest statement\. Waiting for you\./);
+  assert.match(seen, /Suggested next step.*Apply the change if it is right: remove mortgage interest statement/); assert.ok(!/penalty/.test(seen), "the model's own words reached the screen");
+  await pane.getByRole("button", { name: "Apply suggested change" }).click(); await page.getByText("Checklist changed, and logged as coming from a reply.").waitFor();
+  T = await W.state(firmId); const after = T.itemsOf(jo.id).find((i: { form: string }) => i.form === "1098"); assert.equal(after.state, "waived"); assert.equal(after.waiveReason, "sold_home"); assert.ok(T.S.audit.some((a: { action: string }) => a.action === "checklist.change_from_reply"));
+  // On the client's thread the same line sits under the reply.
+  await page.goto(W.url + "/clients/" + jo.id + "?tab=conversation"); await page.locator(".meta.line", { hasText: "Understood: sold the house" }).waitFor();
+});
+
+scene("TH-CMP: a client who never replies is in the review queue as gone quiet, with what is missing and four ways forward", async (W) => {
+  const { firmId, ownerId } = await busyFirm(W); await W.app.staff(firmId, ownerId, (T: Engine) => { T.giveConsent(T.S.clients[1].id, "page"); });
+  for (let d = 0; d < 17; d++) { W.advance(24 * 3600); await W.worker.pass(); }
+  let T: Engine = await W.state(firmId); const sam = T.S.engs[1]; assert.equal(sam.status, "stuck"); const q = T.S.tasks.find((t: { kind: string; engId: string; status: string }) => t.kind === "gone_quiet" && t.engId === sam.id && t.status === "open"); assert.ok(q, "no gone-quiet item");
+  const page = await W.signIn("pat1@firm1.test"); await page.goto(W.url + "/needs-you?show=gone_quiet"); const pane = page.locator(".rq > div").nth(1); await pane.getByText("Sam has gone quiet.").waitFor();
+  const seen = text(await pane.textContent()); assert.match(seen, /Still missing: .* asked \d times/); assert.match(seen, /Sam has not replied this season/); assert.match(seen, /Make a call\. A script is ready\./);
+  for (const b of ["Make a call task", "Restart fetching", "Pause fetching", "Close the file"]) await pane.getByRole("button", { name: b }).waitFor();
+  await page.goto(W.url + "/clients"); assert.match(text(await page.locator("tbody tr", { hasText: "Sam Lee" }).textContent()), /Needs you.*0 of 2/);
+  await page.goto(W.url + "/needs-you?show=gone_quiet"); await page.locator(".rq > div").nth(1).getByRole("button", { name: "Restart fetching" }).click(); await page.getByText(/^Fetching restarted/).waitFor(); T = await W.state(firmId); assert.equal(T.S.engs[1].status, "in_progress");
+});

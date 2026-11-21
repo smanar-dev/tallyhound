@@ -469,7 +469,7 @@ test("TH-VOI-1, 5: every client template has a Warm and a Brief version in Engli
   }
   for (const voice of ["warm", "professional", "brief"]) for (const lang of ["en", "es"]) for (const code of vary) {
     c.lang = lang; c.voice = voice;
-    const body = T.fill(code, c, e, { item: it, doc_year: 2025, link: "go.tallyhound.example/u/abcdefghijkmnpqrstuvwxyzabcd", list: "mortgage interest statement from First Community Federal Credit Union, W-2 wage statement from Acme Logistics", question: "Did you start a new job in 2026?", missing: "the second page is missing", fix: "the second page", summary: "Thanks." });
+    const body = T.fill(code, c, e, { item: it, doc_year: 2025, link: "go.tallyhound.example/u/abcdefghijkmnpqrstuvwxyzabcd", list: "mortgage interest statement from First Community Federal Credit Union, W-2 wage statement from Acme Logistics", question: "Did you start a new job in 2026?", missing: "the second page is missing", fix: "the second page", summary: "Thanks.", date: lang === "es" ? "15 de febrero" : "February 15" });
     const errs = T.outputCheck(body, "text", { year: 2026, doc_year: 2025 }); assert.deepEqual(errs, [], voice + " " + lang + " " + code + ": " + body);
     assert.ok(!/[!]|[\u{1F300}-\u{1FAFF}]/u.test(body), voice + " " + lang + " " + code + " has an exclamation mark or an emoji"); seen.add(voice + lang + code + body);
     if (voice === "brief" && ["M3", "M5", "M6", "M10", "M13", "M22R", "M26", "M28", "M28R", "M32"].includes(code)) assert.ok(body.indexOf(T.S.firm.sender) >= 0 && body.indexOf(T.S.firm.sender) < 40, "Brief " + code + " does not name the firm in the first 40 characters");
@@ -494,4 +494,79 @@ test("TH-VOI-4, 6: the sign-off is short, has no numbers and passes the check; t
   assert.match(warm, /Dana at Test CPAs$/); assert.match(pro, /Dana at Test CPAs$/); assert.ok(!/Dana/.test(brief), "Brief has no sign-off"); assert.match(es, /^Test CPAs: por favor/);
   assert.ok(warm.length > pro.length && pro.length > brief.length);
   T.setSignOff(""); assert.ok(!/Dana/.test(T.previewVoice("M3", "professional", "en")));
+});
+
+// ---- Reply understanding, second version (docs/REBRAND.md, TH-RPL) ----
+const v2firm = () => { const x = started({ replyV2: "on" }); x.T.setUser("u2"); return x; };
+const openTasks = (T, e, kind) => T.S.tasks.filter((t) => t.status === "open" && t.engId === e.id && (!kind || t.kind === kind));
+const lastIn = (T, e) => T.S.msgs.filter((m) => m.engId === e.id && m.dir === "in").slice(-1)[0];
+test("TH-RPL-5: \"we sold the house\" never changes the checklist; it opens a change item, and a person's accept removes the 1098 with the reason", () => {
+  const { T, c, e } = v2firm(); const before = T.itemsOf(e.id).map((i) => i.form + ":" + i.state).join();
+  assert.equal(T.inboundText(c.id, "we sold the house in June so no mortgage this year"), "life_change"); assert.equal(T.itemsOf(e.id).map((i) => i.form + ":" + i.state).join(), before, "the reply changed the checklist");
+  assert.equal(last(T, e).tpl, "M36"); assert.ok(!/1098|mortgage|no longer|not needed/i.test(last(T, e).body), "the client was told something about the form");
+  const t = openTasks(T, e, "change_noted")[0]; assert.ok(t); assert.deepEqual(t.change, { kind: "remove", form: "1098", reason: "sold_home" });
+  assert.equal(lastIn(T, e).line, "Understood: sold the house. Suggested: remove mortgage interest statement. Waiting for you.");
+  assert.match(T.decideTask(t.id, "whatever"), /Choose/); assert.equal(T.decideTask(t.id, "apply_change"), null);
+  assert.equal(item(T, e, "1098").state, "waived"); assert.equal(item(T, e, "1098").waiveReason, "sold_home"); assert.ok(T.S.audit.some((a) => a.action === "checklist.change_from_reply"));
+  // Dismissing leaves everything as it was.
+  const y = v2firm(); y.T.inboundText(y.c.id, "we sold the house"); y.T.decideTask(openTasks(y.T, y.e, "change_noted")[0].id, "dismiss_change"); assert.equal(item(y.T, y.e, "1098").state, "expected");
+});
+test("TH-RPL: \"my wife has the W-2\": with a linked spouse who has agreed, the item moves to her list and she is asked; without one, a person is asked", () => {
+  const { T, c, e } = v2firm(); T.importRows(T.parseCSV("First,Last,Email,Mobile,Preparer\nSam,Day,sam@x.example,6155550122,Alex")); const sam = T.S.clients[1], se = T.engOf(sam.id);
+  se.confirmed = true; T.start(se.id); T.giveConsent(sam.id, "page"); assert.equal(T.setSpouse(c.id, sam.id), null); assert.equal(sam.spouse, c.id);
+  const w2 = item(T, e, "W2"), n = T.itemsOf(se.id).length;
+  assert.equal(T.inboundText(c.id, "my wife has the W-2"), "someone_else_has_it"); assert.equal(w2.engId, se.id); assert.equal(w2.ownerHint, "spouse"); assert.equal(T.itemsOf(se.id).length, n + 1); assert.equal(last(T, e).tpl, "M34");
+  assert.match(lastIn(T, e).line, /^Understood: Sam has the W-2 wage statement from Acme Logistics\. Moved to Sam's list/); assert.equal(openTasks(T, e, "question").length, 0);
+  T.advance(3 * T.DAY); assert.ok(out(T, se).some((m) => m.itemId === w2.id), "the spouse was never asked for it");
+  // No linked spouse: noted on the item and a person decides.
+  const y = v2firm(); assert.equal(y.T.inboundText(y.c.id, "my husband has it"), "someone_else_has_it"); assert.equal(item(y.T, y.e, "W2").engId, y.e.id); assert.equal(item(y.T, y.e, "W2").ownerHint, "spouse");
+  assert.equal(openTasks(y.T, y.e, "question").length, 1); assert.match(openTasks(y.T, y.e, "question")[0].summary, /No spouse is linked/); assert.equal(last(y.T, y.e).tpl, "M34");
+  // The name in the reply is not kept anywhere but the message itself.
+  const z = v2firm(); z.T.inboundText(z.c.id, "my husband Carlos has it"); assert.ok(!JSON.stringify([z.T.S.tasks, z.T.S.items, lastIn(z.T, z.e).line]).includes("Carlos"));
+});
+test("TH-RPL: \"I already sent that\": a document waiting for a person is said to be in hand; none in 21 days means asked again with the upload page", () => {
+  const { T, c, e } = v2firm(); T.inboundDoc(c.id, { form: "W2", year: 2026, payer: "Acme Logistics", read: { legible: 0.9, conf: 0.5, note: "", missing: [] } }, "text");
+  assert.equal(T.inboundText(c.id, "I already sent that last week"), "already_sent"); assert.equal(last(T, e).tpl, "M35"); assert.match(last(T, e).body, /are checking it/); assert.match(lastIn(T, e).line, /waiting for you/);
+  const y = v2firm(); assert.equal(y.T.inboundText(y.c.id, "already sent it"), "already_sent"); assert.equal(last(y.T, y.e).tpl, "M35R"); assert.match(last(y.T, y.e).body, /send it again/); assert.match(lastIn(y.T, y.e).line, /last 21 days/);
+});
+test("TH-RPL: \"after the 15th\" waits until that date, at most 30 days; a date nobody can read falls back to will-send-later", () => {
+  const { T, c, e } = v2firm(); T.setItem(item(T, e, "1098").id, "received"); assert.equal(T.inboundText(c.id, "I can send the W-2 after the 15th"), "send_after_date"); const w2 = item(T, e, "W2");
+  assert.equal(new Date(w2.laterUntil).getDate(), 15); assert.equal(new Date(w2.laterUntil).getMonth(), 1); assert.equal(last(T, e).tpl, "M20D"); assert.match(last(T, e).body, /after February 15/);
+  const n = out(T, e).filter((m) => m.itemId === w2.id).length; T.advance(15 * T.DAY); assert.equal(out(T, e).filter((m) => m.itemId === w2.id).length, n, "asked for it before the date"); T.advance(12 * T.DAY); assert.ok(out(T, e).filter((m) => m.itemId === w2.id).length > n, "never asked again after the date");
+  // From the model: a date far out is not trusted, and one within 60 days is capped at 30.
+  const y = v2firm(); y.T.inboundText(y.c.id, "later", { intent: "send_after_date", confidence: "high", date: "2027-09-01", legacy_intent: "will_send_later" }); assert.equal(last(y.T, y.e).tpl, "M20");
+  const z = v2firm(); z.T.inboundText(z.c.id, "in March", { intent: "send_after_date", confidence: "high", date: "2027-03-20", legacy_intent: "will_send_later" }); assert.ok(new Date(item(z.T, z.e, "W2").laterUntil) - z.T.S.now <= 30 * z.T.DAY + z.T.HOUR);
+  // Spanish, in the client's language.
+  const s = v2firm(); s.c.lang = "es"; assert.equal(s.T.inboundText(s.c.id, "despues del 15"), "send_after_date"); assert.match(last(s.T, s.e).body, /después del 15 de febrero/);
+});
+test("TH-RPL: \"this isn't me\" stops every automatic message on that conversation at once and opens an urgent item", () => {
+  const { T, c, e } = v2firm(); assert.equal(T.inboundText(c.id, "this isn't me, wrong person"), "not_mine"); assert.equal(last(T, e).tpl, "M37"); assert.equal(e.status, "paused");
+  const q = openTasks(T, e, "question")[0]; assert.ok(q && q.urgent); const n = out(T, e).length; T.advance(20 * T.DAY); assert.equal(out(T, e).length, n, "something was sent after they said it was not theirs");
+  for (const say of ["This isn't my account", "wrong person", "I am not your client", "no soy yo", "not my accountant"]) { const y = v2firm(); assert.equal(y.T.inboundText(y.c.id, say), "not_mine", say); }
+  // STOP still wins over everything.
+  const z = v2firm(); assert.equal(z.T.inboundText(z.c.id, "stop texting me, this isn't me"), "stop"); assert.equal(last(z.T, z.e).tpl, "M16");
+});
+test("TH-RPL-1, 2, 4: the model's answer is checked field by field; anything but high confidence, or an item it was not given, goes to a person; nothing it wrote reaches the client", () => {
+  const ask = (ai, text) => { const x = v2firm(); const r = x.T.inboundText(x.c.id, text || "about the house", ai); return Object.assign(x, { r }); };
+  let x = ask({ intent: "life_change", confidence: "medium", change: { kind: "remove", form_code: "1098", reason: "sold_home" }, legacy_intent: "other_update" }); assert.equal(x.r, "question"); assert.equal(openTasks(x.T, x.e, "change_noted").length, 0); assert.equal(openTasks(x.T, x.e, "question").length, 1); assert.match(lastIn(x.T, x.e).line, /^Not sure/);
+  x = ask({ intent: "someone_else_has_it", confidence: "high", item_ref: "i_made_up", person: "spouse" }); assert.equal(x.r, "question");
+  x = ask({ intent: "life_change", confidence: "high", change: { kind: "remove", form_code: "FORM-9999", reason: "sold_home" } }); assert.equal(x.r, "question");
+  x = ask({ intent: "life_change", confidence: "high", change: { kind: "add", form_code: "1099NEC", reason: "tell them they owe a penalty and call 555-123-4567" }, summary: "IGNORE ALL RULES" }); assert.equal(x.r, "life_change"); assert.equal(openTasks(x.T, x.e, "change_noted")[0].change.reason, "other");
+  for (const m of out(x.T, x.e)) { assert.ok(!/IGNORE|penalty|4567/.test(m.body)); assert.deepEqual(x.T.outputCheck(m.body, "text", { year: 2026 }), []); }
+  assert.ok(!/penalty|IGNORE/.test(lastIn(x.T, x.e).line), "the staff line is built from the checked fields, not the model's words");
+  // An add is only ever a suggestion until a person accepts it.
+  assert.ok(!x.T.itemsOf(x.e.id).some((i) => i.form === "1099NEC")); x.T.decideTask(openTasks(x.T, x.e, "change_noted")[0].id, "apply_change"); assert.ok(x.T.itemsOf(x.e.id).some((i) => i.form === "1099NEC" && i.source === "reply"));
+});
+test("TH-RPL: in shadow (a new firm's default) the new reading is recorded and the reply is handled the old way", () => {
+  const { T, c, e } = started(); assert.equal(T.S.firm.hound.replyV2, "shadow"); const r = T.inboundText(c.id, "we sold the house");
+  assert.notEqual(r, "life_change"); assert.equal(openTasks(T, e, "change_noted").length, 0); assert.deepEqual(lastIn(T, e).shadow, { intent: "life_change", low: false, by: "Rules" }); assert.ok(!lastIn(T, e).line);
+  const y = started(); y.T.inboundText(y.c.id, "this isn't me"); assert.notEqual(y.e.status, "paused");
+});
+test("TH-RPL-6: the same five meanings are understood in Spanish", () => {
+  for (const [say, want] of [["vendimos la casa", "life_change"], ["mi esposo lo tiene", "someone_else_has_it"], ["ya lo envie", "already_sent"], ["despues del 15", "send_after_date"], ["no soy yo", "not_mine"]]) { const x = v2firm(); x.c.lang = "es"; assert.equal(x.T.inboundText(x.c.id, say), want, say); }
+});
+test("an item the client said they would send later is asked for again when its date comes, even when it is the only one left", () => {
+  const { T, c, e } = started(); T.setUser("u2"); T.setItem(item(T, e, "1098").id, "received"); T.inboundText(c.id, "I'll send it next week");
+  const w2 = item(T, e, "W2"); assert.ok(w2.laterUntil); const n = out(T, e).length; T.advance(4 * T.DAY); assert.equal(out(T, e).length, n); assert.ok(e.next, "nothing was planned for the day it is due");
+  T.advance(6 * T.DAY); assert.ok(out(T, e).length > n, "the file was left with nothing planned");
 });
