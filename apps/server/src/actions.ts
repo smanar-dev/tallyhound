@@ -46,6 +46,10 @@ export const ACTIONS: Record<string, Rule> = {
   // Fetch intensity (TH-PAC): the firm's, by an owner; one client's, by staff. The engine checks the role and the value.
   setIntensity: { role: "owner", n: 1, run: (T, [k]) => T.setIntensity(String(k || "")) },
   setClientIntensity: { role: "staff", n: 2, run: (T, [cid, k]) => T.setClientIntensity(String(cid || ""), k ? String(k) : "") },
+  // Voice (TH-VOI): the firm's and its sign-off, by an owner; one client's, by staff.
+  setVoice: { role: "owner", n: 1, run: (T, [k]) => T.setVoice(String(k || "")) },
+  setClientVoice: { role: "staff", n: 2, run: (T, [cid, k]) => T.setClientVoice(String(cid || ""), k ? String(k) : "") },
+  setSignOff: { role: "owner", n: 1, run: (T, [text]) => T.setSignOff(String(text == null ? "" : text).slice(0, 80)) },
   setClosedDays: { role: "owner", n: 1, run: (T, [list]) => T.setClosedDays((Array.isArray(list) ? list : []).slice(0, 100).map(String)) },
   // chase
   start: staff(1), pause: staff(1), resume: staff(1), takeover: staff(2), handback: staff(2), approveMsg: staff(2), rejectMsg: staff(1), manual: staff(2), markHeadsUp: staff(1),

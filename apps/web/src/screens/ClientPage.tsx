@@ -229,7 +229,11 @@ function Details({ T, c }: Ctx) {
   const [v, setV] = useState({ first: c.first, last: c.last, mobile: phone(c.mobile), email: c.email || "", tz: c.tz || "", preparer: c.preparer || "", notes: c.notes || "" });
   const set = (k: keyof typeof v) => (ev: { target: { value: string } }) => setV({ ...v, [k]: ev.target.value });
   const changed = v.mobile.replace(/\D/g, "") !== (c.mobile || "") && c.textConsent === "given";
+  const own = (fn: string) => (ev: { target: { value: string } }) => void act(fn, c.id, ev.target.value).then((r) => toast(r ? String(r) : "Saved. The hound will use this from its next message."), () => {});
   return <div className="col" style={{ gap: 16 }}>
+    <div className="card pad col"><h3>How the hound works for {c.first}</h3><div className="grid g2">
+      <label className="f">Voice<select value={c.voice || ""} disabled={ro} onChange={own("setClientVoice")}><option value="">Firm default ({T.VOICES[T.S.firm.hound.voice || "professional"].label})</option>{Object.keys(T.VOICES).map((k) => <option key={k} value={k}>{T.VOICES[k].label}</option>)}</select></label>
+      <label className="f">Fetch intensity<select value={c.intensity || ""} disabled={ro} onChange={own("setClientIntensity")}><option value="">Firm default ({T.CADENCE_PRESETS[T.S.firm.hound.intensity || "steady"].label})</option>{Object.keys(T.CADENCE_PRESETS).map((k) => <option key={k} value={k}>{T.CADENCE_PRESETS[k].label}</option>)}</select></label></div></div>
     <div className="card pad col"><h3>Contact</h3><div className="grid g2">
       <label className="f">First name<input type="text" value={v.first} onChange={set("first")} disabled={ro} /></label><label className="f">Last name<input type="text" value={v.last} onChange={set("last")} disabled={ro} /></label>
       <label className="f">Mobile<input type="tel" value={v.mobile} onChange={set("mobile")} disabled={ro} /></label><label className="f">Email<input type="email" value={v.email} onChange={set("email")} disabled={ro} /></label>
@@ -304,7 +308,7 @@ export function ClientPage() {
   return <Page title={cname(c)}>
     <div><Link className="btn ghost sm" to="/clients"><Icon name="l" small />Clients</Link></div>
     <div className="card pad row" style={{ gap: 16 }}><Avatar first={c.first} last={c.last} />
-      <div className="grow" style={{ minWidth: 200 }}><div className="row" style={{ gap: 8 }}><h1>{cname(c)}</h1><StatusChip status={e.status} /></div>
+      <div className="grow" style={{ minWidth: 200 }}><div className="row" style={{ gap: 8 }}><h1>{cname(c)}</h1><StatusChip status={e.status} />{c.voice ? <Chip>Voice: {T.VOICES[c.voice].label}</Chip> : null}{c.intensity ? <Chip>Fetch: {T.CADENCE_PRESETS[c.intensity].label}</Chip> : null}</div>
         <div className="small muted" style={{ marginTop: 4 }}>{c.spouse ? "Joint return with " + c.spouse.first + " · " : ""}{c.entity && c.entity !== c.first ? c.entity + " · " : ""}{e.year} {(T.RETURNS[e.type] || T.RETURNS["1040"]).form}{u ? " · Preparer " + u.name : ""}</div>
         <div className="row small" style={{ marginTop: 8, gap: 14 }}>{c.mobile ? <span className="row" style={{ gap: 5 }}><Icon name="phone" small />{phone(c.mobile)} <Chip tone={consent[1]}>{consent[0]}</Chip>{c.mobileBad ? <Chip tone="bad">Wrong number?</Chip> : null}{T.isLandline(c) ? <Chip tone="bad">Landline: cannot get texts</Chip> : null}</span> : null}{c.email ? <span className="row" style={{ gap: 5 }}><Icon name="mail" small />{c.email}{c.emailOk === false ? <Chip tone="bad">Bouncing</Chip> : null}</span> : null}</div></div>
       <div className="row">{can() ? <><button className="btn" onClick={() => setParams({ tab: "conversation" })}><Icon name="msg" small />Message</button>{e.status === "paused" ? <button className="btn" onClick={() => void act("resume", e.id).then(() => toast("Resumed."), () => {})}><Icon name="play" small />Resume</button> : null}{e.status !== "not_started" ? <button className="btn" onClick={doHandOff}><Icon name="deliver" small />Hand off files</button> : null}

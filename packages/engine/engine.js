@@ -89,7 +89,7 @@
       M1: "Hi {first}, it's {preparer} at {firm}. This year you can send your tax documents by text. Take a photo and reply. To turn this on, confirm your mobile number here: {link}. Prefer email? Reply to this message with your documents attached.{verify}",
       M1R: "Hi {first}, a quick reminder. Confirm your mobile number here to send documents by text: {link}. Or reply to this email with them attached.",
       M2: "{firm}: You're set up to send tax documents by text. Message frequency varies. Msg and data rates may apply. Reply HELP for help, STOP to opt out.",
-      M3: "Hi {first}, it's {firm}. We need {n} documents for your {year} return{for_entity}. First: your {plain_name}{from_payer}. Reply with a photo when you have it.",
+      M3: "Hi {first}, it's {firm}. We need {n} documents for your {year} return{for_entity}. First: your {plain_name}{from_payer}. Reply with a photo when you have it. {sign_off}",
       M4: "Thanks, got it. Next: your {plain_name}{from_payer}. {where_hint}",
       M5: "Hi {first}, {firm} here. We still need your {plain_name}{from_payer} for {year}. A photo by reply works.",
       M6: "{firm}: we are still missing {k} documents for your {year} return. Reply here or call us on {firm_phone}. We'll pause reminders for now.",
@@ -130,7 +130,7 @@
       M1: "Hola {first}, le escribe {preparer} de {firm}. Este año puede enviar sus documentos de impuestos por mensaje de texto. Tome una foto y responda. Para activarlo, confirme su número de celular aquí: {link}.{verify}",
       M1R: "Hola {first}, un recordatorio. Confirme su número de celular aquí para enviar documentos por texto: {link}.",
       M2: "{firm}: Ya puede enviar documentos de impuestos por texto. La frecuencia de mensajes varía. Pueden aplicar cargos de mensajes y datos. Responda AYUDA para ayuda, ALTO para cancelar.",
-      M3: "Hola {first}, le escribe {firm}. Necesitamos {n} documentos para su declaración de {year}{for_entity}. Primero: su {plain_name}{from_payer}. Responda con una foto cuando lo tenga.",
+      M3: "Hola {first}, le escribe {firm}. Necesitamos {n} documentos para su declaración de {year}{for_entity}. Primero: su {plain_name}{from_payer}. Responda con una foto cuando lo tenga. {sign_off}",
       M4: "Gracias, recibido. Siguiente: su {plain_name}{from_payer}. {where_hint}",
       M5: "Hola {first}, le escribe {firm}. Aún necesitamos su {plain_name}{from_payer} de {year}. Puede responder con una foto.",
       M6: "{firm}: aún faltan {k} documentos para su declaración de {year}. Responda aquí o llámenos al {firm_phone}. Pausaremos los recordatorios por ahora.",
@@ -165,6 +165,151 @@
   };
   const TPL_USE = { M33: "Voicemail after the final reminder", M32: "The closing question", M31: "Auto-reply while the firm is paused", M30L: "Locked PDF", M30T: "A file we cannot open", M30K: "A link instead of a file", M1: "Invitation to text (email)", M1R: "Invitation reminder (email)", M2: "Texting turned on", M3: "First request", M4: "Next request", M5: "Reminder", M6: "Final reminder", M7: "Wrong year", M8: "Photo too hard to read", M8L: "Photo too hard to read, second time", M9: "Missing page", M10: "Did anything change this year?", M11: "Duplicate", M12: "Passed to your team", M13: "Everything is in", M14: "Question passed to a person", M15: "Where to find a form", M16: "Texting turned off (STOP)", M16H: "Reply to HELP", M19: "Client has none, next request", M19X: "Client has none", M20: "Will send later", M21: "Unknown sender", M26: "What is still needed", M27: "Document arrived before we asked", M28: "Check-in invitation", M28R: "Check-in reminder", M29: "Check-in thanks", M22: "Part of a document is missing", M22R: "Reminder for the missing part", M23: "One reply for several documents", M24: "Passed to a person", M25: "Pause when a client is upset" };
   const COMPLIANCE = ["M1", "M1R", "M2", "M16", "M16H", "M21"];
+  /* Voice (TH-VOI, docs/REBRAND.md section 5). How the firm's messages sound: Warm, Professional or Brief, for the firm or for one
+     client. Professional is TPL above. Warm and Brief are written by hand below, one for one; nothing here is written by a model.
+     Every version passes outputCheck (a test fills each with the longest realistic values). No exclamation marks and no emoji in
+     any voice. Messages the law words for us (opting in, STOP, HELP, a wrong number) and the recorded call have one wording.
+     The Spanish versions are drafts until a fluent speaker has reviewed them (T-31); Spanish stays off for pilot firms. */
+  const VOICES = {
+    warm: { label: "Warm", note: "A friendly opener, a thank-you and your sign-off" },
+    professional: { label: "Professional", note: "Clear and polite. The standard wording" },
+    brief: { label: "Brief", note: "One sentence: the ask and nothing else" }
+  };
+  const VOICE_FIXED = ["M1", "M1R", "M2", "M16", "M16H", "M21", "M23", "M31", "M33"];
+  const VOICE_TPL = {
+    warm: {
+      en: {
+        M3: "Hi {first}, it's {firm}. Hope the new year is going well. We need {n} documents for your {year} return{for_entity}. Could you start with your {plain_name}{from_payer}? {how_send} Thank you. {sign_off}",
+        M4: "Thank you, {first}, got it. Next on the list is your {plain_name}{from_payer}. {where_hint}",
+        M5: "Hi {first}, {firm} here with a friendly reminder. We still need your {plain_name}{from_payer} for {year}. A photo by reply is perfect. Thank you. {sign_off}",
+        M6: "Hi {first}, it's {firm}. We are still missing {k} documents for your {year} return. Whenever you are ready, reply here or call us on {firm_phone}. We'll pause the reminders for now. Thank you.",
+        M7: "Thank you, {first}. That one is for {doc_year}, and we need the {year} version of your {plain_name}{from_payer}. {where_hint}",
+        M8: "Thank you, {first}. Part of that photo is hard to read. Could you take it again with the page flat, in good light, with all four corners showing?",
+        M8L: "Sorry, {first}, it is still hard to read. This page keeps the photo at full quality: {link}",
+        M9: "Thank you, {first}. That looks like one page of a longer document. Could you send the other pages too?",
+        M10: "Hi {first}, a quick question from {firm} for your {year} return: {question} Reply YES or NO. Thank you.",
+        M11: "Thank you, {first}. We already have that one, so nothing more is needed for it.",
+        M12: "Thank you, {first}. I've passed that to {preparer} at {firm}, who will take a look.",
+        M13: "That's everything, {first}. {firm} has all {n} documents for your {year} return. Thank you for getting them to us. {sign_off}",
+        M14: "Good question, {first}. I've passed it to {preparer}, who will get back to you.",
+        M15: "Happy to help, {first}. Your {plain_name} comes from {issuer}. {where_hint} If you have an online account with them, look under tax documents.",
+        M19: "No problem at all, {first}. I've let {preparer} know. Next on the list is your {plain_name}{from_payer}.",
+        M19X: "No problem at all, {first}. I've let {preparer} know.",
+        M20: "No rush, {first}. I'll check back in a few days.",
+        M22: "Thank you, {first}, we got your {plain_name}{from_payer}, but {missing}. Could you send {fix}?",
+        M22R: "Hi {first}, {firm} here with a friendly reminder. We still need {fix} for your {plain_name}{from_payer}. A photo by reply is perfect. Thank you.",
+        M24: "Thank you, {first}. I've passed this to {preparer} at {firm}, who will get back to you.",
+        M25: "Sorry for all the reminders, {first}. I'll pause them for a few days. {preparer} will be in touch if anything is urgent.",
+        M26: "Hi {first}, here is what is still needed for your {year} return: {list}. Reply with a photo of any of them whenever you can. Thank you.",
+        M27: "Thank you, {first}, got it. {firm} will be in touch if anything else is needed.",
+        M28: "Hi {first}, it's {firm}. Before we ask for your {year} tax documents, here is a 2-minute check-in so we only ask for what you have. Just tap what applies: {link} Thank you.",
+        M28R: "Hi {first}, {firm} here with a friendly reminder about the 2-minute check-in for your {year} taxes: {link}",
+        M29: "Thank you, {first}. {firm} is putting your list together and will send it shortly.",
+        M30L: "Thank you, {first}. That PDF is locked with a password, so {firm} could not open it. Could you send a copy without the password, or a photo of each page?",
+        M30T: "Thank you, {first}. {firm} could not open that kind of file. A photo of the page or a PDF works best.",
+        M30K: "Thank you, {first}. {firm} cannot open links. Could you send the photo or PDF itself in a reply?",
+        M32: "{firm} has every document on your list, {first}. Thank you. One last thing: did anything change this year that we have not asked about, such as a new job, a move or a sale? Reply YES or NO."
+      },
+      es: {
+        M3: "Hola {first}, le escribe {firm}. Esperamos que el año haya empezado bien. Necesitamos {n} documentos para su declaración de {year}{for_entity}. ¿Podría empezar con su {plain_name}{from_payer}? {how_send} Gracias. {sign_off}",
+        M4: "Gracias, {first}, recibido. Lo siguiente en la lista es su {plain_name}{from_payer}. {where_hint}",
+        M5: "Hola {first}, le escribe {firm} con un recordatorio amable. Aún necesitamos su {plain_name}{from_payer} de {year}. Una foto como respuesta es suficiente. Gracias. {sign_off}",
+        M6: "Hola {first}, le escribe {firm}. Aún faltan {k} documentos para su declaración de {year}. Cuando pueda, responda aquí o llámenos al {firm_phone}. Pausaremos los recordatorios por ahora. Gracias.",
+        M7: "Gracias, {first}. Ese documento es de {doc_year} y necesitamos el de {year}: su {plain_name}{from_payer}. {where_hint}",
+        M8: "Gracias, {first}. Parte de la foto es difícil de leer. ¿Podría tomarla de nuevo sobre una superficie plana, con buena luz y mostrando las cuatro esquinas?",
+        M8L: "Disculpe, {first}, aún es difícil de leer. Esta página mantiene la foto con calidad completa: {link}",
+        M9: "Gracias, {first}. Parece una página de un documento más largo. ¿Podría enviar también las otras páginas?",
+        M10: "Hola {first}, una pregunta rápida de {firm} para su declaración de {year}: {question} Responda SI o NO. Gracias.",
+        M11: "Gracias, {first}. Ya tenemos ese documento, así que no necesitamos nada más de ese.",
+        M12: "Gracias, {first}. Se lo pasé a {preparer} de {firm}, quien lo revisará.",
+        M13: "Eso es todo, {first}. {firm} tiene los {n} documentos para su declaración de {year}. Gracias por enviarlos. {sign_off}",
+        M14: "Buena pregunta, {first}. Se la pasé a {preparer}, quien le responderá.",
+        M15: "Con gusto, {first}. Su {plain_name} viene de {issuer}. {where_hint} Si tiene una cuenta en línea con ellos, busque en documentos de impuestos.",
+        M19: "No hay problema, {first}. Ya le avisé a {preparer}. Lo siguiente en la lista es su {plain_name}{from_payer}.",
+        M19X: "No hay problema, {first}. Ya le avisé a {preparer}.",
+        M20: "Sin prisa, {first}. Le escribiré de nuevo en unos días.",
+        M22: "Gracias, {first}, recibimos su {plain_name}{from_payer}, pero {missing}. ¿Podría enviar {fix}?",
+        M22R: "Hola {first}, le escribe {firm} con un recordatorio amable. Aún necesitamos {fix} de su {plain_name}{from_payer}. Una foto como respuesta es suficiente. Gracias.",
+        M24: "Gracias, {first}. Se lo pasé a {preparer} de {firm}, quien le responderá.",
+        M25: "Disculpe tantos recordatorios, {first}. Los pausaré unos días. {preparer} le escribirá si algo es urgente.",
+        M26: "Hola {first}, esto es lo que aún falta para su declaración de {year}: {list}. Responda con una foto de cualquiera de ellos cuando pueda. Gracias.",
+        M27: "Gracias, {first}, recibido. {firm} le escribirá si se necesita algo más.",
+        M28: "Hola {first}, le escribe {firm}. Antes de pedirle sus documentos de impuestos de {year}, le dejamos unas preguntas de 2 minutos para pedirle solo lo que usted tiene. Toque lo que corresponda: {link} Gracias.",
+        M28R: "Hola {first}, le escribe {firm} con un recordatorio amable de las preguntas de 2 minutos para sus impuestos de {year}: {link}",
+        M29: "Gracias, {first}. {firm} está preparando su lista y se la enviará pronto.",
+        M30L: "Gracias, {first}. Ese PDF tiene contraseña y {firm} no pudo abrirlo. ¿Podría enviar una copia sin contraseña, o una foto de cada página?",
+        M30T: "Gracias, {first}. {firm} no pudo abrir ese tipo de archivo. Una foto de la página o un PDF funciona mejor.",
+        M30K: "Gracias, {first}. {firm} no puede abrir enlaces. ¿Podría enviar la foto o el PDF en una respuesta?",
+        M32: "{firm} ya tiene todos los documentos de su lista, {first}. Gracias. Una última cosa: ¿cambió algo este año que no le hayamos preguntado, como un trabajo nuevo, una mudanza o una venta? Responda SI o NO."
+      }
+    },
+    brief: {
+      en: {
+        M3: "{firm}: please send your {plain_name}{from_payer} for your {year} return{for_entity}. {how_send}",
+        M4: "Got it, thanks. Next: your {plain_name}{from_payer}.",
+        M5: "{firm}: still need your {plain_name}{from_payer} for {year}. A photo by reply works.",
+        M6: "{firm}: {k} documents still missing for {year}. Reply here or call us on {firm_phone}. Reminders are paused.",
+        M7: "That one is for {doc_year}. Please send the {year} {plain_name}{from_payer}.",
+        M8: "We can't read that photo. Please retake it flat, in good light, all four corners showing.",
+        M8L: "Still hard to read. Please use this page: {link}",
+        M9: "That is one page of a longer document. Please send the other pages.",
+        M10: "{firm}, for your {year} return: {question} Reply YES or NO.",
+        M11: "We already have that one. Thanks.",
+        M12: "Thanks. Passed to {preparer} at {firm}.",
+        M13: "{firm} has all {n} documents for your {year} return. Thank you.",
+        M14: "Passed to {preparer}, who will get back to you.",
+        M15: "Your {plain_name} comes from {issuer}. {where_hint}",
+        M19: "Noted, {preparer} knows. Next: your {plain_name}{from_payer}.",
+        M19X: "Noted, {preparer} knows.",
+        M20: "No rush. We'll check back in a few days.",
+        M22: "Got your {plain_name}{from_payer}, but {missing}. Please send {fix}.",
+        M22R: "{firm}: still need {fix} for your {plain_name}{from_payer}. A photo by reply works.",
+        M24: "Thanks. Passed to {preparer} at {firm}.",
+        M25: "Sorry for the reminders. They are paused for a few days.",
+        M26: "{firm}: still needed for {year}: {list}. Reply with a photo of any.",
+        M27: "Got it, thanks.",
+        M28: "{firm}: a 2-minute check-in before we ask for your {year} tax documents: {link}",
+        M28R: "{firm}: reminder, your 2-minute check-in for {year}: {link}",
+        M29: "Thanks. {firm} will send your list shortly.",
+        M30L: "That PDF is locked. Please send a copy without the password, or a photo of each page.",
+        M30T: "{firm} could not open that file. Please send a photo or a PDF.",
+        M30K: "{firm} cannot open links. Please send the photo or PDF itself.",
+        M32: "{firm} has every document on your list. Did anything else change this year, such as a new job, a move or a sale? Reply YES or NO."
+      },
+      es: {
+        M3: "{firm}: por favor envíe su {plain_name}{from_payer} para su declaración de {year}{for_entity}. {how_send}",
+        M4: "Recibido, gracias. Siguiente: su {plain_name}{from_payer}.",
+        M5: "{firm}: aún necesitamos su {plain_name}{from_payer} de {year}. Puede responder con una foto.",
+        M6: "{firm}: aún faltan {k} documentos de {year}. Responda aquí o llámenos al {firm_phone}. Los recordatorios quedan en pausa.",
+        M7: "Ese documento es de {doc_year}. Por favor envíe el de {year}: su {plain_name}{from_payer}.",
+        M8: "No podemos leer la foto. Por favor tómela de nuevo, plana, con buena luz y las cuatro esquinas visibles.",
+        M8L: "Aún es difícil de leer. Por favor use esta página: {link}",
+        M9: "Es una página de un documento más largo. Por favor envíe las otras páginas.",
+        M10: "{firm}, para su declaración de {year}: {question} Responda SI o NO.",
+        M11: "Ya tenemos ese documento. Gracias.",
+        M12: "Gracias. Se lo pasé a {preparer} de {firm}.",
+        M13: "{firm} tiene los {n} documentos para su declaración de {year}. Gracias.",
+        M14: "Se la pasé a {preparer}, quien le responderá.",
+        M15: "Su {plain_name} viene de {issuer}. {where_hint}",
+        M19: "Anotado, {preparer} ya lo sabe. Siguiente: su {plain_name}{from_payer}.",
+        M19X: "Anotado, {preparer} ya lo sabe.",
+        M20: "Sin prisa. Le escribiremos en unos días.",
+        M22: "Recibimos su {plain_name}{from_payer}, pero {missing}. Por favor envíe {fix}.",
+        M22R: "{firm}: aún necesitamos {fix} de su {plain_name}{from_payer}. Puede responder con una foto.",
+        M24: "Gracias. Se lo pasé a {preparer} de {firm}.",
+        M25: "Disculpe los recordatorios. Quedan en pausa unos días.",
+        M26: "{firm}: aún falta para {year}: {list}. Responda con una foto de cualquiera.",
+        M27: "Recibido, gracias.",
+        M28: "{firm}: unas preguntas de 2 minutos antes de pedirle sus documentos de impuestos de {year}: {link}",
+        M28R: "{firm}: recordatorio, sus preguntas de 2 minutos para {year}: {link}",
+        M29: "Gracias. {firm} le enviará su lista pronto.",
+        M30L: "Ese PDF tiene contraseña. Por favor envíe una copia sin contraseña, o una foto de cada página.",
+        M30T: "{firm} no pudo abrir ese archivo. Por favor envíe una foto o un PDF.",
+        M30K: "{firm} no puede abrir enlaces. Por favor envíe la foto o el PDF.",
+        M32: "{firm} ya tiene todos los documentos de su lista. ¿Cambió algo más este año, como un trabajo nuevo, una mudanza o una venta? Responda SI o NO."
+      }
+    }
+  };
   const SCOPE = { documents: "Documents", tax_question: "Tax question", billing: "Billing", scheduling: "Scheduling", personal: "Personal", complaint: "Complaint", other: "Other" };
 
   const QUESTIONS = [
@@ -281,8 +426,25 @@
   function linkLive(c) { return !!(c && c.key && c.keyAt && S.now - new Date(c.keyAt) <= LINK_DAYS * DAY); }
   function linkFresh(c) { if (!S.firm.linkBase || !c) return; if (!linkLive(c)) { c.key = linkKey(); c.keyAt = new Date(S.now); } }
   function linkFor(c, kind) { return S.firm.linkBase ? S.firm.linkBase + "/" + kind + "/" + (S.firm.slug ? S.firm.slug + "-" : "") + ((c && c.key) || "") : LINK_SAMPLE + "/" + kind + "/k3x9"; }
+  function voiceFor(c) { const k = (c && c.voice) || (S.firm.hound && S.firm.hound.voice) || "professional"; return VOICES[k] ? k : "professional"; }
+  function setVoice(k) { if (!may("owner")) return "Only an owner can change this"; if (!VOICES[k]) return "Choose Warm, Professional or Brief"; const H = S.firm.hound; if ((H.voice || "professional") === k) return null; H.voice = k; audit("firm.voice_changed", "Messages now sound " + VOICES[k].label); return null; }
+  function setClientVoice(cid, k) { const c = client(cid); if (!c) return "Unknown client"; if (!may()) return "Not allowed"; if (k && !VOICES[k]) return "Choose Warm, Professional or Brief"; if ((c.voice || null) === (k || null)) return null; if (k) c.voice = k; else delete c.voice; const e = engOf(cid); if (e) timeline(e, "Voice: " + (k ? VOICES[k].label : "the firm's (" + VOICES[voiceFor(c)].label + ")"), S.user.name); audit("client.voice_changed", c.first + " " + c.last + ": " + (k ? VOICES[k].label : "firm default")); return null; }
+  /* TH-VOI-4: the sign-off a firm puts at the end of its requests. Up to 30 characters, and it must pass the same check as a message. */
+  function setSignOff(text) {
+    if (!may("owner")) return "Only an owner can change this"; const v = String(text == null ? "" : text).replace(/\s+/g, " ").trim();
+    if (v.length > 30) return "Keep the sign-off to 30 characters"; if (/[{}!]/.test(v)) return "No exclamation marks or brackets in a sign-off"; if (/\d/.test(v)) return "No numbers in a sign-off";
+    const errs = outputCheck(v, "text", {}); if (errs.length) return "That sign-off cannot be used: " + errs.join(", ");
+    if ((S.firm.signOff || "") === v) return null; S.firm.signOff = v; audit("firm.signoff_changed", v ? "Sign-off set" : "Sign-off removed"); return null;
+  }
+  /* TH-VOI-6: what a request reads like in a voice and language, for the settings page. Sample data only: Maria, and a W-2 from
+     Acme Health. Never a real client. The firm's own name and sign-off are used, because that is what the owner is choosing. */
+  function previewVoice(code, voice, lang) {
+    const c = { id: "", first: "Maria", last: "Garcia", lang: lang === "es" ? "es" : "en", preparer: S.user ? S.user.id : null, voice: VOICES[voice] ? voice : "professional" };
+    return fill(TPL.en[code] ? code : "M3", c, null, { voice: c.voice, item: { form: "W2", payer: "Acme Health" }, n: 3, k: 2, doc_year: (S.firm.taxYear || 2026) - 1, link: LINK_SAMPLE + "/u/k3x9", list: "W-2 from Acme Health, 1099-INT from First Farmers Bank", question: PORTALQ[0][lang === "es" ? 2 : 1].replace("{year}", S.firm.taxYear || 2026), missing: "page 2 is missing", fix: "page 2", summary: "" });
+  }
   function fill(code, c, e, extra) {
-    const lang = c && c.lang === "es" ? "es" : "en", t = (S.firm.templates[lang] || {})[code] || TPL[lang][code] || TPL.en[code];
+    const lang = c && c.lang === "es" ? "es" : "en", voice = (extra && extra.voice && VOICES[extra.voice] ? extra.voice : voiceFor(c)), std = (S.firm.templates[lang] || {})[code] || TPL[lang][code] || TPL.en[code];
+    const t = voice === "professional" || VOICE_FIXED.includes(code) ? std : (((S.firm.templatesBy || {})[voice] || {})[lang] || {})[code] || VOICE_TPL[voice][lang][code] || VOICE_TPL[voice].en[code] || std;
     const it = extra && extra.item, F = it ? FORMS[it.form] : null, p = progress(e ? e.id : "");
     const prep = c ? (S.users.find((u) => u.id === c.preparer) || {}).first || S.firm.sender : S.firm.sender;
     const v = Object.assign({
@@ -291,12 +453,15 @@
       firm: S.firm.sender, first: c ? c.first : "", preparer: prep, year: e ? e.year : S.firm.taxYear || 2026, n: p.total, k: e ? openItems(e.id).length : 0,
       plain_name: F ? (it.custom ? ((x) => (/^[A-ZÁÉÍÓÚ][a-záéíóúñ]/.test(x) ? x[0].toLowerCase() + x.slice(1) : x))(lang === "es" && it.customEs ? it.customEs : it.custom) : lang === "es" ? F.es : F.plain) : "", from_payer: it && it.payer ? (lang === "es" ? " de " : " from ") + it.payer : "",
       where_hint: F ? (lang === "es" ? F.hintEs : F.hint) : "", issuer: F ? (lang === "es" ? F.issuerEs : F.issuer) : "",
-      link: linkFor(c, code.startsWith("M1") ? "c" : "u"), firm_phone: S.firm.phone, firm_email: S.firm.email
+      link: linkFor(c, code.startsWith("M1") ? "c" : "u"), firm_phone: S.firm.phone, firm_email: S.firm.email,
+      how_send: LONGHOW[lang][it && LONGDOC.includes(it.form) ? 1 : 0],
+      // The firm's sign-off (up to 30 characters). With none set, Warm signs with the preparer's first name and Professional does not sign.
+      sign_off: S.firm.signOff || (voice === "warm" && prep && prep !== S.firm.sender ? prep : "")
     }, extra || {});
     let tt = t; if (it && LONGDOC.includes(it.form)) tt = tt.replace(LONGHOW[lang][0], LONGHOW[lang][1]);
     if (!String(S.firm.phone || "").trim()) tt = tt.replace(" or call us on {firm_phone}", "").replace("Call {firm_phone} or email {firm_email}", "Email {firm_email}").replace("Please call {firm_phone}.", "Please contact your preparer directly.").replace(" o llámenos al {firm_phone}", "").replace("Llame al {firm_phone} o escriba a {firm_email}", "Escriba a {firm_email}").replace("Por favor llame al {firm_phone}.", "Por favor contacte a su preparador directamente.").replace(/\{firm_phone\}/g, S.firm.email || "");
     return tt.replace(/\{(\w+)\}/g, (m, k) => (v[k] !== undefined && v[k] !== null ? v[k] : m)).replace(/\s+/g, " ")
-      .replace(/\b(need|missing) 1 documents\b/g, "$1 1 document").replace(/\ball 1 documents\b/g, "your document").replace(/\b(Necesitamos|faltan) 1 documentos\b/g, (m, w) => (w === "faltan" ? "falta 1 documento" : "Necesitamos 1 documento")).replace(/\blos 1 documentos\b/g, "su documento").trim();
+      .replace(/\b(need|missing) 1 documents\b/g, "$1 1 document").replace(/\ball 1 documents\b/g, "your document").replace(/\b(Necesitamos|faltan) 1 documentos\b/g, (m, w) => (w === "faltan" ? "falta 1 documento" : "Necesitamos 1 documento")).replace(/\blos 1 documentos\b/g, "su documento").replace(/([A-Za-z])\.\.(?=\s|$)/g, "$1.").trim();   // a firm name ending in a full stop does not double it
   }
   function outputCheck(body, channel, vars) {
     const errs = [];
@@ -405,7 +570,7 @@
     const H = S.firm.hound, comp = COMPLIANCE.includes(code) || code === "M31", it0 = extra && extra.item;
     let status = "delivered", after = "delivered";
     if (!comp && H.mode === "copilot") { after = "approval"; status = H.aiLive ? "writing" : "approval"; if (PROACTIVE.includes(code)) S.msgs.forEach((x) => { if (x.engId === e.id && x.status === "approval" && PROACTIVE.includes(x.tpl)) { x.status = "discarded"; x.note = "Replaced by a newer draft"; } }); } else if (!comp && H.aiLive) status = "writing";
-    const m = { id: id("m"), engId: e.id, dir: "out", kind: "auto", tpl: code, body, base: body, channel: ch, at: new Date(S.now), status, after, itemId: it0 ? it0.id : null, why: (extra && extra.why) || "", ctx: { use: TPL_USE[code] || code, item: it0 ? (it0.custom || FORMS[it0.form].plain) + (it0.payer ? " from " + it0.payer : "") : "", missing: extra && extra.missing, fix: extra && extra.fix, doc_year: extra && extra.doc_year } };
+    const m = { id: id("m"), engId: e.id, dir: "out", kind: "auto", tpl: code, voice: voiceFor(c), body, base: body, channel: ch, at: new Date(S.now), status, after, itemId: it0 ? it0.id : null, why: (extra && extra.why) || "", ctx: { use: TPL_USE[code] || code, item: it0 ? (it0.custom || FORMS[it0.form].plain) + (it0.payer ? " from " + it0.payer : "") : "", missing: extra && extra.missing, fix: extra && extra.fix, doc_year: extra && extra.doc_year } };
     S.msgs.push(m); e.lastOut = new Date(S.now);
     if (status === "delivered") { meter(ch === "text" ? "segOut" : "email", ch === "text" ? segs(body) : 1); fairCheck(); } if (status === "writing") meter("write");
     hlog(e, "message", (status === "approval" ? "Drafted for approval: " : status === "writing" ? "Writing: " : "Sent: ") + (TPL_USE[code] || code).toLowerCase() + " by " + ch, m.why, status === "writing" ? "Claude" : "Rules");
@@ -1298,7 +1463,7 @@
     const dana = S.clients[0]; Object.assign(dana.profile, { childcare: true, charity: true });
     const ben = S.clients.find((c) => c.last === "Carter"); if (ben) Object.assign(ben.profile, { newJob: true, hsa: true });
     S.firm.docCheck = true; S.firm.elemOff = {};
-    S.firm.hound = { mode: "autopilot", aiLive: false, aiWrite: true, intensity: "steady", tone: "warm", persona: "Tallyhound", emailAfter: 2, slaHours: 4, pauseDays: 3, callTask: true };
+    S.firm.hound = { mode: "autopilot", aiLive: false, aiWrite: true, intensity: "steady", voice: "professional", tone: "warm", persona: "Tallyhound", emailAfter: 2, slaHours: 4, pauseDays: 3, callTask: true };
     S.alerts = []; S.hlog = [];
     T_eng(dana).memory = [{ at: new Date(now - 4 * DAY), text: "Sam handles the bank and brokerage paperwork", source: "Claude" }]; T_eng(dana).target = new Date(2027, 1, 12, 17); T_eng(dana).hours = [19, 20, 19, 18];
     const wei = S.clients.find((c) => c.last === "Chen"); if (wei) { T_eng(wei).memory = [{ at: new Date(now - 2 * DAY), text: "Prefers texts in the evening", source: "Claude" }]; T_eng(wei).hours = [19, 19, 20]; S.tasks.filter((t) => t.kind === "question").forEach((t) => { t.category = "tax_question"; t.reason = "Tax question"; t.summary = "Wei asked whether an HSA contribution is deductible."; t.suggest = "Hi Wei, good question. HSA contributions are something I'll go over with you when we review your return. For now, if you have your HSA statement (Form 5498-SA), please send a photo."; t.suggestBy = "Claude"; }); }
@@ -1333,7 +1498,7 @@
     ["tray", "audit", "alerts", "hlog", "archive"].forEach((k) => { if (!Array.isArray(N[k])) N[k] = []; });
     if (!N.usage || typeof N.usage !== "object") N.usage = {};
     if (N.firm) N.firm.retain = Object.assign({}, RETAIN_DEFAULT, N.firm.retain);
-    const HD = { mode: "copilot", aiLive: false, aiWrite: true, intensity: "steady", tone: "warm", persona: "", emailAfter: 2, slaHours: 4, pauseDays: 3, callTask: true }; N.firm.hound = N.firm.hound || {}; Object.keys(HD).forEach((k) => { if (N.firm.hound[k] === undefined) N.firm.hound[k] = HD[k]; });
+    const HD = { mode: "copilot", aiLive: false, aiWrite: true, intensity: "steady", voice: "professional", tone: "warm", persona: "", emailAfter: 2, slaHours: 4, pauseDays: 3, callTask: true }; N.firm.hound = N.firm.hound || {}; Object.keys(HD).forEach((k) => { if (N.firm.hound[k] === undefined) N.firm.hound[k] = HD[k]; });
     N.firm.templates = N.firm.templates || {}; if (!N.firm.templates.en) N.firm.templates.en = {}; if (!N.firm.templates.es) N.firm.templates.es = {}; if (!(N.now instanceof Date)) N.now = new Date();
     S = N; seq = +o.seq || 0; S.hold = null; S.user = S.users.find((u) => u.id === o.userId) || S.users[0];
     S.msgs.forEach((m) => { if (m.status === "writing") m.status = m.after || "delivered"; });
@@ -1578,7 +1743,7 @@
     if (e.status === "complete" && open) { e.status = "in_progress"; e.completedAt = null; e.step = 0; if (!e.next) e.next = nextAllowed(S.now); timeline(e, "Reopened: a document is outstanding again"); }
     else if (["in_progress", "stuck"].includes(e.status) && !open && any) { if (checkComplete(e)) finished(e); }
   }
-  window.TH = { verified, CADENCE_PRESETS, gapsOf, cadenceFor, setIntensity, setClientIntensity, undiscard, setClosedDays, startMany, deletionEvidence, setCallOk, plans, quoteFor, areaZone, zoneFor, addContact, removeContact, planEnded, setLine, isLandline, RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
+  window.TH = { VOICES, VOICE_TPL, VOICE_FIXED, voiceFor, setVoice, setClientVoice, setSignOff, previewVoice, verified, CADENCE_PRESETS, gapsOf, cadenceFor, setIntensity, setClientIntensity, undiscard, setClosedDays, startMany, deletionEvidence, setCallOk, plans, quoteFor, areaZone, zoneFor, addContact, removeContact, planEnded, setLine, isLandline, RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
     dump, load, blank, setNow, setUser, linkFor, linkLive, LINK_DAYS, consentFromPage, declineTexts, stopEmail, unsubscribeLink, CONSENT_WORDING,
     get S() { return S; }, FORMS, TPL, TPL_USE, QUESTIONS, STUCK, DAY, HOUR, MIN,
     client, eng, engOf, itemsOf, openItems, progress, fill, outputCheck, channelFor, allowed, nextAllowed, live, nextItem,

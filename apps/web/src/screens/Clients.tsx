@@ -113,7 +113,7 @@ type Dialog = null | { kind: "add" } | { kind: "start" } | { kind: "assign"; ids
 export function Clients() {
   const { T, can, act, actMany, toast } = useFirm(), s = T.S, nav = useNavigate(), [params, setParams] = useSearchParams();
   const pill = PILLS.some((p) => p[0] === params.get("show")) ? params.get("show")! : "all";
-  const [q, setQ] = useState(""), [prep, setPrep] = useState(""), [sel, setSel] = useState(() => new Set<string>()), [limit, setLimit] = useState(PAGE), [dialog, setDialog] = useState<Dialog>(null);
+  const [q, setQ] = useState(""), [prep, setPrep] = useState(""), [voi, setVoi] = useState(""), [inten, setInten] = useState(""), [sel, setSel] = useState(() => new Set<string>()), [limit, setLimit] = useState(PAGE), [dialog, setDialog] = useState<Dialog>(null);
   // Home and other screens can open a dialog here: /clients?do=add, ?do=start, ?do=assign (everyone not started).
   useEffect(() => {
     const d = params.get("do"); if (!d) return;
@@ -122,7 +122,7 @@ export function Clients() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params]);
   const open = useMemo(() => openTasks(T), [T]);
-  const rows: Row[] = useMemo(() => { const t = q.trim().toLowerCase(); return s.engs.filter((e: Row) => { const c = T.client(e.clientId); return c && inPill(T, e, pill, open) && (!prep || c.preparer === prep) && (!t || (c.first + " " + c.last + " " + (c.email || "") + " " + (c.mobile || "")).toLowerCase().includes(t)); }).sort((a: Row, b: Row) => (a.status === "stuck" ? 0 : 1) - (b.status === "stuck" ? 0 : 1) || T.client(a.clientId).last.localeCompare(T.client(b.clientId).last)); }, [T, s, pill, prep, q, open]);
+  const rows: Row[] = useMemo(() => { const t = q.trim().toLowerCase(); return s.engs.filter((e: Row) => { const c = T.client(e.clientId); return c && inPill(T, e, pill, open) && (!prep || c.preparer === prep) && (!voi || T.voiceFor(c) === voi) && (!inten || T.cadenceFor(e).key === inten) && (!t || (c.first + " " + c.last + " " + (c.email || "") + " " + (c.mobile || "")).toLowerCase().includes(t)); }).sort((a: Row, b: Row) => (a.status === "stuck" ? 0 : 1) - (b.status === "stuck" ? 0 : 1) || T.client(a.clientId).last.localeCompare(T.client(b.clientId).last)); }, [T, s, pill, prep, voi, inten, q, open]);
   const shown = rows.slice(0, limit), ready = readyToStart(T).length, allSel = shown.length > 0 && shown.every((e) => sel.has(e.id));
   const setPill = (p: string) => { const n = new URLSearchParams(params); if (p === "all") n.delete("show"); else n.set("show", p); setParams(n); setLimit(PAGE); };
   const toggle = (id: string) => { const n = new Set(sel); if (n.has(id)) n.delete(id); else n.add(id); setSel(n); };
@@ -146,7 +146,9 @@ export function Clients() {
   return <Page title="Clients" actions={actions}>
     <div className="row"><div className="pills">{PILLS.map((p) => <button key={p[0]} className={pill === p[0] ? "on" : ""} aria-pressed={pill === p[0]} onClick={() => setPill(p[0])}>{p[1]}<span>{s.engs.filter((e: Row) => inPill(T, e, p[0], open)).length}</span></button>)}</div><span className="sp" />
       <input type="search" placeholder="Filter this list" aria-label="Filter clients" style={{ width: 180 }} value={q} onChange={(e) => { setQ(e.target.value); setLimit(PAGE); }} />
-      <select aria-label="Preparer" value={prep} onChange={(e) => setPrep(e.target.value)}><option value="">All preparers</option>{s.users.filter((u: Row) => u.role !== "read_only").map((u: Row) => <option key={u.id} value={u.id}>{u.first}</option>)}</select></div>
+      <select aria-label="Preparer" value={prep} onChange={(e) => setPrep(e.target.value)}><option value="">All preparers</option>{s.users.filter((u: Row) => u.role !== "read_only").map((u: Row) => <option key={u.id} value={u.id}>{u.first}</option>)}</select>
+      <select aria-label="Voice" value={voi} onChange={(e) => setVoi(e.target.value)}><option value="">Any voice</option>{Object.keys(T.VOICES).map((k) => <option key={k} value={k}>{T.VOICES[k].label}</option>)}</select>
+      <select aria-label="Fetch intensity" value={inten} onChange={(e) => setInten(e.target.value)}><option value="">Any intensity</option>{Object.keys(T.CADENCE_PRESETS).map((k) => <option key={k} value={k}>{T.CADENCE_PRESETS[k].label}</option>)}</select></div>
     <div className="card">
       {!s.clients.length ? <HoundNote title="No clients yet." mode="sniff wag"><p>Import your client list and the hound will get to work.</p>{can() ? <div className="row" style={{ justifyContent: "center", marginTop: 14 }}><Link className="btn pri" to="/add-clients"><Icon name="upload" small />Import your client list</Link><button className="btn" onClick={() => setDialog({ kind: "add" })}><Icon name="plus" small />Add one client</button></div> : null}</HoundNote>
         : !rows.length ? <Empty>No clients match. <button className="btn sm" onClick={() => { setQ(""); setPrep(""); setPill("all"); }}>Clear filters</button></Empty>

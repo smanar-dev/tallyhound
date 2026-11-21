@@ -23,13 +23,13 @@ scene("the hound shows what it did and why, what is coming up, and lets an owner
   await page.getByRole("tab", { name: "Rules it follows" }).click(); await page.getByLabel(/^Approve each message/).click(); await page.getByText("Saved.", { exact: true }).waitFor();
   T = await W.state(firmId); assert.equal(T.S.firm.hound.mode, "copilot"); assert.ok(T.S.audit.some((a: { action: string; detail: string }) => a.action === "settings.hound" && /Now on copilot/.test(a.detail)));
   // The "Saved." from the change before may still be on screen, so wait for the saved state itself, not for the words.
-  await page.getByLabel("Tone").selectOption("brief"); for (let i = 0; i < 100 && (await W.state(firmId)).S.firm.hound.tone !== "brief"; i++) await new Promise((r) => setTimeout(r, 50)); assert.equal((await W.state(firmId)).S.firm.hound.tone, "brief");
+  await page.getByLabel("Pause after an upset reply").selectOption("5"); for (let i = 0; i < 100 && (await W.state(firmId)).S.firm.hound.pauseDays !== 5; i++) await new Promise((r) => setTimeout(r, 50)); assert.equal((await W.state(firmId)).S.firm.hound.pauseDays, 5);
   await page.getByRole("tab", { name: "Drafts to approve" }).click(); await page.getByText("No drafts waiting.").waitFor();
 });
 
 scene("staff can see the rules but not change them; a person takes a conversation over and hands it back from the client page", async (W) => {
   const { firmId, ownerId } = await busyFirm(W); await W.firms.addUser(firmId, (await W.auth.userById(ownerId))!, { name: "Alex Staff", email: "alex@firm1.test", role: "staff" });
-  const page = await W.signIn("alex@firm1.test"); await page.goto(W.url + "/hound?tab=rules"); await page.getByText("Only an owner can change these.").waitFor(); assert.equal(await page.getByLabel(/^Approve each message/).isDisabled(), true); assert.equal(await page.getByLabel("Tone").isDisabled(), true);
+  const page = await W.signIn("alex@firm1.test"); await page.goto(W.url + "/hound?tab=rules"); await page.getByText("Only an owner can change these.").first().waitFor(); assert.equal(await page.getByLabel(/^Approve each message/).isDisabled(), true); assert.equal(await page.getByLabel("Pause after an upset reply").isDisabled(), true);
   let T: Engine = await W.state(firmId); const jo = T.S.engs[0]; await page.goto(W.url + "/clients/" + jo.id); const card = page.locator(".card", { hasText: "What it knows about Jo" }); await card.waitFor();
   await card.getByRole("button", { name: /^I'll handle / }).click(); await page.getByText(/^You have the conversation/).waitFor(); await page.waitForURL("**tab=conversation"); assert.match(text(await card.textContent()), /A person has it.*Alex Staff took over/);
   T = await W.state(firmId); assert.equal(T.S.engs[0].takeover.by, "Alex Staff");
@@ -172,4 +172,30 @@ scene("Email address: an owner adds the firm's domain, sees the three records, a
   await page.getByRole("button", { name: "Check now" }).click(); await page.getByText("Not found yet. Records can take up to a day to show.").waitFor(); assert.equal((await W.state(firmId)).S.firm.domain.verified, false);
   DNS.found = true; await page.getByRole("button", { name: "Check now" }).click(); await page.getByRole("status").getByText("Requests come from documents@larkinpoe.example.").waitFor(); assert.equal((await W.state(firmId)).S.firm.domain.verified, true);
   await page.getByRole("button", { name: "Remove this domain" }).click(); await page.getByRole("dialog").getByRole("button", { name: "Remove" }).click(); await page.getByLabel("Your firm's domain").waitFor(); assert.equal((await W.state(firmId)).S.firm.domain, null);
+});
+
+scene("TH-VOI, TH-PAC: an owner makes the hound theirs: voice with a live sample, a sign-off, fetch intensity; one client can differ; staff can look but not change", async (W) => {
+  const { firmId } = await busyFirm(W), page = await W.signIn("pat1@firm1.test"); await page.goto(W.url + "/hound?tab=rules"); await page.getByRole("heading", { name: "Make the hound yours" }).waitFor();
+  const sample = page.locator(".bub.out").first(); assert.match(text(await sample.textContent()), /^Hi Maria, it's Test CPAs 1\. We need 3 documents.*Acme Health/);
+  // Brief: the sample rewrites itself, and it is saved and audited.
+  await page.getByRole("radiogroup", { name: "Voice" }).getByText("Brief", { exact: true }).click(); await page.getByText("Saved. The hound will use this from its next message.").waitFor();
+  assert.match(text(await sample.textContent()), /^Test CPAs 1: please send your W-2 wage statement from Acme Health/); let T: Engine = await W.state(firmId); assert.equal(T.S.firm.hound.voice, "brief"); assert.ok(T.S.audit.some((a: { action: string }) => a.action === "firm.voice_changed"));
+  // The sample is never a real client.
+  for (const c of T.S.clients) assert.ok(!text(await sample.textContent()).includes(c.first + ","), "a real client's name is in the sample");
+  await page.getByLabel("Preview language").selectOption("es"); assert.match(text(await sample.textContent()), /^Test CPAs 1: por favor envíe/); await page.getByText(/waiting for review by a fluent speaker/).waitFor();
+  // A sign-off with a number is refused in words; a good one is saved.
+  await page.getByLabel(/^Sign-off/).fill("Call 5551234"); await page.getByRole("button", { name: "Save sign-off" }).click(); await page.getByRole("alert").filter({ hasText: "No numbers in a sign-off" }).waitFor();
+  await page.getByLabel(/^Sign-off/).fill("Pat at Test CPAs"); await page.getByRole("button", { name: "Save sign-off" }).click(); await page.getByRole("alert").waitFor({ state: "detached" }); T = await W.state(firmId); assert.equal(T.S.firm.signOff, "Pat at Test CPAs");
+  // Persistent: saved, with the note about counsel, and nothing is sent because of the change.
+  const sent = W.sms.sent.length + W.email.sent.length; await page.getByRole("radiogroup", { name: "Fetch intensity" }).getByText("Persistent", { exact: true }).click(); await page.getByText(/Ask your own counsel/).waitFor();
+  T = await W.state(firmId); assert.equal(T.S.firm.hound.intensity, "persistent"); assert.equal(W.sms.sent.length + W.email.sent.length, sent);
+  // One client on Warm and Gentle: chips on their page, and the list filters find them.
+  const jo = T.S.engs[0]; await page.goto(W.url + "/clients/" + jo.id + "?tab=details"); await page.getByLabel("Voice").selectOption("warm"); await page.getByText("Saved. The hound will use this from its next message.").first().waitFor(); await page.getByLabel("Fetch intensity").selectOption("gentle");
+  await page.locator(".chip", { hasText: "Voice: Warm" }).waitFor(); await page.locator(".chip", { hasText: "Fetch: Gentle" }).waitFor(); T = await W.state(firmId); assert.equal(T.voiceFor(T.S.clients[0]), "warm"); assert.equal(T.cadenceFor(T.S.engs[0]).key, "gentle"); assert.equal(T.voiceFor(T.S.clients[1]), "brief");
+  await page.goto(W.url + "/clients"); await page.getByLabel("Voice").selectOption("warm"); await page.locator("tbody tr").nth(1).waitFor({ state: "detached" }); assert.match(text(await page.locator("tbody tr").textContent()), /Jo Day/);
+  await page.getByLabel("Voice").selectOption(""); await page.getByLabel("Fetch intensity").selectOption("persistent"); await page.locator("tbody tr").nth(2).waitFor({ state: "detached" }); assert.equal(await page.locator("tbody tr").count(), 2);
+  // Staff see the choices and cannot change the firm's.
+  await page.goto(W.url + "/settings?tab=people"); await page.getByRole("button", { name: "Add a person" }).click(); const dlg = page.getByRole("dialog"); await dlg.getByLabel("Name").fill("Alex Staff"); await dlg.getByLabel("Work email").fill("alex@firm1.test"); await dlg.getByRole("button", { name: "Add", exact: true }).click(); await dlg.waitFor({ state: "detached" });
+  const alex = await W.signIn("alex@firm1.test"); await alex.goto(W.url + "/hound?tab=rules"); await alex.getByRole("heading", { name: "Make the hound yours" }).waitFor(); assert.equal(await alex.locator("input[name=voice]").first().isDisabled(), true); assert.equal(await alex.locator("input[name=inten]").first().isDisabled(), true);
+  assert.equal((await alex.request.post(W.url + "/api/act", { data: { fn: "setVoice", args: ["warm"] } })).status(), 403);
 });

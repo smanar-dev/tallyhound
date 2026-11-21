@@ -21,6 +21,7 @@ body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--body);-webkit-tex
 ::selection{background:var(--tint)}
 button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
+input[type=radio],input[type=checkbox]{accent-color:var(--ink)}
 h1,h2,h3,h4{margin:0;text-wrap:balance}
 h1{font:600 30px/1.08 var(--display);letter-spacing:-.03em;font-optical-sizing:auto}
 h2{font:600 20px/1.2 var(--display);letter-spacing:-.015em;font-optical-sizing:auto}

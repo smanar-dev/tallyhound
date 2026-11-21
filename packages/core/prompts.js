@@ -55,7 +55,7 @@ function writeMessage(T, m) {
     .map((x) => (x.dir === "in" ? c.first : H.persona) + ": " + (x.docId ? "[document]" : String(x.body).slice(0, 160)));
   const open = T.openItems(e.id).map((i) => fname(T, i.form) + (i.payer ? " from " + i.payer : ""));
   return "You write one message from " + H.persona + ", the document-collection assistant at " + S.firm.name + ", to a tax client. " +
-    "Purpose: " + m.ctx.use + ". Channel: " + m.channel + ". Language: " + (c.lang === "es" ? "Spanish" : "English") + ". Tone: " + H.tone + ".\n" +
+    "Purpose: " + m.ctx.use + ". Channel: " + m.channel + ". Language: " + (c.lang === "es" ? "Spanish" : "English") + ". Voice: " + (T.voiceFor ? T.VOICES[T.voiceFor(c)].label + " (" + T.VOICES[T.voiceFor(c)].note.toLowerCase() + ")" : H.tone) + ". No exclamation marks.\n" +
     "Facts you may use: client first name " + c.first + "; preparer " + prep + "; tax year " + e.year +
     (m.ctx.item ? "; document: " + m.ctx.item : "") + (m.ctx.missing ? "; what is missing: " + m.ctx.missing + "; what to send: " + m.ctx.fix : "") +
     (e.target ? "; documents needed by " + (e.target.getMonth() + 1) + "/" + e.target.getDate() : "") +

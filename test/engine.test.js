@@ -457,3 +457,41 @@ test("TH-CMP-6: marking an item not needed on the checklist also answers the \"I
   assert.equal(t.status, "decided"); assert.equal(t.decision, "settled"); T.advance(T.HOUR); assert.ok(["complete", "in_progress"].includes(e.status)); assert.ok(T.checkComplete ? true : true);
   assert.equal(T.S.tasks.filter((x) => x.status === "open" && x.engId === e.id).length, 0);
 });
+
+// ---- Voice (docs/REBRAND.md, TH-VOI) ----
+test("TH-VOI-1, 5: every client template has a Warm and a Brief version in English and Spanish, and every version passes the output check with long values", () => {
+  const { T, c, e } = started(); T.setUser("u1"); T.S.firm.sender = "Hartwell, Okafor & Lindqvist CPAs"; T.S.firm.phone = "(615) 555-0100"; c.first = "Christopher";
+  const vary = Object.keys(T.TPL.en).filter((k) => !T.VOICE_FIXED.includes(k)); assert.ok(vary.length >= 30);
+  const it = item(T, e, "1098"); it.payer = "First Community Federal Credit Union"; const seen = new Set();
+  for (const voice of ["warm", "brief"]) for (const lang of ["en", "es"]) {
+    assert.deepEqual(vary.filter((k) => !T.VOICE_TPL[voice][lang][k]), [], voice + " " + lang + " is missing versions");
+    assert.deepEqual(Object.keys(T.VOICE_TPL[voice][lang]).filter((k) => !vary.includes(k)), [], voice + " " + lang + " has a version of a message that has one wording");
+  }
+  for (const voice of ["warm", "professional", "brief"]) for (const lang of ["en", "es"]) for (const code of vary) {
+    c.lang = lang; c.voice = voice;
+    const body = T.fill(code, c, e, { item: it, doc_year: 2025, link: "go.tallyhound.example/u/abcdefghijkmnpqrstuvwxyzabcd", list: "mortgage interest statement from First Community Federal Credit Union, W-2 wage statement from Acme Logistics", question: "Did you start a new job in 2026?", missing: "the second page is missing", fix: "the second page", summary: "Thanks." });
+    const errs = T.outputCheck(body, "text", { year: 2026, doc_year: 2025 }); assert.deepEqual(errs, [], voice + " " + lang + " " + code + ": " + body);
+    assert.ok(!/[!]|[\u{1F300}-\u{1FAFF}]/u.test(body), voice + " " + lang + " " + code + " has an exclamation mark or an emoji"); seen.add(voice + lang + code + body);
+    if (voice === "brief" && ["M3", "M5", "M6", "M10", "M13", "M22R", "M26", "M28", "M28R", "M32"].includes(code)) assert.ok(body.indexOf(T.S.firm.sender) >= 0 && body.indexOf(T.S.firm.sender) < 40, "Brief " + code + " does not name the firm in the first 40 characters");
+  }
+  assert.equal(seen.size, 3 * 2 * vary.length);
+});
+test("TH-VOI-2, 3, 7: an owner picks the firm's voice, staff pick one client's, and every automatic message records the voice it went out in", () => {
+  const { T, c, e } = started(); assert.equal(last(T, e).voice, "professional"); const pro = last(T, e).body;
+  T.setUser("u2"); assert.match(T.setVoice("brief"), /Only an owner/); T.setUser("u1"); assert.match(T.setVoice("chatty"), /Choose/); assert.equal(T.setVoice("brief"), null); assert.ok(T.S.audit.some((a) => a.action === "firm.voice_changed"));
+  T.advance(3 * T.DAY); const m = last(T, e); assert.equal(m.tpl, "M5"); assert.equal(m.voice, "brief"); assert.match(m.body, /^Test CPAs: still need your W-2/); assert.ok(m.body.length < pro.length);
+  T.setUser("u2"); assert.equal(T.setClientVoice(c.id, "warm"), null); T.advance(4 * T.DAY); assert.equal(last(T, e).voice, "warm"); assert.match(last(T, e).body, /friendly reminder.*Thank you\. Alex$/);
+  assert.equal(T.setClientVoice(c.id, ""), null); assert.equal(T.voiceFor(c), "brief");
+  // The words the law fixes do not change with the voice.
+  T.inboundText(c.id, "STOP"); assert.equal(last(T, e).tpl, "M16"); assert.equal(last(T, e).body, "Test CPAs: You're unsubscribed and will get no more texts. Reply START to resubscribe.");
+});
+test("TH-VOI-4, 6: the sign-off is short, has no numbers and passes the check; the preview is built from sample data in the firm's own name", () => {
+  const { T, c } = started(); T.setUser("u2"); assert.match(T.setSignOff("Alex"), /Only an owner/); T.setUser("u1");
+  assert.match(T.setSignOff("x".repeat(31)), /30 characters/); assert.match(T.setSignOff("Call 5551234"), /No numbers/); assert.match(T.setSignOff("See you soon!"), /exclamation/); assert.match(T.setSignOff("We'll get your refund"), /cannot be used/);
+  assert.equal(T.setSignOff("Dana at Test CPAs"), null);
+  const warm = T.previewVoice("M3", "warm", "en"), pro = T.previewVoice("M3", "professional", "en"), brief = T.previewVoice("M3", "brief", "en"), es = T.previewVoice("M3", "brief", "es");
+  for (const b of [warm, pro, brief, es]) { assert.match(b, /Maria|Test CPAs/); assert.ok(!b.includes(c.first), "a real client is in the preview"); assert.match(b, /Acme Health/); assert.deepEqual(T.outputCheck(b, "text", { year: 2026 }), []); }
+  assert.match(warm, /Dana at Test CPAs$/); assert.match(pro, /Dana at Test CPAs$/); assert.ok(!/Dana/.test(brief), "Brief has no sign-off"); assert.match(es, /^Test CPAs: por favor/);
+  assert.ok(warm.length > pro.length && pro.length > brief.length);
+  T.setSignOff(""); assert.ok(!/Dana/.test(T.previewVoice("M3", "professional", "en")));
+});
