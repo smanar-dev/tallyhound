@@ -1,5 +1,5 @@
 // Sending from a firm's own domain (T-110). Until a firm does this, requests come from its Tallyhound address, which works
-// everywhere. With it, clients see mail from, say, documents@larkinpoe.com. Replies and bounces still come to Tallyhound
+// everywhere. With it, clients see mail from, say, documents@maplepine.com. Replies and bounces still come to Tallyhound
 // (Reply-To is always the firm's Tallyhound address), so Tallyhound still never connects to the firm's mailbox.
 // The owner adds three DNS records and presses Check:
 //   DKIM         a TXT record: proves the mail was really sent for the domain
@@ -36,7 +36,7 @@ export function createDomains(d: DomainDeps) {
     /** The owner names the domain and the address on it. The mail service makes the records to add. Nothing is sent from it yet. */
     async start(firmId: string, userId: string, o: { name: string; local: string }) {
       const name = String(o.name || "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, ""), local = String(o.local || "documents").trim().toLowerCase();
-      if (!/^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/.test(name)) throw new DomainError("Enter your firm's domain, like larkinpoe.com");
+      if (!/^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/.test(name)) throw new DomainError("Enter your firm's domain, like maplepine.com");
       if (FREE.includes(name) || /(^|\.)tallyhound\.com$/.test(name)) throw new DomainError("That is not a domain your firm controls. Use the one your firm's own email is on");
       if (!/^[a-z0-9][a-z0-9._-]{0,40}$/.test(local)) throw new DomainError("The part before the @ can use letters, numbers, dots and dashes");
       if (await held(firmId)) throw new DomainError("Remove the domain you have set up before adding another");

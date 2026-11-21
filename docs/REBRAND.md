@@ -201,16 +201,18 @@ Today: `rollSeason` archives the old file and carries the checklist forward; `hi
 
 | # | Question | What the sources say | What is built unless told otherwise |
 |---|---|---|---|
-| 1 | Does the model write client messages? | The feature spec says no (templates only). The content book and brand book say AI writes each request. This product already lets the model reword a template, behind `outputCheck`, with an owner switch | Voices are hand-written templates and are what goes out when the switch is off or the check fails. The existing owner switch stays, and the model is told the voice. One line to change the default |
+| 1 | Does the model write client messages? | The feature spec says no (templates only). The content book and brand book say AI writes each request | **Decided by Jordan, November 21: both.** Each firm's owner chooses under The hound, Rules it follows, "Who writes each message": the voice's own wording as written, or Claude rewording it in that voice. Either way `outputCheck` runs and a draft that strays falls back to the wording |
 | 2 | May Warm use an exclamation mark? | Spec: no | No, in every voice |
 | 3 | Persistent: up to seven automatic texts in 12 days | Spec: ship pending counsel | Built; the settings page says counsel should confirm before a firm uses it |
 | 4 | Text barks to staff | Spec: V1 | Built after everything marked MVP |
 | 5 | Memory on by default | Spec: on, with an owner switch | On |
-| 6 | Template codes M21 to M24 | Taken in this engine | M34 to M37 |
+| 6 | Template codes M21 to M24 | Taken in this engine by the wrong-number, missing-part, summary and passed-to-preparer messages | **Settled:** the new ones are M34 (someone else has it), M35 and M35R (already sent), M36 (life change), M37 (not mine) and M20D (after a date). Renumbering the old ones would change stored messages for no gain |
 | 7 | "Review queue" was a retired phrase in `docs/UX.md` | The brand book makes it the name of the place | `docs/UX.md` is updated; "Needs you" stays as a status |
 | 8 | Storage claims | Brand book: say Google Drive now, the others next | The product has all four built but none run live. Product screens list what is configured; nothing in the product claims a provider is proven |
 | 9 | The marketing website | Lives on Base44 and is the master for the hound artwork and tokens | Not changed by this work. Artwork and tokens are copied from it |
-| 10 | "AI writes each request" on the website FAQ | Spec asks for the line to be corrected if decision 1 stays with templates | A website change; listed for Jordan, not made here |
+| 10 | "AI writes each request" on the website FAQ | The spec asked for it to be corrected if templates won | With decision 1 the line is true where the owner chooses Claude. The fuller sentence for the site: "Every request goes out in your firm's voice: as your approved wording, or reworded by AI, your choice." Jordan's to place |
+| 11 | A new firm starts reply understanding in shadow | The spec's release plan: shadow first, compare, then switch | **Settled:** shadow is the default for a new firm; the rules tab says how many replies it has recorded so far, so the owner can see what switching it on would do. The demo firm has it on |
+| 12 | "Gone quiet implies exactly one gone-quiet item" | The spec's property test | **Settled:** every file that stops has an item in the review queue. Where the reason already put one there (a question, a document, an "I don't have it"), that is the item, and a second "gone quiet" one is not opened beside it. A client with no reply always gets exactly one |
 
 ## 7. Order of work
 

@@ -104,7 +104,7 @@ export function Banners() {
     {acc.state === "trial" && (acc.daysLeft <= 7 || acc.clientsLeft === 0) ? <div className="banner info" style={{ display: "flex" }}><Icon name="clock" small /><span>Free trial: {acc.daysLeft} day{acc.daysLeft === 1 ? "" : "s"} left{acc.clientsLeft === 0 ? ", and all " + T.TRIAL_CLIENTS + " trial clients are in use" : ""}. Collecting stops when it ends unless you choose a plan.</span>{can("owner") ? <button className="btn sm" onClick={() => nav("/settings?tab=plan")}>See plans</button> : null}</div> : null}
     {acc.state === "checking" ? <div className="banner info" style={{ display: "flex" }}><Icon name="clock" small /><span>{acc.reason} Nothing is sent to clients until it is done.</span></div> : null}
     {f.stopped ? <div className="banner bad"><Icon name="alert" small />All automated messages are stopped. Nothing is sent until an owner resumes.{can("owner") ? <button className="btn sm" onClick={() => void act("resumeAll").then(() => undefined, () => undefined)}>Resume messages</button> : null}</div> : null}
-    {senderState(f) === "filed" ? <div className="banner note"><Icon name="alert" small />Your text number is waiting for carrier approval. Clients are reached by email with the upload link until then.</div> : null}
+    {senderState(f) === "filed" ? <div className="banner note"><Icon name="alert" small />Your texting number is still being approved by the carriers. Email requests go out now; texts start once it's approved.</div> : null}
   </>;
 }
 

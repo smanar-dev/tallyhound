@@ -69,7 +69,7 @@
   const clientOfDoc = (d) => (d.clientId ? T.client(d.clientId) : null);
 
   /* ---------- shell ---------- */
-  const sampleFirm = () => !!T.client("c1") && S().firm.name === "Larkin & Poe CPAs";
+  const sampleFirm = () => !!T.client("c1") && S().firm.name === "Maple & Pine Tax Co.";
   function side() {
     const s = S(), nt = openTasks().length, hb = S().msgs.filter((m) => m.status === "approval").length + openTasks().filter((t) => ["question", "call"].includes(t.kind)).length, nav = [["home", "Home", "home"], ["clients", "Clients", "users"], ["review", "Needs you", "review", needsYou().length + s.msgs.filter((m) => m.status === "approval").length], ["hound", 'The Hound <small style="font-weight:500;opacity:.6;margin-left:4px">your assistant</small>', "spark"], ["-", "More"], ["import", "Add clients", "upload"], ["inbox", "All messages", "inbox", s.tray.length], ["insights", "Progress", "chart"]];
     if (can("owner")) nav.push(["settings", "Settings", "gear"]);
@@ -566,7 +566,7 @@
     if (a.state === "paused") return topbar("Paused") + '<div class="scroll" id="scroll"><div class="page" style="max-width:720px"><div class="card pad col" style="gap:12px;text-align:center;align-items:center;padding:36px 28px"><div class="big" style="width:56px;height:56px;border-radius:16px;display:grid;place-items:center;background:var(--tint);color:var(--accent-ink)">' + ic("clock") + "</div><h1>Paused until " + fmtDay(b.pausedUntil) + '</h1><p class="muted" style="max-width:520px">' + s.clients.length + " clients, their checklists and everything Tallyhound learned about them are stored. Nothing is being sent or collected, and nothing is billed. A client who writes in gets an automatic reply asking them to contact you directly. It all switches back on by itself on that date.</p>" + (can("owner") ? '<button class="btn pri" data-a="unpause">Resume now</button>' : '<p class="small muted">Ask an owner to resume early.</p>') + "</div></div></div>";
     return topbar("Choose a plan") + '<div class="scroll" id="scroll"><div class="page col" style="max-width:860px;gap:16px"><div><h1>Your free trial has ended</h1><p class="muted" style="margin-top:4px">Everything is saved: ' + s.clients.length + " client" + (s.clients.length === 1 ? "" : "s") + ", their checklists and every document received. Nothing is being sent until you choose a plan. " + (can("owner") ? "" : "Ask an owner to choose one.") + "</p></div>" + planCards(true) + '<p class="small muted">One flat monthly price. Never per return, per document or per message. Cancel any month.</p></div></div>';
   }
-  const SAMPLE0 = () => S().firm.name === "Larkin & Poe CPAs";
+  const SAMPLE0 = () => S().firm.name === "Maple & Pine Tax Co.";
   // The next season is "due" once most clients are finished, or from November after the filing year.
   const seasonDue = () => { const s = S(), n = s.engs.length, fin = s.engs.filter((e) => ["complete", "closed"].includes(e.status)).length, yr = s.firm.taxYear || 2026; return (n && fin / n >= 0.8) || s.now >= new Date(yr + 1, 10, 1); };
 
@@ -975,7 +975,7 @@
     tab: (d) => { R.tab = d.t; R.menu = null; }, stab: (d) => { R.stab = d.t; }, pill: (d) => { R.f.pill = d.p; R.sel.clear(); }, pillGo: (d) => { go("clients"); R.f.pill = d.p; R.imp = { step: 1, text: "", parsed: null, result: null }; },
     clearF: () => { R.f = { pill: "all", q: "", prep: "" }; }, selClear: () => R.sel.clear(), menu: (d) => { R.menu = R.menu === d.m ? null : d.m; },
     adv: (d) => { T.advance(+d.h * T.HOUR); toast("Clock moved to " + dt(S().now)); }, next: () => { toast(T.jumpToNext() ? "Jumped to the next scheduled send: " + dt(S().now) : "Nothing is scheduled."); },
-    guide: () => { R.modal = { type: "guide" }; }, guideGo: (d) => { const i = +d.i; R.modal = null; R.viewer = null; if (!T.client("c1") || S().firm.name !== "Larkin & Poe CPAs") return toast("The guided demo runs on the sample firm. Use Start over to go back to it."); try { const r = GUIDE[i].run(i); R.coach = Object.assign({ i }, r); } catch (x) { R.coach = null; toast("That scenario needs fresh sample data. Use Start over, then try again."); } },
+    guide: () => { R.modal = { type: "guide" }; }, guideGo: (d) => { const i = +d.i; R.modal = null; R.viewer = null; if (!T.client("c1") || S().firm.name !== "Maple & Pine Tax Co.") return toast("The guided demo runs on the sample firm. Use Start over to go back to it."); try { const r = GUIDE[i].run(i); R.coach = Object.assign({ i }, r); } catch (x) { R.coach = null; toast("That scenario needs fresh sample data. Use Start over, then try again."); } },
     coachAct: () => { if (R.coach && R.coach.fn) R.coach.fn(); }, coachClose: () => { R.coach = null; },
     resetAsk: () => { R.modal = { type: "reset" }; },
     resetGo: () => { T.reset(); syncAI(); R.chat = null; R.modal = null; R.viewer = null; R.coach = null; R.sim.cid = "c1"; R.sim.app = "messages"; go("home"); toast("Demo data reset."); },

@@ -125,7 +125,7 @@ function createApp({ store, sms, email, ai, clock, log, files, voice }) {
         if (!r.error) { m.id = r.id; m.place = r.place; m.fails = 0; d.hold = null; continue; }
         m.fails = (m.fails || 0) + 1; d.hold = "storage"; say("file_failed", firmId, d.id, r.error);
         const e = d.engId && T.eng(d.engId), c = e && T.client(e.clientId);
-        if (m.fails === 3 && e && c) T.alertx(e, "high", "storage_failed", "A document for " + c.first + " " + c.last + " could not be filed into " + (T.S.firm.delivery.provider || "your storage") + ". Tallyhound is keeping its copy and will keep trying. Check the connection under Settings.", "sf" + d.id);
+        if (m.fails === 3 && e && c) T.alertx(e, "high", "storage_failed", (T.S.firm.delivery.provider || "Your storage") + " is disconnected, so documents are waiting here safely, starting with one for " + c.first + " " + c.last + ". Reconnect it under Settings to file them.", "sf" + d.id);
       }
       for (const r of done) {
         const m = T.S.msgs.find((x) => x.id === r.id); if (!m) continue; const e = T.eng(m.engId), c = e && T.client(e.clientId);

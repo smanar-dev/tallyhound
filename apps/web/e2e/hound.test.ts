@@ -213,3 +213,18 @@ scene("TH-MEM: a season closes and the next one starts from it: \"From 2026\" on
   await page.goto(W.url + "/clients/" + e.id + "?tab=details"); const last = page.locator(".card", { hasText: "Last season (" + year + ")" }); assert.match(text(await last.textContent()), /W-2 wage statement from Acme Logistics.*Received by text/); assert.match(text(await last.textContent()), /Not needed: sold the home/);
   await last.getByRole("button", { name: "Clear memory" }).click(); await page.getByText(/^Cleared\./).waitFor(); T = await W.state(firmId); assert.equal(T.memoryOf(jo.id).length, 0);
 });
+
+scene("TH-VOI-8 and who writes: an owner chooses between the voice's own wording and Claude rewording it, and edits Warm without touching Professional or Brief", async (W) => {
+  const { firmId } = await busyFirm(W), page = await W.signIn("pat1@firm1.test"); await page.goto(W.url + "/hound?tab=rules");
+  const who = page.getByRole("radiogroup", { name: "Who writes each message" }); await who.getByText("Your voice's wording", { exact: true }).click(); await page.getByText("Saved. The hound will use this from its next message.").waitFor();
+  let T: Engine = await W.state(firmId); assert.equal(T.S.firm.hound.aiWrite, false); await who.getByText("Claude rewords it", { exact: true }).click(); for (let i = 0; i < 100 && (await W.state(firmId)).S.firm.hound.aiWrite !== true; i++) await new Promise((r) => setTimeout(r, 50)); assert.equal((await W.state(firmId)).S.firm.hound.aiWrite, true);
+  // Message wording, Warm: the sample is Maria, never a client of this firm.
+  await page.goto(W.url + "/settings?tab=wording"); await page.getByLabel("Voice").selectOption("warm"); await page.locator(".wpick").filter({ hasText: /^Reminder$/ }).first().click();
+  const box = page.getByLabel("Wording"), sample = page.locator(".bub.out").first(); assert.match(await box.inputValue(), /friendly reminder/); assert.match(text(await sample.textContent()), /^Hi Maria,/); for (const c of T.S.clients) assert.ok(!text(await sample.textContent()).includes("Hi " + c.first + ","));
+  await box.fill("Hi {first}, {firm} here. You will get a big refund if you send your {plain_name}{from_payer} for {year}."); await page.getByRole("button", { name: "Save", exact: true }).click(); await page.getByRole("alert").filter({ hasText: /would not pass the message check/ }).waitFor();
+  await box.fill("Hi {first}, {firm} here. Just checking in on your {plain_name}{from_payer} for {year}. Whenever you can. Thank you. {sign_off}"); await page.getByRole("button", { name: "Save", exact: true }).click(); await page.getByText("Saved. It is used from the next message.").waitFor();
+  T = await W.state(firmId); const code = Object.keys(T.S.firm.templatesBy.warm.en)[0]!; assert.match(T.S.firm.templatesBy.warm.en[code], /Just checking in/); assert.ok(!(T.S.firm.templates.en || {})[code], "Professional was changed"); assert.ok(!((T.S.firm.templatesBy.brief || {}).en || {})[code], "Brief was changed");
+  assert.match(T.previewVoice(code, "warm", "en"), /Just checking in/); assert.ok(!/Just checking in/.test(T.previewVoice(code, "professional", "en"))); assert.ok(!/Just checking in/.test(T.previewVoice(code, "brief", "en")));
+  // The words the law fixes cannot be edited in any voice.
+  await page.locator(".wpick", { hasText: "Texting turned off (STOP)" }).first().click(); await page.getByText("This wording is required by law, so it cannot be changed here.").waitFor(); await page.getByRole("button", { name: "Use the standard wording" }).waitFor({ state: "detached" });
+});

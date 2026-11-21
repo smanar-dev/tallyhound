@@ -492,13 +492,20 @@ Sources: the brand book, the content book and "New features spec and build plan"
 55. T-155 and T-156, barks (TH-BRK-1 to 11). In the engine: `barkRoute`, `barkQueue` (from `addTask`), `barkDue`, `barkHeld`, `barkRead`, `setBarkRules`, `setStaffHours`, `setMyBarks`. The server words the email (`notify.ts`) and the morning note is "Tallyhound: n things in the review queue". The bell, the toast, "Mine only" on the queue, the Barks settings tab, My alerts. "What Tallyhound knows" and "Suggested next step" on every item (`apps/server/src/needs.ts`). Text barks: a person's own mobile, verified by a code, texted from `TH_SYSTEM_NUMBER`; STOP removes it (migration 016).
 56. T-159, season memory (TH-MEM-1 to 9). `memoryWrite` when a file finishes; waive reasons; `rollForward` builds next season from it ("From 2026", "Slow last year", "Removed last season" with Keep and Confirm all); the Last season panel; `clearMemory`, `setMemory`; stored in the client's own row (`packages/core/parts.js`) and removed by a purge. Send-time learning uses the spec's rule: three replies in the same two-hour window.
 
-Still open from this round, and why:
+57. Closing the open points of this round. The owner's choice of who writes each message is now explicit beside the voice (`hound.aiWrite`: the voice's own wording, or Claude rewording it), as Jordan decided. TH-VOI-8: Message wording has a voice selector; `saveWording` and `resetWording` take a voice, keep each voice's edits apart (`firm.templatesBy`), and check what is saved against sample data (Maria, never a client). The demo firm is the brand's sample cast: Maple & Pine Tax Co., Maria and Daniel Garcia, Luis Ortega, Ray Chen. Three product errors use the content book's words (texting number being approved, a file that could not be read, storage disconnected). The rules tab says how many replies shadow has recorded.
 
-* The demo firm still uses its old sample names. The brand book's sample cast (Maple & Pine Tax Co., Maria Garcia and the rest) is used in the voice preview and the evaluation set, not yet in `seed()`, because the engine's own tests are written against the old names.
-* TH-VOI-8: no screen for an owner to edit Warm and Brief wording.
-* The reply evaluation on consented pilot data, and five working days in shadow, cannot be done before a pilot.
-* Spanish is written in every voice and is off until a fluent speaker has reviewed it (T-31).
-* Counsel: Persistent, and the six new client templates.
-* Decision 1 in `docs/REBRAND.md`: whether the model may reword client messages. Today the owner switch from before is kept and the voice's own wording is the fallback.
-* The marketing website is not changed by any of this. Its FAQ line about AI writing each request is listed for Jordan.
+## Everything still to be done (November 21)
 
+Nothing in `docs/TICKETS.md` is unbuilt. What is left needs something code cannot supply.
+
+**A first live run of each outside service** (all are only tested against stand-ins; `npm run admin -- check-services` goes through them one key at a time): Claude, Twilio (texts in and out, the carrier registration, deleting their copies, `TH_SYSTEM_NUMBER` for staff texts), Postmark (mail out, mail in, bounces, the firm's own domain), Stripe, Google Drive, OneDrive, SharePoint, Dropbox, AWS KMS, an S3 bucket, Docker (the image has never been built), HEIC photos from a real iPhone, ClamAV.
+
+**People and decisions** (T-02, 22, 30, 31, 37, 42 to 44, 64, 70, 77, 92, 96, 104, 109, 113, 114, 129, 130, 133, 134, 136 to 138, 141): hosting; the accuracy measurements on real documents; the outside security review and the penetration test; a fluent Spanish review (Spanish is written in every voice and is off until then); whether sending on its own is the default; watching real first-time users; prices confirmed; Karbon live; an incident rehearsal; terms; a real text registration; business checklists read by a preparer.
+
+**Counsel:** Persistent (up to seven automatic messages in 12 days); the six new client templates (M34 to M37, M35R, M20D); reading last year's return; staff-recorded consent; recorded reminder calls.
+
+**Only possible in a pilot:** the reply evaluation on consented data with the spec's gates (the repository has a synthetic set of 85); five working days in shadow before switching reply understanding on; Manar and a pilot firm approving the client wording; one pilot firm running the spec's scenarios on its own sample clients.
+
+**Known limits, by choice:** a staff click and the five-minute timer still load the whole firm (about 0.8 s at 2,500 clients); `/api/state` sends the browser the whole workspace; the browser tests run on Chromium only, and nobody has tried a screen reader, a real phone, Safari or Firefox; the content book's staff-notification sentences are followed in meaning, not word for word, because emails leave out the client's surname and the document.
+
+**Outside this repository:** the marketing website on Base44 (decision 10 in `docs/REBRAND.md`); the brand book's own list (logo exports, the hound pose pack, the slide and email templates, founder photos, the trademark search).
