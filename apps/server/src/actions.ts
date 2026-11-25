@@ -71,6 +71,14 @@ export const ACTIONS: Record<string, Rule> = {
   askNow: { role: "staff", n: 1, run: (T, [iid]) => T.askNow(String(iid || "")) },
   // TH-BRK-14: who is the office manager, for the kinds of bark an owner sends there.
   setDuty: { role: "owner", n: 2, run: (T, [uid, on]) => T.setDuty(String(uid || ""), on === true) },
+  // v2, email-first (docs/V2.md). The upload link: a new one, or switched off (TH-UPL-1). Who approves letters, for one client (TH-EML-4).
+  rotateLink: { role: "staff", n: 1, run: (T, [eid]) => T.rotateLink(String(eid || "")) },
+  revokeLink: { role: "staff", n: 1, run: (T, [eid]) => T.revokeLink(String(eid || "")) },
+  setClientSendMode: { role: "staff", n: 2, run: (T, [cid, v]) => T.setClientSendMode(String(cid || ""), v === "approve" || v === "auto" ? v : "") },
+  // The firm's working days, the most letters a day from one mailbox (TH-EML-11), and whether a person confirms every document (the pilot's check).
+  setWorkDays: { role: "owner", n: 1, run: (T, [list]) => T.setWorkDays((Array.isArray(list) ? list : []).slice(0, 7)) },
+  setMailCap: { role: "owner", n: 1, run: (T, [n]) => T.setMailCap(Number(n)) },
+  setConfirmAll: { role: "owner", n: 1, run: (T, [on]) => T.setConfirmAll(on === true) },
   // The Hound's schedule and memory, as the demo's Coming up list and client panel change them.
   sendNow: { role: "staff", n: 1, run: (T, [eid]) => { const e = T.eng(eid); if (!e || !e.next) return "Nothing is planned for this client"; if (!T.allowed(T.S.now)) return "It is outside sending hours. The Hound waits until they begin."; e.lastAutoDay = null; e.next = new Date(T.S.now); T.step(e); T.hlog(e, "decide", T.S.user.name + " sent the next message now", "A person asked for it from Coming up", "Rules"); return null; } },
   snooze: { role: "staff", n: 1, run: (T, [eid]) => { const e = T.eng(eid); if (!e || !e.next) return "Nothing is planned for this client"; e.next = T.nextAllowed(new Date(new Date(e.next).getTime() + T.DAY)); T.hlog(e, "decide", T.S.user.name + " put the next message off by a day", "A person asked for it from Coming up", "Rules"); return null; } },

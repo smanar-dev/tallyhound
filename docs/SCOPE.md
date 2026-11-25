@@ -1,5 +1,7 @@
 # Scope: the one job
 
+> **November 24, 2026: email-first.** Requests and follow-ups go by email as one letter listing everything owed; documents come in through the client's private upload link; texting is out of scope for launch and returns, if at all, as a link-only nudge after counsel signs off. `docs/V2.md` has the detail. Where this file says "text", read it as history.
+
 Tallyhound does one thing for an accounting firm: it gets every client's tax documents in, and checks each one. Nothing else ships until this is the best tool a CPA can buy for that job.
 
 ## The job, in four steps

@@ -4,8 +4,8 @@
 //                    owner their sign-in link. (A button, because mail scanners open links, and a scanner must not start a trial.)
 //   /quote           a client count in, a monthly price out, by the engine's own rule.
 // A firm made this way is unchecked like any other (T-116): it can set up, and sends nothing until a person at Tallyhound has
-// confirmed it is a real firm. Text number registration is not started by itself: it needs the firm's legal details, which the
-// owner enters under Settings, Text number.
+// confirmed it is a real firm. Every firm made here is email-first (docs/V2.md): there is no text number to register. Texting, if it returns, needs the legal details the
+// owner would enter under Settings.
 import { createHash, randomBytes } from "node:crypto";
 import { createElement as h, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -37,7 +37,7 @@ export interface SignupDeps { store: SignupStore; auth: AuthStore; firms: Firms;
 
 const page = (title: string, body: ReactNode): string => "<!doctype html>" + renderToStaticMarkup(h("html", { lang: "en" },
   h("head", null, h("meta", { charSet: "utf-8" }), h("meta", { name: "viewport", content: "width=device-width, initial-scale=1" }), h("title", null, title + " · Tallyhound"), h("link", { rel: "stylesheet", href: "/client.css" })),
-  h("body", null, h("main", null, h("p", { className: "firm" }, "Tallyhound"), body, h("footer", null, "Tallyhound collects tax documents for accounting firms by text and email.")))));
+  h("body", null, h("main", null, h("p", { className: "firm" }, "Tallyhound"), body, h("footer", null, "Tallyhound collects tax documents for accounting firms: one email, one private upload link, every document checked.")))));
 const field = (id: string, label: string, props: Record<string, unknown>) => h("div", { className: "field", key: id }, h("label", { htmlFor: id }, label), h("input", { id, name: id, ...props }));
 const clean = (v: unknown, max: number) => String(v ?? "").replace(/[<>\u0000-\u001f]/g, "").replace(/\s+/g, " ").trim().slice(0, max);   // eslint-disable-line no-control-regex
 const hash = (t: string) => createHash("sha256").update(t).digest("hex");

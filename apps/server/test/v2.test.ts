@@ -199,3 +199,49 @@ test("TH-NTR-9: each firm's layer key is made once, used on every call, replaced
   for (const s of [500, 503, 429]) { status = s; await assert.rejects(N.getProject({ firmId: "f1", assistantId: a.assistantId, projectId: "p1" }), (e: unknown) => e instanceof LayerError && e.code === "unreachable"); }
   status = 400; await assert.rejects(N.upsertTask({ firmId: "f1", assistantId: a.assistantId, key: "i:1", projectId: "p1", title: "W-2", status: "Open", note: "" }), (e: unknown) => e instanceof LayerError && e.code === "refused");
 });
+
+// With no mail layer set up, an email-first firm's letters go from its Tallyhound address through Tallyhound's own mail service,
+// and replies come back to that address. Nothing else about the product changes (docs/V2.md, "Running without the layer").
+for (const kind of KINDS) test("v2 (" + kind + "): without the mail layer the same letter goes from the firm's Tallyhound address; a reply, a switched-off link, the hourly limit and a staff upload all behave", async () => {
+  const reading: { text: Record<string, unknown> | null } = { text: null };
+  const ai = kitMemory.fakeAI((p: string) => (p.startsWith("You read photos") ? W2 : p.startsWith("You read text messages") ? reading.text : null));
+  const H = await build(kind, { letters: true, ai }), { firmId, ownerId } = await H.newFirm(), owner = await H.signInAs("pat1@firm1.test");
+  const state = async (): Promise<Engine> => { const T = createEngine(); T.load(await H.store.readState(firmId)); return T; };
+  assert.deepEqual((await owner.get("/api/mailbox")).json, { layer: false, offered: [], mine: null, all: [] }); assert.equal((await owner.get("/api/mailbox/google/start")).headers.location, "/settings?tab=mailbox&problem=unavailable");
+  assert.equal((await H.layerPost({ id: "x", type: "reply", assistant_id: "a", from: "maria@x.example", text: "hi" })).statusCode, 404, "the layer's webhook exists with no layer set up");
+  await H.app.staff(firmId, ownerId, (T: Engine) => { assert.equal(T.S.firm.letters, true); assert.equal(T.S.firm.mail, "own"); T.S.firm.hound.mode = "autopilot"; T.S.firm.confirmAll = false; T.importRows(T.parseCSV("First,Last,Email,Mobile\nMaria,Garcia,maria@x.example,6155550111")); const e = T.S.engs[0]; T.itemsOf(e.id).find((i: any) => i.form === "W2").payer = "Acme Logistics"; e.confirmed = true; T.start(e.id); });
+  await H.worker.pass(); assert.equal(H.sms.sent.length, 0, "an email-first firm sent a text"); assert.equal(H.email.sent.length, 1); const L = H.email.sent[0] as any;
+  assert.equal(L.to, "maria@x.example"); assert.equal(L.from, "test1@docs.tallyhound.test"); assert.equal(L.replyTo, "test1@docs.tallyhound.test"); assert.equal(L.subject, "2 documents for your 2026 tax return"); assert.match(L.body, /- W-2 from Acme Logistics\n {2}- 1098 \(mortgage interest statement\)\n\nUpload them here/); assert.match(String(L.unsubscribe), /^https:\/\/go\.tallyhound\.test\/e\//);
+  assert.equal(H.layer.calls, 0, "the mail layer was called for a firm that does not use it");
+  // A reply to that address is read like any reply.
+  await H.postmarkPost("/hooks/postmark/inbound", { MessageID: "pm1", OriginalRecipient: "test1@docs.tallyhound.test", From: "Maria Garcia <maria@x.example>", Subject: "Re: 2 documents", TextBody: "can I deduct my home office?", Headers: [{ Name: "Authentication-Results", Value: "mx; dmarc=pass" }], Attachments: [] });
+  await H.inbox.drain(); await H.worker.pass(); let T = await state(); assert.equal(T.S.tasks.filter((t: any) => t.kind === "question" && t.status === "open").length, 1); assert.match((H.email.sent.at(-1) as any).body, /^Good question\. I've passed it to Pat/); assert.equal(T.S.msgs.find((m: any) => m.dir === "in").channel, "email");
+  // The upload link: live, then switched off by staff, then replaced.
+  const u = () => "/u/" + T.S.firm.slug + "-" + T.S.engs[0].link.key, get = (url: string) => H.server.inject({ method: "GET", url }), old = u();
+  assert.equal((await get(old)).statusCode, 200); assert.equal((await owner.post("/api/act", { fn: "revokeLink", args: [T.S.engs[0].id] })).status, 200);
+  const off = await get(old); assert.equal(off.statusCode, 404); assert.match(words(off.body), /This link no longer works Ask your accountant for a new link/); assert.ok(!/Maria|W-2/.test(off.body), "a dead link says whose it was");
+  assert.equal((await owner.post("/api/act", { fn: "rotateLink", args: [T.S.engs[0].id] })).status, 200); T = await state(); assert.notEqual(u(), old); assert.equal((await get(u())).statusCode, 200); assert.equal((await get(old)).statusCode, 404);
+  const st = (await owner.get("/api/state")).raw.body; assert.ok(!st.includes(T.S.engs[0].link.key) && !st.includes(old.slice(-28)), "an upload link reached a browser");
+  // "I don't have this one" from the page pauses that document and asks a person; "later" is a suggested step.
+  const form = (body: Record<string, string>) => H.server.inject({ method: "POST", url: u(), payload: new URLSearchParams(body).toString(), headers: { "content-type": "application/x-www-form-urlencoded" } }), iid = (f: string) => T.itemsOf(T.S.engs[0].id).find((i: any) => i.form === f).id;
+  assert.equal((await form({ form: "none", item: iid("1098") })).headers.location, u() + "?said=none"); assert.equal((await form({ form: "later", item: iid("W2"), day: "2027-02-10" })).headers.location, u() + "?said=later"); assert.equal((await form({ form: "none", item: "i-nobody" })).headers.location, u());
+  T = await state(); assert.equal(T.itemsOf(T.S.engs[0].id).find((i: any) => i.form === "1098").state, "says_none"); assert.ok(T.S.tasks.some((t: any) => t.kind === "says_none" && t.status === "open")); const step = T.S.tasks.find((t: any) => t.kind === "step" && t.status === "open"); assert.equal(step.step.type, "hold"); assert.equal(new Date(step.step.until).getDate(), 10);
+  assert.match(words((await get(u() + "?said=none")).body), /We've let Test CPAs 1 know you don't have that one/);
+  // TH-UPL-6: more than 20 files in an hour through one link is refused.
+  const post = (n: number) => { const b = "----th" + Math.random().toString(36).slice(2), parts = Array.from({ length: n }, (_, i) => Buffer.concat([Buffer.from("--" + b + '\r\nContent-Disposition: form-data; name="file"; filename="f' + i + '.jpg"\r\nContent-Type: image/jpeg\r\n\r\n'), JPEG, Buffer.from(String(Math.random())), Buffer.from("\r\n")])); return H.server.inject({ method: "POST", url: u(), payload: Buffer.concat([...parts, Buffer.from("--" + b + "--\r\n")]), headers: { "content-type": "multipart/form-data; boundary=" + b } }); };
+  assert.equal((await post(10)).statusCode, 303); assert.equal((await post(10)).statusCode, 303); const over = await post(1); assert.equal(over.statusCode, 429); assert.match(words(over.body), /That is a lot of files in one hour/);
+  // TH-UPL-8: staff add a document for the client; it is marked as added by staff and the client is sent nothing about it.
+  const n = H.email.sent.length, up = await H.server.inject({ method: "POST", url: "/api/clients/" + T.S.engs[0].id + "/documents", payload: JPEG, headers: { "content-type": "image/jpeg", cookie: (await H.signInAs("pat1@firm1.test")).cookie(), "x-tallyhound": "1" } });
+  if (up.statusCode === 200) { T = await state(); assert.ok(T.S.audit.some((a: any) => a.action === "document.staff_upload")); assert.equal(H.email.sent.length, n); }
+  await H.close();
+});
+
+test("TH-UPL-3: when the service is on https, a client page asked for in the clear is refused before anything is read", async () => {
+  const H = await build("memory", { letters: true, secure: true }), { firmId, ownerId } = await H.newFirm();
+  await H.app.staff(firmId, ownerId, (T: Engine) => { T.S.firm.hound.mode = "autopilot"; T.importRows(T.parseCSV("First,Last,Email\nMaria,Garcia,maria@x.example")); const e = T.S.engs[0]; e.confirmed = true; T.start(e.id); }); await H.worker.pass();
+  const T = createEngine(); T.load(await H.store.readState(firmId)); const u = "/u/" + T.S.firm.slug + "-" + T.S.engs[0].link.key;
+  const plain = await H.server.inject({ method: "GET", url: u }); assert.equal(plain.statusCode, 400); assert.ok(!/Maria/.test(plain.body));
+  const post = await H.server.inject({ method: "POST", url: u, payload: "form=none&item=x", headers: { "content-type": "application/x-www-form-urlencoded" } }); assert.equal(post.statusCode, 400);
+  const tls = await H.server.inject({ method: "GET", url: u, headers: { "x-forwarded-proto": "https" } }); assert.equal(tls.statusCode, 200); assert.match(tls.body, /Hi Maria/);
+  await H.close();
+});

@@ -1,6 +1,6 @@
 # Tallyhound: instructions for Claude Code
 
-Tallyhound collects tax documents from an accounting firm's clients by text and email. Launch target: pilot firms live by January 15, 2027.
+Tallyhound collects tax documents from an accounting firm's clients. Since November 24, 2026 it is email-first (`docs/V2.md`): one letter by email listing everything a client still owes, documents in through a private upload link, no texting. Launch target: two pilot firms live by January 15, 2027.
 
 ## The one job
 Tallyhound does one job: client list, checklist, chase, check. `docs/SCOPE.md` defines it and lists what is out. Before building anything, ask which of the four steps it improves. If the answer is none, stop and ask the owner.
@@ -12,18 +12,28 @@ Every document must pass three checks, and `T.verdict(doc)` is the only place th
 
 `docs/UX.md` has ten rules and a vocabulary table. They are acceptance criteria for every screen. If a screen needs explaining, change the screen.
 
+## Email-first (v2)
+`docs/V2.md` is the map. Read its "What is not real yet" before touching the mail layer.
+- A firm with `firm.letters` set (every firm the service makes) sends letters, never texts. The texting code is kept, switched off, and still has its tests; do not delete it and do not switch it on.
+- Tallyhound is the record. The mail layer's list of who owes what is a copy, written and repaired from the engine (`mirrorWant`, `mirrorJobs`, `reconcile`). Never read a decision out of the layer.
+- The layer's name appears only in `apps/server/src/integrations/neeter/`, `runtime.ts`, the webhook path and the docs. Never on a screen, in an email, in anything sent to a browser, or anywhere under `apps/web`. `apps/server/test/v2.test.ts` scans for it. Only `runtime.ts` may import the adapter.
+- Only names go to the layer: a client's name and email, a form's name, who issues it. Never an amount, an identifier or anything from a document (`checkNames`).
+- No model-written text reaches a client of an email-first firm. Letters and replies are the fixed wording of the firm's voice.
+- During the pilot a reply may change nothing by itself except the rows the spec marks automatic; the rest are one-click steps in the review queue (`hound.oneClick`). Every document the sniff test decides also goes to a person (`firm.confirmAll`).
+- A client's upload link (`e.link.key`) and the layer's ids (`e.mirror`) never leave the server.
+
 ## Ground rules
-- Sending is claim, send, record (`withFirm` in `packages/core/pipeline.js`). A message is marked and saved before the provider is called. Never add a code path that calls a provider for a message that has not been claimed and saved, and never resend a claimed message automatically.
+- Sending is claim, send, record (`withFirm` in `packages/core/pipeline.js`). A message is marked and saved before the provider is called. Never add a code path that calls a provider for a message that has not been claimed and saved, and never resend a claimed message automatically. The one exception is a letter that could not reach the mail layer: it is tried again for a day with the same key (`letter_waiting`), which the layer must honour.
 - Pricing is flat by client count (`docs/PRICING.md`). Do not build per-return, per-document or per-message billing.
 - `packages/engine/engine.js` is the source of truth for every product rule. It is the same file the demo runs. Do not rewrite it. Change it in small steps, and add a test in `test/engine.test.js` for every change.
 - Run `npm run check` (type check, lint, all tests, the web build and the browser tests) before and after every change. All tests must pass before a ticket is done. Set `DATABASE_URL` to a throwaway Postgres to include the tests that need a real server.
 - The engine never talks to the outside world. Texting, email, storage and the model live behind the interfaces in `packages/core/pipeline.js`. Keep it that way.
 - The model reads and writes. Code decides. Never let model output trigger an action without the engine's checks: `outputCheck`, `composeDone`, and the opt-out rule in `inboundText`.
-- Opt-out wording always wins. Consent replies (STOP, START, HELP) always send immediately, in every mode.
+- Opt-out wording always wins. In an email-first firm that is the unsubscribe link in every letter and any reply that asks to stop: every letter to that address stops at once and a person is told. In a texting firm, consent replies (STOP, START, HELP) always send immediately, in every mode.
 - Never log document contents, message bodies or model prompts in plain application logs. Log ids and outcomes.
 - No real client data in development or tests. Use the synthetic forms.
 - Data rules (`docs/SECURITY.md`). Never add a field for a Social Security number, date of birth, bank detail or an amount from a document. Every inbound message goes through `scrub` before it is stored. Every store is wrapped in `encryptedStore`; nothing reaches the database or the bucket unsealed. A stored file is deleted only after the state that forgets it has been saved (`dropFiles`). Deletion on schedule runs whatever the firm's billing state.
-- Tallyhound never connects to a firm's mailbox. Email arrives at the firm's Tallyhound address. Mail whose sender cannot be confirmed is never filed to a client automatically (`docs/INTEGRATIONS.md`).
+- Without the mail layer, Tallyhound connects to nobody's mailbox: email arrives at the firm's Tallyhound address. With it, a preparer connects their own mailbox, with their own consent, through `apps/server/src/mailbox.ts` and nowhere else; the token is sealed with the firm's key and never sent to a browser. Mail whose sender cannot be confirmed is never filed to a client automatically (`docs/INTEGRATIONS.md`).
 - Work the tickets in `docs/TICKETS.md` in order. Each has acceptance checks. Do not start a ticket marked AFTER LAUNCH.
 
 ## Layout
@@ -33,8 +43,9 @@ Every document must pass three checks, and `T.verdict(doc)` is the only place th
 - `packages/core/parts.js` how a firm is stored: a core, one sealed row per client, audit rows (T-101). The engine still sees one workspace. An inbound event passes a scope to `withFirm` and loads only its client; never add an engine rule on that path that reads another client's data without a test in `test/parts.test.js`
 - `packages/adapters` Claude API, Twilio (send, webhook signature, media), inbound email, Postgres store, Karbon import. None run live yet
 - `apps/server` the web service (TypeScript, runs without a build step): sign-in, `/api/state`, role-checked actions, the timer, the admin command. See `apps/server/README.md`. A browser reaches only the engine functions listed in `apps/server/src/actions.ts`
-- The client's own pages (`/c/` agree to texts, `/u/` send documents, `/e/` stop emails, `/f/` the firm's public page) are in `apps/server/src/public.ts` and `clientpages.ts`: React components turned into plain HTML on the server. They must work with no script (the upload page adds `apps/server/assets/client.js` for progress and a retake prompt, and still posts as a plain form without it), set no cookie, and never show a document, anything already received, a full phone number, or anything about another client. The private link is the only credential
+- The client's own pages (`/c/` agree to texts, `/u/` send documents, `/e/` stop emails, `/f/` the firm's public page) are in `apps/server/src/public.ts` and `clientpages.ts`: React components turned into plain HTML on the server. They must work with no script (the upload page adds `apps/server/assets/client.js` for progress and a retake prompt, and still posts as a plain form without it), set no cookie, and never show a document, a file, an email address, a full phone number, or anything about another client. The email-first upload page shows the firm's name, the client's first name and the names of the documents still owed, and, for the upload just made, one sentence saying what the sniff test found. The private link is the only credential
 - `apps/web` the staff web app (React, built with Vite into `apps/web/dist`, which the web service serves). The engine runs in the browser as a read-only model of the firm's state (`src/lib/firm.tsx`), so every status, count and check on screen is the engine's own; every change is one call to `/api/act`. Never set HTML from data and never add an inline script: `apps/web/e2e/rules.test.ts` plants a payload in every stored field and visits every screen. Add each new screen's address to `ROUTES` there. Words on screen follow the vocabulary in `docs/UX.md`; the same file checks them
+- `apps/server/src/maillayer.ts` the mail layer's interface; `integrations/neeter/` the adapter and its stand-in; `mailbox.ts` connecting a preparer's Google or Microsoft mailbox; `POST /hooks/neeter` replies in. `test/v2.test.js` and `apps/server/test/v2.test.ts` are the v2 spec's acceptance scenarios
 - `docs/DELTA.md` is the website's feature list as built: the follow-up plan, the understood panel, the sniff trace, the call card, the activity log. `apps/server/src/plan.ts` works the plan out by running the engine's scheduler ahead on a copy of one client; it must never become a second scheduler. `T.traceOf`, `T.panelOf` and `T.activity` only read what the engine already recorded
 - `db/schema.sql` the Postgres schema; later changes go in `db/migrations`, applied by `npm run admin -- migrate`
 - `reference/artifact` the working demo: use it as the design and behavior reference for every screen
@@ -46,4 +57,4 @@ Every document must pass three checks, and `T.verdict(doc)` is the only place th
 - Never build HTML from a client name, payer, message or model output without escaping it. `tools/` has the injection sweep the demo passes; the web app needs the same test (T-52).
 - Tax year 2026 is fixed in `newEng`. T-27.
 - Spanish wording has not had native review. Keep Spanish off for pilots. T-31.
-- `seed()` builds demo data. Production only calls `blank()` and `load()`.
+- `seed()` builds demo data. Production only calls `blank()` and `load()`. The demo in `reference/artifact` is a texting firm and no longer shows how the chase works: use it for the look, not the flow.

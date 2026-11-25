@@ -40,6 +40,9 @@ Put every one of these in the host's secret store, never in the repo.
 | `TH_ALERT_EMAIL` | recommended | Where the developer is emailed when sends fail for a firm, a firm's turn on the timer fails, or an arriving message is lost after every retry. At most once an hour for the same trouble. Point an uptime check at `/healthz` as well: it answers 503 when the timer has not run for 10 minutes |
 | `POSTMARK_HOOK_USER`, `POSTMARK_HOOK_PASSWORD` | for email in | The name and password inside the webhook address given to Postmark |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_MESSAGING_SERVICE_SID` | for texts | Without them texting is "not connected" and Tallyhound collects by email |
+| `TH_MAIL_LAYER` | optional | Unset: client letters go from each firm's Tallyhound address through Postmark. `neeter`: letters go from each preparer's own mailbox through the mail layer (`docs/V2.md`); needs the three settings below and a Google or Microsoft sign-in app. `fake`: a stand-in in memory for a trial run; refused in production |
+| `NEETER_BASE_URL`, `NEETER_PARTNER_KEY` | with `TH_MAIL_LAYER=neeter` | The layer's address and Tallyhound's partner key. Each firm's own key is made with it, sealed, and replaced every 90 days |
+| `NEETER_WEBHOOK_SECRET` | with `TH_MAIL_LAYER=neeter` | The secret the layer signs its calls to `/hooks/neeter` with |
 | `TH_SYSTEM_NUMBER` | for text barks to staff | Tallyhound's own number, in E.164 form, on the same Twilio account. It must be a different number from every firm's client number. Without it nobody can add a mobile under My alerts, and barks go in the app and by email only. Point its incoming-message webhook at `/hooks/twilio` so a STOP from staff is honoured |
 | `ANTHROPIC_API_KEY` | for reading | Without it documents go to a person and messages use the standard wording |
 | `TH_MODEL_DAILY_CAP_USD` | no | Most the model may cost one firm in a day. Default 10 |

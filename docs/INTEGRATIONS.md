@@ -47,7 +47,9 @@ Whatever the source, only these fields are read: first name, last name, email, m
 
 ## Email
 
-### Decision: Tallyhound never connects to a firm's mailbox
+### Decision, reversed on November 24, 2026 (see `docs/V2.md`): Tallyhound never connects to a firm's mailbox
+
+With the mail layer on, each preparer connects their own Google or Microsoft mailbox so letters leave from their own address. The reasons below still describe the cost of that, and are why it is one consent screen, the narrowest permissions the providers offer, reading limited to threads Tallyhound started and senders on the client list, and a one-click disconnect. Without the layer the decision below still holds.
 
 Reading a Gmail inbox through Google's API needs a restricted scope. Google requires an app that uses one to pass a third-party security assessment and repeat it every 12 months (Google Cloud help, "Security assessment"). Older write-ups put the cost at $15,000 to $75,000 a year; we have no current quote. Microsoft has its own review for the equivalent permission.
 

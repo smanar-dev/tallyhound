@@ -56,7 +56,8 @@ What does not, and what you see instead:
 |---|---|
 | `ANTHROPIC_API_KEY` | Documents are not read: each one goes to Needs you for a person. Messages use the standard wording. Ask is hidden |
 | `POSTMARK_TOKEN` | Emails to clients are recorded as failed, "Email is not connected yet" |
-| `TWILIO_*` | Texts are recorded as failed, "Texting is not connected yet" |
+| `TWILIO_*` | Nothing, for an email-first firm (every firm made now): it sends no texts. Only matters if texting returns |
+| `TH_MAIL_LAYER` | Nothing. Unset, client letters go from the firm's Tallyhound address through Postmark. Set it to `fake` to try mailbox connection and the mirror on your own computer with a stand-in (it also needs `GOOGLE_CLIENT_ID` or `MICROSOFT_CLIENT_ID`); see `docs/V2.md` |
 | The rest | That feature's tab, switch or button is simply not shown |
 
 ## Is each service really working?
@@ -98,7 +99,8 @@ changes each time it starts, so each service has to be told again.
 2. `ANTHROPIC_API_KEY`, then have staff upload a photo of a sample W-2 from a client's page. This is the heart of the product.
 3. `POSTMARK_TOKEN` and `TH_SIGNIN_FROM`, then `check-services --email`.
 4. A tunnel, then Postmark inbound: email a document to the firm's Tallyhound address.
-5. Twilio, with a number you own as the "client". A trial Twilio account can only text numbers you have verified.
+5. The whole email-first round trip: press Go fetch for a client whose email is yours, open the letter, upload a document through its link, and reply to it.
+6. Twilio only if texting returns: an email-first firm sends no texts.
 6. Stripe in test mode, Drive, and the rest.
 
 Use made-up clients and the sample forms. No real client's documents until counsel has signed off and you are on a real host.

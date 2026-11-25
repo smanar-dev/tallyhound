@@ -33,7 +33,7 @@ An owner changes the four document times on Settings, Security and data. "Delete
 * **Columns such as SSN, date of birth, fee, AGI, refund, bank account in an imported client list.** They are recognised by their header or their contents, shown as "Never imported", and not read.
 * **Amounts and box values from documents.** The model is asked whether the document is the right one and readable. It is not asked for the numbers and there is no field to put them in.
 * **Passwords.** Staff sign in by emailed link or their identity provider. A locked PDF gets a request for an unlocked copy.
-* **The firm's mailbox.** Tallyhound has its own address per firm and never signs in to anyone's email.
+* **The firm's mailbox.** Without the mail layer, Tallyhound has its own address per firm and signs in to nobody's email. With it (v2), a preparer connects their own mailbox by their own consent; see Subprocessors below.
 
 The honest limit: the document images themselves contain Social Security numbers. That is what a W-2 is. We hold those images, sealed, for the shortest time the firm chooses, and that is the main thing this document is about.
 
@@ -114,3 +114,19 @@ Designed, not rehearsed (T-109):
 Tested in this kit: scrubbing, the import filter, every retention path, deletion while paused, encryption round trips and tampering, firm-to-firm key separation, key destruction, real deletion of stored bytes with retry, sender checks, forwarded mail, the unknown-sender cap. The fuzz tool runs 200 random seasons and checks after every step that no ID number was stored and nothing outlived its time.
 
 Tested on a real PostgreSQL 18 server in round 15: the schema, the row lock and 80 simultaneous events from two servers. Not tested: anything against the real cloud key service, real Twilio or mail webhooks, sign-in, the storage connectors. No outside party has reviewed any of it.
+
+
+## Subprocessors (v2, November 24, 2026)
+
+A firm must be able to vet every service that handles its clients' information (FTC Safeguards Rule). This is the list a firm is given on request and the one the data processing terms carry.
+
+| Subprocessor | Role | What it holds | Hosting location |
+|---|---|---|---|
+| Neeter | Email delivery and task tracking. Only when a firm's preparers connect their own mailboxes | Access to each connected mailbox, limited to threads Tallyhound started and senders on the firm's client list; each client's name and email address; the name of each form owed and who issues it. Never a document, an amount or an identifier | **TO BE CONFIRMED IN WRITING** with Neeter, with where its staff with production access sit and its own subprocessors (it says it runs its AI on Google Cloud Vertex AI and does not train on client content) |
+| Postmark | Staff email (sign-in links, barks, the morning note) and, without the mail layer, client letters | Addresses and message text | United States |
+| Anthropic | Reading documents and replies | The page images and reply text of one request at a time; not kept for training | United States |
+| The hosting provider, the database and the file store | Running the service | Everything, sealed with each firm's key | To be chosen (T-02) |
+
+Mailbox permissions asked for (TH-MBX-2): Google `gmail.send` and `gmail.readonly`; Microsoft `Mail.Send` and `Mail.Read`. Neither provider offers a narrower way to read replies. What is read is limited by the mail layer, and anything from a sender who is not on the firm's client list is dropped before Tallyhound keeps it.
+
+Open with counsel before any client is contacted: whether form and issuer names are tax return information under Section 7216 and whether Neeter is an auxiliary service provider; whether any Neeter access is from outside the United States (26 CFR 301.7216-3 then needs the client's consent); what each pilot firm's insurer requires.

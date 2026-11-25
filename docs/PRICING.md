@@ -1,5 +1,7 @@
 # Pricing: what it costs to run, what to charge, and the rules that protect the margin
 
+> **November 24, 2026.** The v2 spec proposes $5 a client a season, charged when a client sends a first document, with the first 10 free. The decision recorded there is to hold off on pricing until the mail layer's price is known, so nothing below has changed and nothing new is built. During the 2027 pilot, card billing stays off and each pilot firm's plan is set by hand, so no pilot firm is charged (TH-BIL-23). Without texting, the cost of a normal client falls from about $0.63 to about $0.14 before the layer's own price.
+
 Updated November 18 (round 11). This replaces every earlier version. Run `node tools/cost-model.js` to reproduce every number here and to change an assumption.
 
 ## Verdict

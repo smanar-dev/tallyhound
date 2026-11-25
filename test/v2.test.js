@@ -157,3 +157,10 @@ test("the wording of every letter, in every voice, passes the output check and h
     const L = letters(T, e); assert.equal(L.length, 5); for (const m of L) { assert.deepEqual(T.outputCheck(m.body, "email", { year: 2026 }), []); assert.ok(!/text|reply with a photo|STOP|\{|¶|§/i.test(m.body), voice + ": " + m.body); assert.match(m.body, /Dana Whitfield\nMaple & Pine Tax Co\.$/); } }
   const { T } = lfirm(); for (const v of ["professional", "warm", "brief"]) for (const code of Object.keys(T.LETTER[v].en)) assert.ok(!/reply with a photo|photo by reply|YES or NO|by text/i.test(T.LETTER[v].en[code]), v + " " + code);
 });
+test("TH-EML-2: the next letter can be read before it goes, word for word, without the client's link and without changing anything", () => {
+  const { T, c, e } = lfirm(); e.confirmed = true; const before = JSON.stringify(T.dump()), p0 = T.letterPreview(e.id);
+  assert.equal(p0.code, "L1"); assert.equal(p0.subject, "3 documents for your 2026 tax return"); assert.match(p0.body, /\(Maria's private upload link\)/); assert.equal(JSON.stringify(T.dump()), before, "reading the preview changed the firm");
+  T.start(e.id); T.advance(5 * T.MIN); const sent = letters(T, e)[0], p1 = T.letterPreview(e.id); assert.equal(p0.body.replace("(Maria's private upload link)", "https://send.tallyhound.example/u/maple-" + e.link.key), sent.body, "the preview is not what was sent");
+  assert.equal(p1.code, "L2"); assert.equal(md(new Date(p1.when)), "1/27"); assert.equal(p1.from, "docs@mapleandpine.example"); T.inboundDoc(c.id, { form: "W2", year: 2026, payer: "Acme Logistics" }, "portal"); assert.ok(!/W-2/.test(T.letterPreview(e.id).body));
+  T.setUser("u1"); assert.equal(T.setWorkDays([1, 2, 3, 4]), null); assert.equal(T.isWorkDay(new Date(2027, 0, 29)), false, "Friday is no longer a working day"); assert.equal(T.setWorkDays([]), "Choose at least one working day"); assert.equal(T.setMailCap(5), "Choose a number from 10 to 5,000");
+});
