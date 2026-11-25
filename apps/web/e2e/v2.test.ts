@@ -67,7 +67,7 @@ scene("v2: while a person confirms every document, an upload that passed waits i
   T = await W.state(firmId); const d = T.S.docs[0]; assert.equal(d.state, "accepted"); assert.equal(d.unconfirmed, true);
   const page = await W.signIn("pat1@firm1.test"); await page.goto(W.url + "/needs-you?show=document"); const pane = page.locator(".rq > div").nth(1); await pane.getByText("Passed the sniff test.").waitFor();
   assert.match(text(await pane.textContent()), /The sniff test: passed/); assert.match(text(await pane.textContent()), /Look at it and agree, or overrule the sniff test\./);
-  await pane.getByRole("button", { name: "Agree" }).click(); await page.getByText("Confirmed.", { exact: true }).waitFor();
+  await pane.getByRole("button", { name: "Accept", exact: true }).click(); await page.getByText("Confirmed.", { exact: true }).waitFor();
   T = await W.state(firmId); assert.equal(T.S.docs[0].unconfirmed, undefined); assert.equal(T.agreement("W2").n, 1); assert.equal(T.agreement("W2").ok, 1); assert.equal(T.S.tasks.filter((t: any) => t.status === "open" && t.engId === maria.id).length, 0);
   // The count shows under Settings, Mailbox, where an owner can switch the check off.
   await page.goto(W.url + "/settings?tab=mailbox"); const row = page.locator("tr", { hasText: "W-2 wage statement" }); await row.waitFor(); assert.match(text(await row.textContent()), /1\s*100%\s*A person confirms each one/);

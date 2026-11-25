@@ -24,6 +24,25 @@ export const colorOf = (first: string, last: string) => COLORS[hash(first + last
 // Status words, from docs/UX.md's vocabulary. Do not bring the old words back.
 export const STAT: Record<string, [string, string]> = { not_started: ["Ready to fetch", ""], awaiting_consent: ["Waiting for OK to text", "info"], in_progress: ["Fetching", "info"], stuck: ["Needs you", "warn"], paused: ["Paused", ""], opted_out: ["Opted out", "bad"], complete: ["All fetched", "good"], closed: ["Closed", ""], off_season: ["Not this season", ""] };
 export const DSTATE: Record<string, [string, string]> = { accepted: ["Passed the sniff test", "good"], rejected: ["Asked again", "bad"], in_review: ["Needs you", "warn"], duplicate: ["Duplicate", ""], discarded: ["Discarded", ""], tray: ["Unknown senders", "warn"], incomplete: ["Incomplete", "warn"], purged: ["Deleted", ""], classified: ["Sniffing", "info"], stored: ["Sniffing", "info"] };
+/** A file's status words. In an email-first firm the fetch list's state comes first: a list nobody approved is not "Ready to fetch",
+ *  and a client who stopped emails says so whatever else is true. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const engStatus = (T: any, e: any): [string, string] => {
+  const c = T && e ? T.client(e.clientId) : null;
+  if (T && T.S && T.S.firm && T.S.firm.letters === true && e) {
+    if (c && c.emailOff && !["complete", "closed", "off_season"].includes(e.status)) return ["Stopped emails", "bad"];
+    if (e.status === "not_started") { const L = T.listOf ? T.listOf(e.id) : null; if (L && L.status === "proposed") return L.group === "ready" ? ["Ready to approve", "info"] : ["Needs a look", "warn"]; }
+  }
+  return STAT[e && e.status] || [e ? e.status : "", ""];
+};
+/** A document's words, with the pilot's confirm-every-document mode allowed for: the sniff test has spoken but a person has not. */
+export const docState = (d: { state: string; unconfirmed?: boolean } | null | undefined): [string, string] => {
+  if (!d) return ["", ""];
+  if (d.unconfirmed && d.state === "accepted") return ["Waiting for you to confirm", "warn"];
+  if (d.unconfirmed && d.state === "rejected") return ["Will ask again when you confirm", "warn"];
+  if (d.unconfirmed && d.state === "incomplete") return ["Incomplete: waiting for you to confirm", "warn"];
+  return DSTATE[d.state] || [d.state, ""];
+};
 export const ISTATE: Record<string, string> = { expected: "Not requested yet", requested: "Requested", partial: "Part received, chasing the rest", in_review: "Received, waiting for you", says_none: "Client says they don't have it", received: "Received", waived: "Not needed" };
 /** v2 (docs/V2.md): an email-first firm. Letters by email, documents through the upload link, no texting on any screen. */
 export const emailFirst = (T: Engine): boolean => !!(T && T.S && T.S.firm && T.S.firm.letters === true);

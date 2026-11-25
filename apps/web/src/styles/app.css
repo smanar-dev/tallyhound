@@ -422,5 +422,25 @@ ol.steps li+li:before{content:"\203A";margin-right:6px;color:var(--faint)}
 .filelist li{padding:3px 0}
 .fetchlist .fl{align-items:flex-start}
 .fetchlist .fl input[type=checkbox]{width:18px;height:18px;margin-top:2px;flex:none}
+/* Phone: the name gets the whole width; who is asked and Not needed go on their own line under it. */
+@media (max-width:640px){.fetchlist .fl{flex-wrap:wrap}.fetchlist .fl .flacts{flex-basis:100%;padding-left:30px}.fetchlist .fl .flacts select{flex:1;min-width:0}}
 .addrow select,.addrow input{max-width:100%;min-width:0}
 .rulestbl td,.rulestbl th{white-space:normal}
+
+/* Phone: the status is the most important column, so it goes under the name and the column itself is dropped. */
+.phonestat{display:none}
+@media(max-width:640px){.phonestat{display:block;margin-top:4px}.ctbl th:nth-child(4),.ctbl td:nth-child(4){display:none}}
+/* Phone: a queue row's buttons go under the name and reason instead of covering them. */
+@media(max-width:640px){.li.needrow{flex-wrap:wrap}.li.needrow .grow{min-width:0;flex:1 1 calc(100% - 60px)}.li.needrow .needacts{flex-basis:100%;padding-left:48px}}
+/* The client page's tabs wrap to a second line rather than hide the last one; on a phone they scroll. */
+@media(min-width:641px){.tabs.ctabs{flex-wrap:wrap;overflow-x:visible}}
+/* Documents settings: every group's table has the same columns, so the columns line up down the page. */
+.cattbl{table-layout:fixed;width:100%;min-width:720px}
+.cattbl th:nth-child(1){width:80px}.cattbl th:nth-child(2){width:28%}.cattbl th:nth-child(4){width:20%}
+.cattbl td input[type=text]{width:100%}
+/* A file input behind a button-like label: hidden from sight but not from the keyboard, so Tab reaches it and the label shows the focus. */
+.fileinput{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;border:0}
+.filepick{position:relative}
+.filepick:focus-within{outline:3px solid var(--ink);outline-offset:3px}
+/* Phone: the pilot's measures stack, one measure to a block, each figure with its own label. */
+@media(max-width:640px){.mtbl thead{display:none}.mtbl,.mtbl tbody,.mtbl tr,.mtbl td{display:block;width:100%}.mtbl tr{padding:10px 14px;border-bottom:1px solid var(--line2)}.mtbl td{border:0;padding:2px 0;text-align:left!important}.mtbl td[data-label]::before{content:attr(data-label) ": ";color:var(--slate);font-weight:600}}

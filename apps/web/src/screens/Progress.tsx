@@ -14,8 +14,8 @@ const PSTATE: Record<string, [string, string]> = { on_track: ["On track", "good"
 function PilotCard() {
   const { T } = useFirm(), M = T.pilotMeasures();
   return <div className="card"><div className="hd"><h2>The pilot's measures</h2><span className="sp" /><span className="small muted">{M.clients} {M.clients === 1 ? "client" : "clients"} sent a first letter</span></div>
-    <div className="tbl"><table style={{ minWidth: 0 }}><thead><tr><th>Measure</th><th className="num">Now</th><th>Target</th><th>Rethink if</th><th></th></tr></thead><tbody>{M.rows.map((r: Row) => <tr key={r.key}>
-      <td><b>{r.label}</b><div className="small muted">{r.n ? r.of : "No cases yet"}</div></td><td className="num">{r.display}</td><td className="small">{r.target}</td><td className="small">{r.stopAt || "No line set"}</td>
+    <div className="tbl"><table className="mtbl" style={{ minWidth: 0 }}><thead><tr><th>Measure</th><th className="num">Now</th><th>Target</th><th>Rethink if</th><th></th></tr></thead><tbody>{M.rows.map((r: Row) => <tr key={r.key}>
+      <td><b>{r.label}</b><div className="small muted">{r.n ? r.of : "No cases yet"}</div></td><td className="num" data-label="Now">{r.display}</td><td className="small" data-label="Target">{r.target}</td><td className="small" data-label="Rethink if">{r.stopAt || "No line set"}</td>
       <td><span className={"chip " + PSTATE[r.state]![1]}>{PSTATE[r.state]![0]}</span></td></tr>)}</tbody></table></div>
     <div className="bd small muted">Worked out from what happened, not from estimates. Staff touches count decisions in the review queue and messages a person wrote; approving letters is counted apart ({M.approvals} so far). {M.note}</div></div>;
 }

@@ -26,7 +26,7 @@ export function knows(T: Engine, t: Row): string[] {
   if (t.kind === "gone_quiet") for (const m of (t.context && t.context.missing) || []) { const i = s.items.find((x: Row) => x.id === m.itemId); if (i && T.OPEN.includes(i.state)) out.push("Still missing: " + name(i) + ", asked " + times(asked(i) || m.asked || 0)); }
   // v2: a suggested step from a reply, and the pilot's confirm-each-document item (docs/V2.md).
   if (t.kind === "step" && t.step) out.push("Suggested: " + stepWords(T, t));
-  if (t.confirm && d && d.sniff) out.push("The sniff test: " + (d.sniff.state === "accepted" ? "passed" : d.sniff.state === "incomplete" ? "part of it is missing, and the client was asked for the rest" : "did not pass, and the client was asked again"));
+  if (t.confirm && d && d.sniff) out.push("The sniff test: " + (d.sniff.state === "accepted" ? "passed" : d.sniff.state === "incomplete" ? "part of it is missing. When you agree, the client is asked for the rest" : "did not pass. When you agree, the client is asked again"));   // UX review: nothing has been sent yet while a person decides
   if (t.kind === "cant_reach") for (const f of (t.context && t.context.failed) || []) { if (!(T.S.firm.letters === true && /^Texts:/.test(String(f)))) out.push(String(f)); }   // an email-first firm sends no texts, so those lines say nothing useful
   for (const k of t.calls || []) out.push("Call " + new Date(k.at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " by " + k.by + ": " + String(T.CALL_OUTCOMES[k.outcome] || "").toLowerCase());
   if (it) out.push("About: " + name(it) + (asked(it) ? ", asked " + times(asked(it)) : ""));
@@ -36,8 +36,9 @@ export function knows(T: Engine, t: Row): string[] {
   if (t.kind === "news") for (const x of t.suggest || []) out.push("Suggested: " + T.itemTitle({ form: x.form, payer: x.payer || null }, "en") + (x.why ? " (" + String(x.why).toLowerCase() + ")" : ""));
   if (t.kind === "document" && t.reason === "Not on the checklist") out.push("Not on " + c.first + "'s fetch list. Accepting it adds it to the list as received");
   if (e.lastOut) out.push("Last asked: " + new Date(e.lastOut).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }));
-  const last = s.msgs.filter((m: Row) => m.engId === e.id && m.dir === "in" && m.kind === "client").slice(-1)[0];
-  if (last) { out.push(c.first + "'s last message: \u201c" + String(last.body || "").slice(0, 140) + (String(last.body || "").length > 140 ? "..." : "") + "\u201d"); if (last.line || last.understood) out.push(last.line || "Understood: " + String(last.understood).toLowerCase()); }
+  // UX review: an item that came from one reply shows that reply, not whatever the client wrote last.
+  const trig = t.msgId ? s.msgs.find((m: Row) => m.id === t.msgId && m.dir === "in") : null, last = trig || s.msgs.filter((m: Row) => m.engId === e.id && m.dir === "in" && m.kind === "client").slice(-1)[0];
+  if (last) { out.push(c.first + (trig ? " wrote: \u201c" : "'s last message: \u201c") + String(last.body || "").slice(0, 140) + (String(last.body || "").length > 140 ? "..." : "") + "\u201d"); if (last.line || last.understood) out.push(last.line || "Understood: " + String(last.understood).toLowerCase()); }
   else out.push(c.first + " has not replied this season");
   return out;
 }

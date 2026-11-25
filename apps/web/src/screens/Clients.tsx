@@ -7,7 +7,7 @@ import type { Engine } from "virtual:engine";
 import { useFirm } from "../lib/firm";
 import { Page } from "./Shell";
 import { Modal } from "../components/Modal";
-import { Avatar, Chip, Empty, Icon, StatusChip, UserAvatar } from "../components/ui";
+import { Avatar, Empty, EngChip, Icon, StatusChip, UserAvatar } from "../components/ui";
 import { inPill, openTasks, PILLS, readyToStart, type Row } from "../lib/select";
 import { cname, dt, emailFirst, iname, ISTATE, phone, plural, rel } from "../lib/fmt";
 
@@ -21,7 +21,7 @@ function NextStep({ T, e, open }: { T: Engine; e: Row; open: Row[] }) {
   if (e.status === "complete") return e.delivered ? quiet("Files handed off " + rel(T, e.delivered)) : <b>Ready to hand off</b>;
   if (e.status === "not_started" && e.checkin && e.checkin.doneAt && !e.checkin.reviewedAt) return warn("Check-in is back: go through it");
   if (e.status === "not_started" && e.checkin && !e.checkin.doneAt && !e.confirmed) return quiet("Check-in sent " + rel(T, e.checkin.sentAt));
-  if (e.status === "not_started") return e.confirmed ? <>Ready to start</> : quiet("Confirm the checklist");
+  if (e.status === "not_started") return e.confirmed ? <>Ready to start</> : quiet(T.S.firm.letters === true ? "Approve the fetch list" : "Confirm the checklist");
   if (e.status === "awaiting_consent") return quiet("Invited " + rel(T, e.invitedAt));
   if (e.status === "in_progress") { const it = T.nextItem(e); return <>{it ? iname(T, it) : "Waiting"}{e.next ? <span className="faint"> · {rel(T, e.next)}</span> : null}</>; }
   if (e.status === "opted_out") return quiet("Reach them another way");
@@ -38,7 +38,7 @@ function AddClient({ onClose }: { onClose: () => void }) {
     try {
       const r = (await act("addClient", { first: v.first, last: v.last, mobile: v.mobile, email: v.email, lang: "en", entity: v.entity.trim(), rtype: v.rtype, template: v.rtype === "1040" ? v.template : BIZ[v.rtype] })) as { ok: boolean; why?: string; engId?: string };
       if (!r.ok) { setWhy((r.why || "Could not add this client") + "."); return; }   // T-38: the engine's own reason, and nothing was saved
-      toast("Client added with a checklist. Confirm it, then say go fetch."); onClose(); nav("/clients/" + r.engId);
+      toast(emailFirst(T) ? "Client added. Look over their fetch list, then approve it: approving sends the first letter." : "Client added with a checklist. Confirm it, then say go fetch."); onClose(); nav("/clients/" + r.engId);
     } catch { /* the toast has said why */ } finally { setBusy(false); }
   };
   return <Modal title="Add a client" onClose={onClose} footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn pri" disabled={busy} onClick={save}>Add client</button></>}>
@@ -49,7 +49,7 @@ function AddClient({ onClose }: { onClose: () => void }) {
       <label className="f">{emailFirst(T) ? "Phone, for calls (optional)" : "Mobile"}<input type="tel" placeholder="10 digits" value={v.mobile} onChange={set("mobile")} autoComplete="off" /></label>
       <label className="f">Email<input type="email" value={v.email} onChange={set("email")} autoComplete="off" /></label>
       <label className="f">Kind of return<select value={v.rtype} onChange={set("rtype")}>{Object.keys(T.RETURNS).map((k) => <option key={k} value={k}>{T.RETURNS[k].label} ({T.RETURNS[k].form})</option>)}</select></label>
-      {v.rtype === "1040" ? <label className="f">Checklist<select value={v.template} onChange={set("template")}>{T.templates().map((t: Row) => <option key={t.id} value={t.id}>{t.name} ({t.items.length})</option>)}</select></label>
+      {v.rtype === "1040" ? <label className="f">{emailFirst(T) ? "Starter list" : "Checklist"}<select value={v.template} onChange={set("template")}>{T.templates().map((t: Row) => <option key={t.id} value={t.id}>{t.name} ({t.items.length})</option>)}</select></label>
         : <label className="f">Business, trust or organization name<input type="text" value={v.entity} onChange={set("entity")} /></label>}
     </div>
     <p className="small muted">{emailFirst(T) ? "Needs a name and an email address: letters go by email. A phone number is only for your own calls." : "Needs a name and either a mobile number or an email."} Nothing goes out until you say go fetch.</p>
@@ -98,7 +98,7 @@ function StartCollecting({ onClose }: { onClose: () => void }) {
       {ready.length ? <><p className="muted">These clients have a confirmed checklist and have not been contacted.</p>
         <div className="list card" style={{ boxShadow: "none" }}>{ready.map((e) => { const c = T.client(e.clientId); return <label className="li" style={{ cursor: "pointer" }} key={e.id}><input type="checkbox" checked={pick.has(e.id)} onChange={() => toggle(e.id)} /><Avatar first={c.first} last={c.last} small /><span className="grow"><b>{cname(c)}</b><span className="small muted"> · {plural(T.itemsOf(e.id).length, "document")} · {EM ? (c.email && c.emailOk !== false && !c.emailOff ? "a letter by email" : "no working email address") : c.textConsent === "given" ? "texts" : c.email ? "email invitation" : "no way to reach them"}</span></span></label>; })}</div></>
         : <p className="muted">No client is ready. Confirm their checklists first.</p>}
-      {unconf.length ? <div className="note"><Icon name="alert" small /><span>{unconf.length === 1 ? "1 client is" : unconf.length + " clients are"} left out because the checklist is not confirmed: {unconf.slice(0, 12).map((e) => cname(T.client(e.clientId))).join(", ")}{unconf.length > 12 ? " and " + (unconf.length - 12) + " more" : ""}.</span></div> : null}
+      {unconf.length ? <div className="note"><Icon name="alert" small /><span>{unconf.length === 1 ? "1 client is" : unconf.length + " clients are"} left out because {emailFirst(T) ? "the fetch list is not approved" : "the checklist is not confirmed"}: {unconf.slice(0, 12).map((e) => cname(T.client(e.clientId))).join(", ")}{unconf.length > 12 ? " and " + (unconf.length - 12) + " more" : ""}.</span></div> : null}
     </> : null}
     {step === 2 && fc && first && EM ? <div className="col">
       <p>The first message {fc.first} gets is a letter by email listing every document, with their private upload link.</p>
@@ -114,12 +114,6 @@ function StartCollecting({ onClose }: { onClose: () => void }) {
 }
 
 type Dialog = null | { kind: "add" } | { kind: "start" } | { kind: "assign"; ids: string[] };
-
-/** docs/FETCH.md: where a client's fetch list stands, for a client not started yet. The engine sorts it; this only names it. */
-function ListChip({ T, e }: { T: Row; e: Row }) {
-  if (e.status !== "not_started") return null; const L = T.listOf(e.id); if (!L) return null;
-  return <> <Chip tone={L.status === "approved" ? "good plain" : L.group === "ready" ? "good plain" : "warn plain"}>{L.status === "approved" ? "Approved" : L.group === "ready" ? "Ready" : "Needs a look"}</Chip></>;
-}
 
 export function Clients() {
   const { T, can, act, actMany, toast } = useFirm(), s = T.S, nav = useNavigate(), [params, setParams] = useSearchParams();
@@ -143,7 +137,7 @@ export function Clients() {
     try {
       if (kind === "start") { const r = (await act("startMany", ids)) as { started: number; capped: number; refused: string[]; paced?: number }; toast((r.paced ? "The first 50 go now and the rest in groups of 50 every half hour. " : "") + "Off it goes. Fetching for " + r.started + (ids.length - r.started ? ", left " + (ids.length - r.started) + " that could not be started" + (r.refused.length ? " (" + r.refused.join("; ").toLowerCase() + ")" : "") : "") + "."); }
       else if (kind === "checkin") { const r = await actMany(ids.map((id) => ["sendCheckin", id])), ok = r.filter((x) => !x).length; toast("Check-in sent to " + plural(ok, "client") + "." + (ids.length - ok ? " " + (ids.length - ok) + " left out: already collecting, already answered, or no way to reach them." : "")); }
-      else if (kind === "recommend") { const r = (await actMany(ids.map((id) => ["addRecommended", id]))) as number[], n = r.reduce((a, b) => a + (+b || 0), 0), m = r.filter((x) => +x > 0).length; toast("Added " + plural(n, "suggested document") + " across " + plural(m, "client") + ". Each one shows the reason on the checklist."); }
+      else if (kind === "recommend") { const r = (await actMany(ids.map((id) => ["addRecommended", id]))) as number[], n = r.reduce((a, b) => a + (+b || 0), 0), m = r.filter((x) => +x > 0).length; toast("Added " + plural(n, "suggested document") + " across " + plural(m, "client") + ". Each one shows the reason on " + (emailFirst(T) ? "the fetch list." : "the checklist.")); }
       else {
         const applies = (e: Row) => kind === "confirm" ? !e.confirmed : kind === "pause" ? !["complete", "closed", "not_started", "paused"].includes(e.status) : e.status === "paused";
         const todo = ids.filter((id) => applies(T.eng(id))); await actMany(todo.map((id) => [kind === "confirm" ? "confirmChecklist" : kind, id]));
@@ -152,7 +146,7 @@ export function Clients() {
       clear();
     } catch { /* the toast has said why */ }
   };
-  const actions: ReactNode = can() ? <><Link className="btn hide-s" to="/add-clients"><Icon name="upload" small />Import your client list</Link><button className="btn" onClick={() => setDialog({ kind: "add" })}><Icon name="plus" small /><span className="hide-s">Add client</span></button>{ready ? <button className="btn pri" onClick={() => setDialog({ kind: "start" })}><Icon name="send" small />Go fetch ({ready})</button> : null}</> : null;
+  const actions: ReactNode = can() ? <><Link className="btn hide-s" to="/add-clients"><Icon name="upload" small />Add clients</Link><button className="btn" onClick={() => setDialog({ kind: "add" })}><Icon name="plus" small /><span className="hide-s">Add client</span></button>{ready ? <button className="btn pri" onClick={() => setDialog({ kind: "start" })}><Icon name="send" small />Go fetch ({ready})</button> : null}</> : null;
 
   return <Page title="Clients" actions={actions}>
     <div className="row"><div className="pills">{PILLS.filter((p) => (emailFirst(T) ? p[0] !== "awaiting_consent" : p[0] !== "off_season")).map((p) => <button key={p[0]} className={pill === p[0] ? "on" : ""} aria-pressed={pill === p[0]} onClick={() => setPill(p[0])}>{p[1]}<span>{s.engs.filter((e: Row) => inPill(T, e, p[0], open)).length}</span></button>)}</div><span className="sp" />
@@ -161,14 +155,14 @@ export function Clients() {
       <select aria-label="Voice" value={voi} onChange={(e) => setVoi(e.target.value)}><option value="">Any voice</option>{Object.keys(T.VOICES).map((k) => <option key={k} value={k}>{T.VOICES[k].label}</option>)}</select>
       <select aria-label="Fetch intensity" value={inten} onChange={(e) => setInten(e.target.value)}><option value="">Any intensity</option>{Object.keys(T.CADENCE_PRESETS).map((k) => <option key={k} value={k}>{T.CADENCE_PRESETS[k].label}</option>)}</select></div>
     <div className="card">
-      {!s.clients.length ? <HoundNote title="No clients yet." mode="sniff wag"><p>Import your client list and the hound will get to work.</p>{can() ? <div className="row" style={{ justifyContent: "center", marginTop: 14 }}><Link className="btn pri" to="/add-clients"><Icon name="upload" small />Import your client list</Link><button className="btn" onClick={() => setDialog({ kind: "add" })}><Icon name="plus" small />Add one client</button></div> : null}</HoundNote>
+      {!s.clients.length ? <HoundNote title="No clients yet." mode="sniff wag"><p>Add your clients and the hound will get to work.</p>{can() ? <div className="row" style={{ justifyContent: "center", marginTop: 14 }}><Link className="btn pri" to="/add-clients"><Icon name="upload" small />Add clients</Link><button className="btn" onClick={() => setDialog({ kind: "add" })}><Icon name="plus" small />Add one client</button></div> : null}</HoundNote>
         : !rows.length ? <Empty>No clients match. <button className="btn sm" onClick={() => { setQ(""); setPrep(""); setPill("all"); }}>Clear filters</button></Empty>
         : <><div className="tbl"><table className="ctbl"><thead><tr><th style={{ width: 36 }}>{can() ? <input type="checkbox" aria-label="Select all shown" checked={allSel} onChange={() => { const n = new Set(sel); shown.forEach((e) => (allSel ? n.delete(e.id) : n.add(e.id))); setSel(n); }} /> : null}</th><th>Client</th><th>Preparer</th><th>Status</th><th>In and verified</th><th>Last heard</th><th>What happens next</th></tr></thead>
           <tbody>{shown.map((e) => { const c = T.client(e.clientId), p = T.verified(e.id), u = s.users.find((x: Row) => x.id === c.preparer); return <tr key={e.id} tabIndex={0} className={"click" + (sel.has(e.id) ? " sel" : "")} onClick={() => nav("/clients/" + e.id)} onKeyDown={(ev) => { if (ev.key === "Enter" && ev.target === ev.currentTarget) nav("/clients/" + e.id); }}>
             <td onClick={(ev) => ev.stopPropagation()}>{can() ? <input type="checkbox" aria-label={"Select " + cname(c)} checked={sel.has(e.id)} onChange={() => toggle(e.id)} /> : null}</td>
-            <td><div className="row" style={{ gap: 10, flexWrap: "nowrap" }}><Avatar first={c.first} last={c.last} /><div><b>{cname(c)}</b><div className="small faint">{c.email || phone(c.mobile)}</div></div></div></td>
+            <td><div className="row" style={{ gap: 10, flexWrap: "nowrap" }}><Avatar first={c.first} last={c.last} /><div><b>{cname(c)}</b><div className="small faint">{c.email || phone(c.mobile)}</div><div className="phonestat">{emailFirst(T) ? <EngChip T={T} e={e} /> : <StatusChip status={e.status} />}</div></div></div></td>
             <td>{u ? <span className="row" style={{ gap: 6, flexWrap: "nowrap" }}><UserAvatar user={u} small />{u.first}</span> : null}</td>
-            <td><StatusChip status={e.status} />{emailFirst(T) ? <ListChip T={T} e={e} /> : null}</td>
+            <td>{emailFirst(T) ? <EngChip T={T} e={e} /> : <StatusChip status={e.status} />}</td>
             <td><div className="row" style={{ gap: 8, flexWrap: "nowrap" }}><span className="dots">{T.itemsOf(e.id).map((i: Row) => <i key={i.id} className={i.state} title={iname(T, i) + ": " + ISTATE[i.state]} />)}</span><span className="mono faint" title={"In and verified " + p.n + " of " + p.m}>{p.n} of {p.m}</span></div></td>
             <td className="muted small" style={{ whiteSpace: "nowrap" }}>{rel(T, e.lastIn)}</td>
             <td className="small"><NextStep T={T} e={e} open={open} /></td></tr>; })}</tbody></table></div>

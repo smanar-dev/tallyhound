@@ -7,14 +7,14 @@ import { useFirm } from "../lib/firm";
 import { Page } from "./Shell";
 import { Empty, Icon } from "../components/ui";
 import { Viewer, docTitle } from "../components/Doc";
-import { cname, DSTATE, emailFirst, fname, when } from "../lib/fmt";
+import { cname, docState, DSTATE, emailFirst, fname, when } from "../lib/fmt";
 import type { Row } from "../lib/select";
 
 const VIA: Record<string, string> = { text: "Text", email: "Email", portal: "Upload page", staff: "Added by staff" };
 // What Tallyhound made of a message, in plain words. Empty when there is nothing useful to say.
 function readAs(T: Engine, m: Row, docs: Row[]): string {
   if (m.understood) return m.understood; if (m.intent && T.KLABEL[m.intent]) return T.KLABEL[m.intent];
-  if (docs.length) return docs.length === 1 ? "a " + fname(T, docs[0].form) + ", " + ((DSTATE[docs[0].state] || [""])[0] || "").toLowerCase() : docs.length + " documents";
+  if (docs.length) return docs.length === 1 ? "a " + fname(T, docs[0].form) + ", " + docState(docs[0])[0].toLowerCase() : docs.length + " documents";
   return "";
 }
 

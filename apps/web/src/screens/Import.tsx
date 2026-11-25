@@ -17,6 +17,8 @@ import type { Row } from "../lib/select";
 const STEPS = ["Bring in clients", "Last year's records", "Fetch lists"];
 const NOTHING_SENT = "Nothing is sent to anyone until you approve their list.";
 const FIELD: Record<string, string> = { "": "Leave out", first: "First name", last: "Last name", name: "Full name", email: "Email", mobile: "Phone", spouse: "Spouse", ref: "Client ID", returning: "Returning client?", preparer: "Preparer", lang: "Language", tz: "State or time zone", entity: "Business or trust name", rtype: "Kind of return", docs: "Documents needed" };
+// The same words for a count of more than one ("5 new clients").
+const ROWS: Record<string, string> = { ok: "New clients", duplicate: "Already clients", possible_duplicate: "To decide" };
 const ROW: Record<string, [string, string]> = { ok: ["New client", "good"], no_email: ["New, no email yet", "warn"], updated: ["Updated", "info"], same: ["Already here, unchanged", ""], duplicate: ["Already a client", ""], possible_duplicate: ["Decide", "warn"], rejected: ["Left out", "bad"], skipped: ["Skipped", ""] };
 const STATUS: Record<string, string> = { mapping: "Matching columns", records: "Adding last year's records", review: "Checking fetch lists" };
 const MAX_LIST = 5 * 1024 * 1024;
@@ -24,6 +26,8 @@ const MAX_LIST = 5 * 1024 * 1024;
 export function ImportWizard() {
   const { T, can } = useFirm(), [params] = useSearchParams(), bid = params.get("batch") || "", v: Row | null = bid ? T.importView(bid) : null;
   const step = !v ? 1 : v.status === "review" ? 3 : v.status === "records" && params.get("step") === "2" ? 2 : 1;
+  // A note about the step before (such as "Filed to Ana Ruiz.") would sit over the next step's buttons, so a new step clears it.
+  const { toast } = useFirm(); useEffect(() => { toast(""); }, [step, toast]);
   if (!can()) return <Page title="Add clients"><div className="card pad"><p>Your account can look but not change things, so it cannot add clients. Ask an owner to change your role.</p><Link className="btn" to="/clients">See your clients</Link></div></Page>;
   return <Page title="Add clients"><div className="narrow">
     <ol className="steps" style={{ marginBottom: 16 }}>{STEPS.map((x, i) => <li key={x} className={step === i + 1 ? "on" : step > i + 1 ? "done" : ""} aria-current={step === i + 1 ? "step" : undefined}>{step > i + 1 ? "✓ " : i + 1 + ". "}{x}</li>)}</ol>
@@ -47,7 +51,7 @@ function Start() {
     <div className="card pad col">
       <h3>Bring in your client list</h3>
       <p className="small muted">A CSV or an Excel file from your tax software or practice tool. Leave every column in: Tallyhound uses names, email, phone, spouse and client ID. Columns such as Social Security number, date of birth, bank details and fees are spotted and never imported.</p>
-      <div className="drop"><label className="btn pri">{busy ? "Reading the file" : "Choose the file"}<input type="file" accept=".csv,text/csv,.txt,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden disabled={busy} onChange={(ev) => { void pick(ev.target.files?.[0]); ev.target.value = ""; }} /></label><p className="small muted" style={{ marginTop: 8 }}>{NOTHING_SENT}</p></div>
+      <div className="drop"><label className="btn pri filepick">{busy ? "Reading the file" : "Choose the file"}<input type="file" accept=".csv,text/csv,.txt,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="fileinput" disabled={busy} onChange={(ev) => { void pick(ev.target.files?.[0]); ev.target.value = ""; }} /></label><p className="small muted" style={{ marginTop: 8 }}>{NOTHING_SENT}</p></div>
       <div className="note info"><Icon name="plus" small /><span className="grow">Only a handful of clients?</span><Link className="btn" to="/clients?do=add">Add one client</Link></div></div>
   </div>;
 }
@@ -72,7 +76,7 @@ function Results({ v }: { v: Row }) {
   const decide = (r: Row, choice: string) => void act("importDecide", v.id, r.n, choice).then((x) => toast(x ? String(x) + "." : choice === "new" ? "Added as a new client." : "Skipped."), () => {});
   return <div className="card pad col">
     <h3>{plural(n("ok") + n("no_email"), "new client")} from {v.file}</h3>
-    <div className="row" style={{ gap: 6 }}>{Object.keys(ROW).map((k) => (n(k) ? <Chip key={k} tone={ROW[k]![1]}>{n(k)} {ROW[k]![0].toLowerCase()}</Chip> : null))}</div>
+    <div className="row" style={{ gap: 6 }}>{Object.keys(ROW).map((k) => (n(k) ? <Chip key={k} tone={ROW[k]![1]}>{n(k)} {(n(k) === 1 ? ROW[k]![0] : ROWS[k] || ROW[k]![0]).toLowerCase()}</Chip> : null))}</div>
     {(v.dropped || []).length ? <p className="small muted">Never imported: {v.dropped.join(", ")}.</p> : null}
     <div className="tbl"><table><thead><tr><th>Row</th><th>Client</th><th>What happened</th></tr></thead><tbody>{rows.slice(0, 500).map((r) => <tr key={r.n}><td className="mono">{r.n}</td><td><b>{r.name}</b>{r.email ? <div className="small muted">{r.email}</div> : null}</td>
       <td><Chip tone={(ROW[r.status] || ["", ""])[1]}>{(ROW[r.status] || [r.status])[0]}</Chip>{r.why ? <div className="small muted">{r.why}</div> : null}
@@ -104,7 +108,7 @@ function Records({ v }: { v: Row }) {
     <div className="card pad col">
       <h3>Add last year's records</h3>
       <p className="small muted">Last year's organizers, returns or tax documents, as PDFs. Name each file with the client's name or client ID and Tallyhound files it to them. Only what is found is kept: which forms, which payers, which schedules. Never a number, and never the file.</p>
-      <div className="drop"><label className="btn pri">{busy ? "Reading" : "Choose files"}<input type="file" multiple accept="application/pdf,.pdf" hidden disabled={busy} onChange={(ev) => { void add([...(ev.target.files || [])]); ev.target.value = ""; }} /></label>
+      <div className="drop"><label className="btn pri filepick">{busy ? "Reading" : "Choose files"}<input type="file" multiple accept="application/pdf,.pdf" className="fileinput" disabled={busy} onChange={(ev) => { void add([...(ev.target.files || [])]); ev.target.value = ""; }} /></label>
         <label className="row small" style={{ gap: 6, marginTop: 10, justifyContent: "center" }}><input type="checkbox" checked={server} onChange={(ev) => setServer(ev.target.checked)} />Read them on the server instead of on this computer</label>
         <p className="small muted" style={{ marginTop: 6 }}>{server ? "Each file is held in memory while it is read, then gone. A scan is read by the model and a person confirms it." : "Read on this computer: the files are not sent anywhere, only what was found."}</p></div>
       {seen.length ? <><div className="progress" role="progressbar" aria-label="Files read" aria-valuemin={0} aria-valuemax={seen.length} aria-valuenow={done}><i style={{ width: Math.round((100 * done) / seen.length) + "%" }} /></div>

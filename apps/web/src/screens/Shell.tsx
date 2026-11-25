@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useFirm } from "../lib/firm";
 import { api } from "../lib/api";
-import { draftsToApprove, needsYou, type Row } from "../lib/select";
+import { waitingCount, type Row } from "../lib/select";
 import { cname, emailFirst, senderState, STAT, when } from "../lib/fmt";
 import { Avatar, Chip, Icon, UserAvatar } from "../components/ui";
 import { Modal } from "../components/Modal";
@@ -24,8 +24,8 @@ function EmailNotes() {
   const sendCode = async () => { setMobWhy(""); try { const r = await api.post<{ ends: string }>("/api/me/mobile", { mobile: num }); setMob({ ends: r.ends, verified: false }); me.mobile = { ends: r.ends, verified: false }; setCode(""); } catch (e) { setMobWhy((e as Error).message); } };
   const verify = async () => { setMobWhy(""); try { await api.post("/api/me/mobile/verify", { code }); const v = { ends: mob!.ends, verified: true }; setMob(v); me.mobile = v; bark({ text: true }); } catch (e) { setMobWhy((e as Error).message); } };
   const forget = async () => { try { await api.del("/api/me/mobile"); setMob(null); me.mobile = null; setNum(""); bark({ text: false }); } catch (e) { setMobWhy((e as Error).message); } };
-  return <><button className="btn sm ghost notesbtn" onClick={() => setOpen(true)}>My alerts</button>
-    {open ? <Modal title="My alerts" onClose={() => setOpen(false)} footer={<button className="btn pri" onClick={() => setOpen(false)}>Done</button>}><div className="col" style={{ gap: 12 }}>
+  return <><button className="btn sm ghost notesbtn" onClick={() => setOpen(true)}>My barks</button>
+    {open ? <Modal title="My barks" onClose={() => setOpen(false)} footer={<button className="btn pri" onClick={() => setOpen(false)}>Done</button>}><div className="col" style={{ gap: 12 }}>
       <p className="small muted">Who gets an alert when something needs a person. A bark tells you how many things in the review queue are yours. It always shows in the app, under the bell.</p>
       <label className="row"><span className="toggle"><input type="checkbox" checked={mine.email !== false} onChange={(ev) => bark({ email: ev.target.checked })} /><span /></span>Email me a bark too, at most one every half hour, and never outside office hours</label>
       {feat.textBarks ? <div className="col" style={{ gap: 8 }}>
@@ -42,7 +42,7 @@ function EmailNotes() {
 
 export function Side({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { T, me, can } = useFirm(), s = T.S, loc = useLocation();
-  const waiting = needsYou(T).length + draftsToApprove(T).length;
+  const waiting = waitingCount(T);
   const item = (to: string, label: ReactNode, icon: IconName, n?: number) => <NavLink key={to} to={to} end={to === "/"} className={({ isActive }) => "nav" + (isActive || (to === "/clients" && loc.pathname.startsWith("/clients/")) ? " on" : "")} onClick={onClose}><Icon name={icon} />{label}{n ? <span className="n">{n}</span> : null}</NavLink>;
   const signOut = () => api.post("/auth/signout").finally(() => window.location.replace("/signin"));
   return <>
@@ -74,16 +74,16 @@ function Bell() {
     if (!told.current) { told.current = new Set(barks.map((b) => b.id)); return; }
     for (const b of newBarks) if (!told.current.has(b.id)) { told.current.add(b.id); const w = T.barkWords(b.counts); toast("Tallyhound barked. " + (b.escalation ? "Something has waited more than a working day." : w.line), { label: "Open queue", run: () => openBark(b) }); }
   }, [newBarks.map((b) => b.id).join()]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const alerts: Row[] = T.S.alerts || [], unread = alerts.filter((a) => !a.read).length + newBarks.length, LV: Record<string, string> = { high: "bad", medium: "warn", low: "", info: "info" };
+  const alerts: Row[] = T.S.alerts || [], unread = alerts.filter((a) => !a.read).length + newBarks.length, LV: Record<string, string> = { high: "bad", medium: "warn", low: "", info: "info" }, LW: Record<string, string> = { high: "Urgent", medium: "Today", low: "When you can", info: "For you to know" };
   useEffect(() => { if (!open) return; const out = (ev: MouseEvent) => { if (box.current && !box.current.contains(ev.target as Node)) setOpen(false); }, esc = (ev: KeyboardEvent) => { if (ev.key === "Escape") setOpen(false); }; document.addEventListener("mousedown", out); document.addEventListener("keydown", esc); return () => { document.removeEventListener("mousedown", out); document.removeEventListener("keydown", esc); }; }, [open]);
   const go = (a: Row) => { setOpen(false); void act("alertRead", a.id).catch(() => {}); if (a.engId) nav("/clients/" + a.engId + "?tab=" + (a.kind === "handoff" || a.kind === "sla" ? "conversation" : "checklist")); };
   return <div className="rel" ref={box}>
-    <button className="btn icon ghost" style={{ position: "relative" }} aria-label={unread ? "Alerts, " + unread + " unread" : "Alerts"} aria-expanded={open} onClick={() => setOpen(!open)}><Icon name="bell" />{unread ? <span className="badge-dot">{unread}</span> : null}</button>
+    <button className="btn icon ghost" style={{ position: "relative" }} aria-label={unread ? "Barks, " + unread + " unread" : "Barks"} aria-expanded={open} onClick={() => setOpen(!open)}><Icon name="bell" />{unread ? <span className="badge-dot">{unread}</span> : null}</button>
     {open ? <div className="menu-pop" style={{ width: "min(380px,90vw)", maxHeight: 420, overflow: "auto" }}>
       {barks.length ? <><div className="row" style={{ padding: "6px 10px" }}><b>Barks</b><span className="sp" /><span className="small faint">Things in the review queue for you</span></div>
         {barks.slice(0, 6).map((b) => { const w = T.barkWords(b.counts); return <button key={b.id} style={{ alignItems: "flex-start", opacity: b.readAt ? 0.6 : 1 }} onClick={() => openBark(b)}><Chip tone={b.escalation ? "warn" : "acc"}>{b.escalation ? "again" : "bark"}</Chip><span style={{ fontWeight: 500, whiteSpace: "normal" }}>{b.escalation ? "Something has waited more than a working day." : w.line}<br /><span className="small faint">{w.parts.join(", ")} · {when(T, b.at)}</span></span></button>; })}</> : null}
-      <div className="row" style={{ padding: "6px 10px" }}><b>Alerts</b><span className="sp" />{unread ? <button className="btn sm ghost" onClick={() => { void act("alertsRead").catch(() => {}); void act("barkRead", "all").catch(() => {}); }}>Mark all read</button> : null}</div>
-      {alerts.length ? alerts.slice(0, 10).map((a) => <button key={a.id} style={{ alignItems: "flex-start", opacity: a.read ? 0.6 : 1 }} onClick={() => go(a)}><Chip tone={LV[a.level]}>{a.level}</Chip><span style={{ fontWeight: 500, whiteSpace: "normal" }}>{a.text}<br /><span className="small faint">{when(T, a.at)}</span></span></button>) : <div className="small muted" style={{ padding: 10 }}>No alerts. Failed sends, questions past their reply time and storage problems show up here.</div>}
+      <div className="row" style={{ padding: "6px 10px" }}><b>{barks.length ? "Other barks" : "Barks"}</b><span className="sp" />{unread ? <button className="btn sm ghost" onClick={() => { void act("alertsRead").catch(() => {}); void act("barkRead", "all").catch(() => {}); }}>Mark all read</button> : null}</div>
+      {alerts.length ? alerts.slice(0, 10).map((a) => <button key={a.id} style={{ alignItems: "flex-start", opacity: a.read ? 0.6 : 1 }} onClick={() => go(a)}><Chip tone={LV[a.level]}>{LW[a.level] || "For you to know"}</Chip><span style={{ fontWeight: 500, whiteSpace: "normal" }}>{a.text}<br /><span className="small faint">{when(T, a.at)}</span></span></button>) : <div className="small muted" style={{ padding: 10 }}>Nothing else. Failed sends, questions past their reply time and storage problems show up here.</div>}
     </div> : null}
   </div>;
 }

@@ -32,7 +32,7 @@ scene("a document Tallyhound was unsure about is settled in Needs you: accept on
   const d1 = T.S.docs.find((d: D) => d.payer === "Bluebird Cafe"), v = T.verdict(d1), shown = await page.locator(".rvwrap .v3").evaluateAll((els) => els.map((e) => [e.querySelector("b")!.textContent, e.className.includes(" ok") ? true : e.className.includes(" no") ? false : null, e.querySelector(".small")!.textContent]));
   assert.deepEqual(shown, [["Right document", v.doc.ok, v.doc.why], ["Right information", v.info.ok, v.info.why], ["Clear to read", v.clear.ok, v.clear.why]]);
   assert.match(text(await page.locator(".rvwrap").textContent()), /Claude read it: Probably a W-2, partly in shadow/);
-  const sent = W.sms.sent.length; await page.getByRole("button", { name: /Accept as read/ }).click(); await page.getByText("Accepted.", { exact: true }).waitFor();
+  const sent = W.sms.sent.length; await page.getByRole("button", { name: "Accept", exact: true }).click(); await page.getByText("Accepted.", { exact: true }).waitFor();
   T = await W.state(firmId); assert.equal(T.S.docs.find((d: D) => d.id === d1.id).state, "accepted"); await page.locator(".rqi").nth(2).waitFor({ state: "detached" });
   // The next one: the model misread the payer. Correct it and accept in one step.
   assert.match(text(await page.locator(".rqi.on").textContent()), /Jo Day/); await page.locator(".rvwrap").getByLabel("Payer").fill("First Farmers Bank"); await page.getByRole("button", { name: "Save correction and accept" }).click(); await page.getByText("Correction saved and accepted.").waitFor();
@@ -89,7 +89,7 @@ scene("TH-RPL, TH-BRK-9: \"we sold the house\" becomes a change item with what T
   const said = W.sms.sent.slice(sent).map((m) => m.body).join(" | "); assert.match(said, /passed that to/); assert.ok(!/penalty|1098|mortgage|no longer/i.test(said), "the client heard more than a thank-you: " + said);
   const page = await W.signIn("pat1@firm1.test"); await page.locator(".side").getByRole("link", { name: /Review queue/ }).click(); await page.getByRole("button", { name: /^Change noted/ }).click();
   const pane = page.locator(".rq > div").nth(1); await pane.getByRole("heading", { name: "What Tallyhound knows" }).waitFor(); const seen = text(await pane.textContent());
-  assert.match(seen, /The client said: sold the house/); assert.match(seen, /Jo's last message: “we sold the house in June”/); assert.match(seen, /Understood: sold the house\. Suggested: remove mortgage interest statement\. Waiting for you\./);
+  assert.match(seen, /The client said: sold the house/); assert.match(seen, /Jo(?: wrote|'s last message): “we sold the house in June”/); assert.match(seen, /Understood: sold the house\. Suggested: remove mortgage interest statement\. Waiting for you\./);
   assert.match(seen, /Suggested next step.*Apply the change if it is right: remove mortgage interest statement/); assert.ok(!/penalty/.test(seen), "the model's own words reached the screen");
   await pane.getByRole("button", { name: "Apply suggested change" }).click(); await page.getByText("Checklist changed, and logged as coming from a reply.").waitFor();
   T = await W.state(firmId); const after = T.itemsOf(jo.id).find((i: { form: string }) => i.form === "1098"); assert.equal(after.state, "waived"); assert.equal(after.waiveReason, "sold_home"); assert.ok(T.S.audit.some((a: { action: string }) => a.action === "checklist.change_from_reply"));
@@ -119,14 +119,14 @@ scene("TH-BRK: ten items in five minutes are one bark; the bell shows it, the qu
   W.advance(6 * 60); await W.worker.pass();
   const barks = W.staffMails.slice(mails).filter((m) => /barked/.test(m.subject) && m.to === "alex@firm1.test"); assert.deepEqual(barks.map((m) => [m.to, m.subject]), [["alex@firm1.test", "Tallyhound barked. 10 things need your team."]]); assert.ok(!/Sam|Lee/.test(barks[0]!.body), "a client is named in the email");
   // In the app: the bell counts it, and it opens the queue on Alex's items only.
-  await alex.reload(); await alex.locator(".side .firm").waitFor(); await alex.getByRole("button", { name: /^Alerts, \d+ unread/ }).click(); await alex.getByText("10 things need your team.").first().click(); await alex.waitForURL("**/needs-you?mine=1");
+  await alex.reload(); await alex.locator(".side .firm").waitFor(); await alex.getByRole("button", { name: /^Barks, \d+ unread/ }).click(); await alex.getByText("10 things need your team.").first().click(); await alex.waitForURL("**/needs-you?mine=1");
   await alex.getByRole("button", { name: "Mine only" }).waitFor(); assert.equal(await alex.locator(".rqi").count(), 10); for (const t of await alex.locator(".rqi").allTextContents()) assert.match(t, /Sam Lee/);
   await alex.getByRole("button", { name: "Mine only" }).click(); await alex.getByRole("button", { name: "Everyone's" }).waitFor(); assert.ok((await alex.locator(".rqi").count()) > 10);
   T = await W.state(firmId); assert.ok(T.S.barks.some((b: { userId: string; readAt: unknown }) => b.userId === alexId && b.readAt), "opening the queue from the bark did not mark it read");
   // The owner adds owners to client questions; the next question barks both.
   await page.goto(W.url + "/settings?tab=barks"); await page.getByRole("heading", { name: "Who hears the barks" }).waitFor(); await page.getByLabel("Who hears: A client question").selectOption("named_users"); await page.getByLabel("Name a person for: A client question").selectOption(alexId); await page.getByText(/^Saved\. The hound barks/).waitFor(); await page.getByLabel("Name a person for: A client question").selectOption(ownerId);
   for (let i = 0; i < 50; i++) { T = await W.state(firmId); if (T.barkRoute({ kind: "question", engId: T.S.engs[1].id }).length === 2) break; await new Promise((r) => setTimeout(r, 100)); } assert.deepEqual(T.barkRoute({ kind: "question", engId: T.S.engs[1].id }).sort(), [alexId, ownerId].sort());
-  // Staff cannot change the firm's rules, and choose their own kinds under My alerts.
+  // Staff cannot change the firm's rules, and choose their own kinds under My barks.
   assert.equal((await alex.request.post(W.url + "/api/act", { data: { fn: "setBarkRules", args: [{}] } , headers: { "x-tallyhound": "1" } })).status(), 403);
-  await alex.getByRole("button", { name: "My alerts" }).click(); await alex.getByRole("dialog").getByLabel("Client questions").click({ force: true, noWaitAfter: true }); await alex.getByText("Saved.", { exact: true }).first().waitFor(); T = await W.state(firmId); assert.deepEqual(T.barkRoute({ kind: "question", engId: T.S.engs[1].id }), [ownerId]);
+  await alex.getByRole("button", { name: "My barks" }).click(); await alex.getByRole("dialog").getByLabel("Client questions").click({ force: true, noWaitAfter: true }); await alex.getByText("Saved.", { exact: true }).first().waitFor(); T = await W.state(firmId); assert.deepEqual(T.barkRoute({ kind: "question", engId: T.S.engs[1].id }), [ownerId]);
 });

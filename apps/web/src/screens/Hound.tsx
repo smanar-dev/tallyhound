@@ -6,13 +6,13 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useFeatures, useFirm } from "../lib/firm";
 import { Page } from "./Shell";
 import { Avatar, Chip, Empty, Icon } from "../components/ui";
-import { draftsToApprove, openTasks, type Row } from "../lib/select";
+import { draftsToApprove, waitingCount, type Row } from "../lib/select";
 import { cname, dt, emailFirst, emWords, plural, rel, when, changed } from "../lib/fmt";
 import type { IconName } from "../lib/icons";
 import type { Engine } from "virtual:engine";
 
 const KIND: Record<string, [IconName, string]> = { message: ["send", "Message"], read: ["eye", "Read"], decide: ["brain", "Decision"], schedule: ["clock", "Scheduled"], handoff: ["hand", "Passed to a person"], alert: ["bell", "Alert"], guardrail: ["lock", "Blocked message"], memory: ["spark", "Note kept"], escalate: ["fast", "Stepped up"], held: ["pause", "Held"] };
-const FILTERS: [string, string][] = [["all", "All"], ["read", "Read"], ["message", "Messages"], ["schedule", "Scheduled"], ["decide", "Decisions"], ["handoff", "Passed to a person"], ["escalate", "Stepped up"], ["memory", "Notes kept"], ["guardrail", "Blocked messages"], ["alert", "Alerts"]];
+const FILTERS: [string, string][] = [["all", "All"], ["read", "Read"], ["message", "Messages"], ["schedule", "Scheduled"], ["decide", "Decisions"], ["handoff", "Passed to a person"], ["escalate", "Stepped up"], ["memory", "Notes kept"], ["guardrail", "Blocked messages"], ["alert", "Barks"]];
 const ALL_TABS: [string, string][] = [["did", "What it did"], ["next", "Coming up"], ["drafts", "Drafts to approve"], ["rules", "Rules it follows"], ["ask", "Ask"]];
 // The engine's log uses a few older words. Shown here in the product's vocabulary.
 const words = (t: string) => String(t || "").replace(/\bquiet hours\b/gi, "sending hours").replace(/\bStuck\b/g, "Needs you").replace(/\bstuck\b/g, "waiting on you").replace(/\b[Oo]utreach\b/g, "collecting").replace(/\bhandoffs?\b/gi, "question for you").replace(/\bqueue\b/gi, "Coming up").replace(/\b[Rr]eview\b/g, "a person's check").replace(/\b[Dd]eliver(ed|y)?\b/g, "hand-off").replace(/\bapprovals?\b/gi, "your OK").replace(/\bengagements?\b/gi, "file").replace(/\binbox\b/gi, "messages").replace(/\bplaybook\b/gi, "rules").replace(/\bunmatched\b/gi, "unknown sender");
@@ -44,7 +44,7 @@ function AskTab() {
 export function Hound() {
   const { T, can, act, actMany, toast } = useFirm(), feat = useFeatures(), s = T.S, H = s.firm.hound, [params, setParams] = useSearchParams(), TABS = ALL_TABS.filter((t) => t[0] !== "ask" || feat.ask || params.get("tab") === "ask"), tab = TABS.some((t) => t[0] === params.get("tab")) ? params.get("tab")! : "did";
   const [filter, setFilter] = useState("all"), [edits, setEdits] = useState<Record<string, string>>({});
-  const drafts = draftsToApprove(T), waiting = openTasks(T).filter((t) => ["question", "call"].includes(t.kind)), alerts: Row[] = s.alerts || [], today = (d: Date) => d.toDateString() === s.now.toDateString();
+  const drafts = draftsToApprove(T), alerts: Row[] = s.alerts || [], today = (d: Date) => d.toDateString() === s.now.toDateString();
   const wk: Row[] = s.msgs.filter((m: Row) => s.now - m.at < 7 * T.DAY), out = wk.filter((m) => m.dir === "out" && m.status === "delivered").length, auto = wk.filter((m) => m.dir === "out" && m.kind === "auto" && m.status === "delivered" && !m.approvedBy).length;
   const say = (r: unknown, ok: string) => toast(r ? String(r) : ok);
   const approve = async (m: Row) => { try { const r = await act("approveMsg", m.id, changed(edits[m.id], m.body)); toast(r ? "Not sent: " + r + "." : EM ? "Approved. It goes out now." : "Approved. It goes out now, or when sending hours begin for this client."); } catch { /* said */ } };
@@ -90,7 +90,7 @@ export function Hound() {
 
   return <Page title="The hound" actions={<Chip tone={H.mode === "copilot" ? "info" : "good"}>{H.mode === "copilot" ? "You approve each message" : "It sends on its own"}</Chip>}>
     {!started ? <div className="card pad row"><span className="ico"><Icon name="spark" small /></span><div className="grow"><b>The hound has nothing to do yet.</b><div className="small muted">Once you say go fetch, this page shows every message it reads and sends, what is coming up, and anything it needs from you.</div></div><Link className="btn pri" to="/">Go to Home</Link></div> : null}
-    <div className="grid g4">{([[out ? Math.round((100 * auto) / out) + "%" : "n/a", "Sent with no staff touch", "last 7 days"], [s.hlog.filter((h: Row) => today(h.at)).length, "Things it did today", plural(s.hlog.filter((h: Row) => today(h.at) && h.model === "Claude").length, "needed", "needed") + " Claude to read or write"], [drafts.length + waiting.length, "Waiting on you", plural(drafts.length, "draft") + " to approve, " + plural(waiting.length, "question or call", "questions or calls")], [alerts.filter((a) => !a.read).length, "Unread alerts", "under the bell, top right"]] as [string | number, string, string][]).map((x) => <div className="card stat" key={x[1]}><b>{x[0]}</b><span>{x[1]}</span><small>{x[2]}</small></div>)}</div>
+    <div className="grid g4">{([[out ? Math.round((100 * auto) / out) + "%" : "None yet", "Sent on its own", "without anyone at the firm, last 7 days"], [s.hlog.filter((h: Row) => today(h.at)).length, "Things it did today", plural(s.hlog.filter((h: Row) => today(h.at) && h.model === "Claude").length, "needed", "needed") + " Claude to read or write"], [waitingCount(T), "Waiting on you", "The same count as the review queue"], [alerts.filter((a) => !a.read).length, "Unread barks", "under the bell, top right"]] as [string | number, string, string][]).map((x) => <div className="card stat" key={x[1]}><b>{x[0]}</b><span>{x[1]}</span><small>{x[2]}</small></div>)}</div>
     <div className="tabs" role="tablist" style={{ margin: 0 }}>{TABS.map((t) => <button key={t[0]} role="tab" aria-selected={tab === t[0]} className={tab === t[0] ? "on" : ""} onClick={() => setParams(t[0] === "did" ? {} : { tab: t[0] })}>{t[1]}{t[0] === "drafts" && drafts.length ? <span className="n">{drafts.length}</span> : null}</button>)}</div>
     {body}
   </Page>;

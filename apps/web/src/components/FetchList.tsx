@@ -15,6 +15,12 @@ import type { Row } from "../lib/select";
 const cap = (t: string) => String(t || "").replace(/^[a-z]/, (ch) => ch.toUpperCase());
 const HELD: Record<string, string> = { catalogue_date: "not issued before then", client_date: "the client's date", staff_date: "your date" };
 /** One finding from last year's records, in words. Names only: the reader and the engine drop every number first. */
+// The engine's short reason tags, in a preparer's words.
+const reasonWords = (r: string): string => {
+  let m = /^(\d+) from the return$/.exec(r); if (m) return +m[1]! === 1 ? "1 document comes only from last year's return. Check it still applies" : m[1] + " documents come only from last year's return. Check they still apply";
+  m = /^(\d+) without an issuer$/.exec(r); if (m) return +m[1]! === 1 ? "1 document has no issuer yet" : m[1] + " documents have no issuer yet";
+  return ({ "New client": "New client: no records from last year", "No email": "No email address yet", "One-time document last year": "Last year had a one-time document", "A file couldn't be read": "A file could not be read", "No records yet": "No records from last year yet" } as Record<string, string>)[r] || r;
+};
 export function findingWords(T: Row, f: Row): string {
   if (f.kind === "payer" && f.form) return cap(T.itemTitle({ form: f.form, payer: f.payer || null }, "en"));
   if (f.kind === "schedule") return String(f.value || "A schedule");
@@ -43,12 +49,12 @@ export function FetchList({ e, c, onDone, openDoc }: { e: Row; c: Row; onDone?: 
       <div className="grow" style={{ minWidth: 0 }}>
         <b className={i.state === "off" ? "faint" : ""}>{title}</b>{i.isNew ? <> <Chip tone="info plain">New this year</Chip></> : null}{entry && entry.newForYear ? <> <Chip tone="acc plain">New for {s.firm.taxYear || 2026}</Chip></> : null}
         {h ? <> <Chip tone="info plain">{"Held until " + dshort(new Date(h.until)) + ": " + HELD[h.reason]}</Chip></> : null}
-        <div className="small muted">{proposed ? "" : (ISTATE[i.state] || "") + " · "}{T.SOURCES[i.source] || "Added by the firm"}{i.why ? " · " + i.why : ""}{p ? " · Asked of " + p.name : ""}</div>
+        <div className="small muted">{proposed ? "" : (ISTATE[i.state] || "") + " · "}{i.why || T.SOURCES[i.source] || "Added by the firm"}{p ? " · Asked of " + p.name : ""}</div>
         {(i.evidence || []).slice(0, 2).map((v: Row, k: number) => <div key={k} className="small faint trunc">{v.file}{v.page ? ", page " + v.page : ""}{v.text ? ": “" + v.text + "”" : ""}</div>)}
         {edit && needsIssuer && ["off", "expected"].includes(i.state) ? <IssuerEdit label={entry.issuerLabel} title={title} onSave={(v) => run("setIssuer", [i.id, v], v ? "Issuer saved." : "Cleared.")} /> : null}
       </div>
       {openDoc && i.docId ? <button className="btn sm ghost" aria-label={"Open the " + title} onClick={() => openDoc(i.docId)}><Icon name="eye" small /></button> : null}
-      {edit && !proposed ? <div className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
+      {edit && !proposed ? <div className="row flacts" style={{ gap: 6, flexWrap: "nowrap" }}>
         {T.OPEN.includes(i.state) ? <select aria-label={"Who is asked for the " + title} value={i.assignee || ""} onChange={(ev) => { const v = ev.target.value; if (v === "+") setWho(i); else void run("assignItem", [i.id, v], v ? "It goes to them in their own letter." : "Asked of " + c.first + " again."); }}>
           <option value="">{c.first}</option>{contacts.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}<option value="+">Someone new</option></select> : null}
         {T.OPEN.includes(i.state) ? <button className="btn sm" onClick={() => { setWhy("not_this_year"); setWaive(i); }}>Not needed</button> : i.state === "waived" ? <button className="btn sm" onClick={() => void run("itemNeeded", [i.id, true], "Asked for again.")}>Ask again</button> : null}
@@ -58,7 +64,7 @@ export function FetchList({ e, c, onDone, openDoc }: { e: Row; c: Row; onDone?: 
   return <div className="card fetchlist">
     <div className="hd"><h3>Fetch list</h3>{proposed ? (off ? <Chip>Not this season</Chip> : L.group === "ready" ? <Chip tone="good">Ready</Chip> : <Chip tone="warn">Needs a look</Chip>) : <Chip tone="good">Approved</Chip>}<span className="sp" />
       <span className="small muted">{proposed ? "Proposed. Nothing is sent to anyone until you approve their list." : "Approved by " + (L.approvedBy || "the firm") + (L.approvedAt ? ", " + when(T, new Date(L.approvedAt)) : "") + ". Version " + (L.version || 1) + "."}</span></div>
-    {proposed && !off && (L.reasons || []).length ? <div className="bd row" style={{ gap: 6 }}><span className="small muted">Why it needs a look:</span>{L.reasons.map((r: string) => <Chip key={r} tone="warn plain">{r}</Chip>)}</div> : null}
+    {proposed && !off && (L.reasons || []).length ? <div className="bd row" style={{ gap: 6 }}><span className="small muted">Why it needs a look:</span>{L.reasons.map((r: string) => <Chip key={r} tone="warn plain">{reasonWords(r)}</Chip>)}</div> : null}
     {off ? <div className="bd note" style={{ margin: 12 }}><Icon name="pause" small /><span className="grow">Not this season. No letters go to {c.first}, and they stay on your client list.</span>{edit ? <button className="btn sm" onClick={() => void season(false)}>Bring back</button> : null}</div> : null}
     {items.length ? <ul className="list plainlist">{items.map(row)}</ul> : <div className="bd small muted">Nothing on the list yet. Add a document below{proposed ? ", or add last year's records and Tallyhound proposes one" : ""}.</div>}
     {edit && !off ? <div className="bd row addrow" style={{ borderTop: "1px solid var(--line2)" }}>

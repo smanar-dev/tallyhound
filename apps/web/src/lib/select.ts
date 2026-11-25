@@ -6,6 +6,8 @@ import type { Engine } from "virtual:engine";
 import { knows, needsYou, nextStep, openTasks, stepWords, type Need, type Row } from "../../../server/src/needs";
 export { knows, needsYou, nextStep, openTasks, stepWords, type Need, type Row };
 export const draftsToApprove = (T: Engine): Row[] => T.S.msgs.filter((m: Row) => m.status === "approval");
+/** The one "waiting on you" number: the review queue badge, Home and The hound all show this. */
+export const waitingCount = (T: Engine): number => needsYou(T).length + draftsToApprove(T).length;
 
 // Why something is waiting, in the words a preparer would use.
 const WHY: Record<string, string> = { "Not on the checklist": "Sent a document that is not on their list", "New this year": "Said what is new this year", "Low confidence": "Tallyhound was not sure what this is", "Confirm the sniff result": "The sniff test has decided: confirm it", "A suggested step": "A suggested step from a reply", "Emailed an attachment": "Emailed a file that is in your mailbox", "Client says none": "Says they don't have it", Question: "Asked a question", "Call the client": "A call to make", "Mentioned a change": "Mentioned a change", "Says someone else has it": "Says someone else has it", "Says this is not theirs": "Urgent: says the messages are not theirs", "Arrived after close": "Arrived after the file was closed", "Email after close": "Emailed after the file was closed", "File after close": "Sent a file after the file was closed" };
@@ -46,6 +48,6 @@ export const countBy = (T: Engine, status: string): number => T.S.engs.filter((e
 // The filters above the client list. "Needs you" is anyone waiting on a person, whatever their status.
 export const PILLS: [string, string][] = [["all", "All"], ["attention", "Needs you"], ["in_progress", "Fetching"], ["awaiting_consent", "Waiting for OK to text"], ["not_started", "Ready to fetch"], ["complete", "All fetched"], ["off_season", "Not this season"], ["other", "Paused or opted out"]];
 export function inPill(T: Engine, e: Row, p: string, open: Row[] = openTasks(T)): boolean {
-  return p === "all" || (p === "attention" ? e.status === "stuck" || open.some((t) => t.engId === e.id) : p === "other" ? ["paused", "opted_out", "closed"].includes(e.status) : e.status === p);
+  return p === "all" || (p === "attention" ? e.status === "stuck" || open.some((t) => t.engId === e.id) : p === "other" ? ["paused", "opted_out", "closed"].includes(e.status) || (!!(T.client(e.clientId) || {}).emailOff && !["complete", "off_season"].includes(e.status)) : e.status === p);
 }
 export const readyToStart = (T: Engine): Row[] => T.S.engs.filter((e: Row) => e.status === "not_started" && e.confirmed);

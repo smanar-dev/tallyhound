@@ -59,15 +59,22 @@ export function FirmProvider({ children, onSignedOut }: { children: ReactNode; o
     const h = window.setInterval(tick, REFRESH_MS); document.addEventListener("visibilitychange", tick);
     return () => { window.clearInterval(h); document.removeEventListener("visibilitychange", tick); };
   }, [reload]);
-  const act = useCallback(async (fn: string, ...args: unknown[]) => {
+  // A double click sends the same action twice before the first answer is back. The second waits on the first and gets its answer,
+  // so it never reaches the server and never turns "Approved" into "Already approved".
+  const inFlight = useRef(new Map<string, Promise<unknown>>());
+  const once = useCallback(<R,>(key: string, run: () => Promise<R>): Promise<R> => {
+    const had = inFlight.current.get(key); if (had) return had as Promise<R>;
+    const p = run().finally(() => { inFlight.current.delete(key); }); inFlight.current.set(key, p); return p;
+  }, []);
+  const act = useCallback((fn: string, ...args: unknown[]) => once("1:" + JSON.stringify([fn, args]), async () => {
     try { const r = await api.act(fn, args); await reload(); return r.result; }
     catch (err) { if (err instanceof ApiError && err.status === 401) { await reload(); return null; } toast((err as Error).message); throw err; }
-  }, [reload, toast]);
-  const actMany = useCallback(async (calls: [string, ...unknown[]][]) => {
+  }), [once, reload, toast]);
+  const actMany = useCallback((calls: [string, ...unknown[]][]) => once("n:" + JSON.stringify(calls), async (): Promise<unknown[]> => {
     if (!calls.length) return [];
     try { const r = await api.actMany(calls.map(([fn, ...args]) => ({ fn, args }))); await reload(); return r.results; }
     catch (err) { if (err instanceof ApiError && err.status === 401) { await reload(); return []; } toast((err as Error).message); throw err; }
-  }, [reload, toast]);
+  }), [once, reload, toast]);
   const value = useMemo<Firm | null>(() => phase.at !== "ready" ? null : { T: phase.T, me: phase.me, can: (level) => (level === "owner" ? phase.me.role === "owner" : phase.me.role !== "read_only"), act, actMany, reload, toast }, [phase, act, actMany, reload, toast]);
 
   if (phase.at === "loading" || phase.at === "signin") return <div className="main"><div className="empty hound" role="status"><Hound width={120} mode="run" /><p>Loading your firm…</p></div></div>;

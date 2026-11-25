@@ -14,7 +14,7 @@ scene("web: a new owner signs in through the screens and lands on a Home that sa
   assert.match(text(await page.locator(".banner.info").textContent()), /Nothing is sent to clients until it is done/, "an unchecked firm is told why nothing sends");
   // docs/UX.md rule 2: three numbered steps, and only the current one has a button. Rule 6: no primary button that cannot do anything.
   const steps = page.locator(".gs"); assert.equal(await steps.count(), 3); assert.equal(await page.locator(".gs.cur").count(), 1);
-  assert.equal(await page.locator(".gs:not(.cur) .btn").count(), 0); assert.deepEqual((await page.locator(".gs.cur .btn").allTextContents()).map(text), ["Import a list", "Add one client"]);
+  assert.equal(await page.locator(".gs:not(.cur) .btn").count(), 0); assert.deepEqual((await page.locator(".gs.cur .btn").allTextContents()).map(text), ["Add clients", "Add one client"]);
   assert.equal(await page.getByRole("button", { name: /Go fetch/ }).count(), 0);
   assert.equal(await page.locator(".pipe").count(), 0, "no counts for a firm with no clients");
   // The menu: four things, then More (rule 4). Settings is the owner's.

@@ -33,7 +33,7 @@ for (const letters of [false, true]) scene("T-52: an HTML payload planted in eve
   const page = await W.signIn("pat1@firm1.test");
   for (const route of await routesFor(W, firmId)) {
     await page.goto(W.url + route); await page.locator(".side .firm").waitFor(); await page.waitForTimeout(50);
-    if (route === "/") { await page.getByLabel(/Alerts/).click(); await page.locator(".menu-pop").waitFor(); await page.getByLabel("Find a client").fill("Jo"); await page.locator(".sres").waitFor(); }
+    if (route === "/") { await page.getByLabel(/Barks/).click(); await page.locator(".menu-pop").waitFor(); await page.getByLabel("Find a client").fill("Jo"); await page.locator(".sres").waitFor(); }
     const r = await page.evaluate(() => ({ pwned: (window as unknown as { __pwned?: number }).__pwned, imgs: document.querySelectorAll('img[src="x"]').length, scripts: [...document.querySelectorAll("script")].filter((s) => !s.src).length, bold: [...document.querySelectorAll("b")].filter((b) => b.textContent === "bold").length, text: document.body.innerText }));
     assert.equal(r.pwned, undefined, route + ": the payload ran"); assert.equal(r.imgs, 0, route + ": the payload became an image"); assert.equal(r.scripts, 0, route + ": an inline script is on the page"); assert.equal(r.bold, 0, route + ": the payload became markup");
     if (route === "/") assert.ok(r.text.includes("<img src=x onerror="), "the payload is on screen, as the text it is");

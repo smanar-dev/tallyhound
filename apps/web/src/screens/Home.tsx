@@ -4,7 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useState, type ReactNode } from "react";
 import { useFeatures, useFirm } from "../lib/firm";
 import { Page } from "./Shell";
-import { activity, countBy, needReason, needsYou, openTasks, readyToStart, type Event, type Need, type Row } from "../lib/select";
+import { activity, countBy, needReason, needsYou, openTasks, readyToStart, waitingCount, type Event, type Need, type Row } from "../lib/select";
 import { cname, DOW, emailFirst, fmtDay, fname, iname, MON, plural, rel, senderState, STAT, when } from "../lib/fmt";
 import { Avatar, DocChip, Empty, Icon, Ring } from "../components/ui";
 
@@ -15,22 +15,22 @@ function NeedRow({ x }: { x: Need }) {
   const { T, can, act } = useFirm(), decide = (d: string) => void act("decideTask", x.t!.id, d, d === "reask" ? { reason: "illegible" } : { reason: "not needed" }).catch(() => {});
   let acts: ReactNode = null;
   if (can()) {
-    if (x.t) acts = x.t.kind === "document" ? <Link className="btn sm pri" to={"/needs-you?task=" + x.t.id}>Check it</Link>
+    if (x.t) acts = x.t.kind === "document" ? <Link className="btn sm" to={"/needs-you?task=" + x.t.id}>Check it</Link>
       : x.t.kind === "gone_quiet" || x.t.kind === "change_noted" ? <Link className="btn sm" to={"/needs-you?task=" + x.t.id}>Decide what next</Link>
-      : x.t.kind === "question" || x.t.kind === "call" ? <Link className="btn sm pri" to={"/clients/" + x.e.id + "?tab=conversation"}>{x.t.kind === "call" ? "Call script" : "Reply"}</Link>
+      : x.t.kind === "question" || x.t.kind === "call" ? <Link className="btn sm" to={"/clients/" + x.e.id + "?tab=conversation"}>{x.t.kind === "call" ? "Call script" : "Reply"}</Link>
       : x.t.kind === "says_none" ? <><button className="btn sm" onClick={() => decide("waive")}>Not needed this year</button><button className="btn sm" onClick={() => decide("reask")}>Ask again</button></>
       : <button className="btn sm" onClick={() => decide("handled")}>Dismiss</button>;
-    else if (x.checkin) acts = <Link className="btn sm pri" to={"/clients/" + x.e.id + "?tab=checklist"}>Go through the checklist</Link>;
-    else if (x.suggest) acts = <Link className="btn sm pri" to={"/clients/" + x.e.id + "?tab=" + (x.custom ? "checklist" : "suggested")}>See suggestion</Link>;
+    else if (x.checkin) acts = <Link className="btn sm" to={"/clients/" + x.e.id + "?tab=checklist"}>{emailFirst(T) ? "Go through the fetch list" : "Go through the checklist"}</Link>;
+    else if (x.suggest) acts = <Link className="btn sm" to={"/clients/" + x.e.id + "?tab=" + (x.custom ? "checklist" : "suggested")}>See suggestion</Link>;
     else acts = <Link className="btn sm" to={"/clients/" + x.e.id + "?tab=conversation"}><Icon name="msg" small />Message</Link>;
   }
-  return <div className="li"><Avatar first={x.c.first} last={x.c.last} /><div className="grow"><Link className="btn ghost" style={{ padding: 0, fontWeight: 700 }} to={"/clients/" + x.e.id}>{cname(x.c)}</Link><div className="small muted trunc">{needReason(T, x)} · {rel(T, x.at)}</div></div><div className="row" style={{ gap: 6 }}>{acts}</div></div>;
+  return <div className="li needrow"><Avatar first={x.c.first} last={x.c.last} /><div className="grow"><Link className="btn ghost" style={{ padding: 0, fontWeight: 700 }} to={"/clients/" + x.e.id}>{cname(x.c)}</Link><div className="small muted trunc">{needReason(T, x)} · {rel(T, x.at)}</div></div><div className="row needacts" style={{ gap: 6 }}>{acts}</div></div>;
 }
 
 function FeedLine({ x }: { x: Event }) {
   const { T } = useFirm(), who = <b>{cname(x.c)}</b>;
   let lead: ReactNode = <Avatar first={x.c.first} last={x.c.last} />, body: ReactNode, to = "/clients/" + x.e.id, label = "Open client";
-  if (x.kind === "doc") { lead = <span className="ico"><Icon name="file" small /></span>; body = <>{who} sent {x.d.form === "OTHER" ? "a document" : "a " + fname(T, x.d.form)}{x.d.payer ? " from " + x.d.payer : ""} <DocChip state={x.d.state} /></>; }
+  if (x.kind === "doc") { lead = <span className="ico"><Icon name="file" small /></span>; body = <>{who} sent {x.d.form === "OTHER" ? "a document" : "a " + fname(T, x.d.form)}{x.d.payer ? " from " + x.d.payer : ""} <DocChip state={x.d.state} d={x.d} /></>; }
   else if (x.kind === "attachments") { lead = <span className="ico"><Icon name="mail" small /></span>; body = <>{who} emailed {plural(x.n, "attachment")} and a note · {x.understood}</>; }
   else if (x.kind === "reply") body = <>{who} {x.portal ? "used the upload page" : "replied"}: “{x.quote}”</>;
   else if (x.kind === "manual") body = <><b>{x.by}</b> messaged {cname(x.c)}</>;
@@ -59,7 +59,7 @@ function StartCard() {
   const cur = !n ? 1 : unconf ? 2 : 3, backs = s.engs.filter((e: Row) => e.checkin && e.checkin.doneAt).length, sentCk = s.engs.filter((e: Row) => e.checkin).length;
   const Step = ({ k, title, text, children }: { k: number; title: string; text: string; children?: ReactNode }) => <div className={"gs " + (k < cur ? "done" : k === cur ? "cur" : "")}><span className="gsn">{k < cur ? <Icon name="check" small /> : k}</span><div className="grow"><b>{title}</b><div className="small muted">{text}</div>{k === cur && children ? <div className="row" style={{ marginTop: 10 }}>{children}</div> : null}</div></div>;
   return <div className="card pad col" style={{ gap: 4 }}><h2>Get your first requests out</h2>
-    <Step k={1} title="Add your clients" text={n ? plural(n, "client") + " added." : (emailFirst(T) ? "Upload a spreadsheet of names and email addresses, or add one client to try it." : "Upload a spreadsheet of names with a mobile number or email, or add one client to try it.")}><Link className="btn pri" to="/add-clients"><Icon name="upload" small />Import a list</Link><Link className="btn" to="/clients?do=add"><Icon name="plus" small />Add one client</Link></Step>
+    <Step k={1} title="Add your clients" text={n ? plural(n, "client") + " added." : (emailFirst(T) ? "Upload a spreadsheet of names and email addresses, or add one client to try it." : "Upload a spreadsheet of names with a mobile number or email, or add one client to try it.")}><Link className="btn pri" to="/add-clients"><Icon name="upload" small />Add clients</Link><Link className="btn" to="/clients?do=add"><Icon name="plus" small />Add one client</Link></Step>
     {emailFirst(T) ? <Step k={2} title="Approve each fetch list" text={n && !unconf ? "Every fetch list is approved." : plural(unconf, "fetch list") + " wait for you. Approving a list sends that client's first letter; nothing goes before."}>{readyLists ? <button className="btn pri" onClick={approveReady}><Icon name="check" small />Approve the {plural(readyLists, "ready list")}</button> : null}<Link className={"btn" + (readyLists ? "" : " pri")} to="/clients?show=not_started">Go through them one by one</Link></Step>
     : <Step k={2} title="Give each client a checklist" text={n && !unconf ? "Every client has a confirmed checklist." : (sentCk > backs ? backs + " of " + sentCk + " check-ins are back. " : "") + "The list of documents each client owes you. Let clients tell you with a few taps, or pick a ready-made list for everyone."}><button className="btn pri" onClick={checkinAll}><Icon name="send" small />Ask clients with a 2-minute check-in</button><Link className="btn" to="/clients?do=assign"><Icon name="file" small />Choose a checklist for all {unconf}</Link><Link className="btn" to="/clients?show=not_started">Go through them one by one</Link></Step>}
     <Step k={3} title="Go fetch" text={(emailFirst(T) ? "Tallyhound writes each client one letter by email listing every document, with their private upload link, checks what comes back, and follows up. " : "Tallyhound asks each client for their documents by text and email, checks what comes back, and follows up. ") + (s.firm.hound.mode === "copilot" ? (emailFirst(T) ? "You approve each letter before it goes." : "You approve each message before it goes.") : "It only comes to you when it needs a person.")}><Link className="btn pri" to="/clients?do=start"><Icon name="send" small />Go fetch for {plural(ready, "client")}</Link></Step>
@@ -92,7 +92,7 @@ export function Home() {
   const more = readyToStart(T).length;
   return <Page title="Home" actions={can() && more && anyStarted ? <Link className="btn pri" to="/clients?do=start"><Icon name="send" small />Go fetch ({more})</Link> : null}>
     <div><h1>Good {h < 12 ? "morning" : h < 17 ? "afternoon" : "evening"}, {s.user.first}</h1>
-      <p className="muted" style={{ marginTop: 4 }}>{DOW[s.now.getDay()]}, {MON[s.now.getMonth()]} {s.now.getDate()}. {!s.clients.length ? "Three steps to your first request. It takes about ten minutes." : !anyStarted ? "Your clients are in. Nothing has been sent yet." : ny.length ? ny.length + " thing" + (ny.length > 1 ? "s need" : " needs") + " you. Tallyhound is handling the rest." : "Nothing needs you. Tallyhound is collecting for everyone else."}</p></div>
+      <p className="muted" style={{ marginTop: 4 }}>{DOW[s.now.getDay()]}, {MON[s.now.getMonth()]} {s.now.getDate()}. {!s.clients.length ? "Three steps to your first request. It takes about ten minutes." : !anyStarted ? "Your clients are in. Nothing has been sent yet." : waitingCount(T) ? waitingCount(T) + " thing" + (waitingCount(T) > 1 ? "s need" : " needs") + " you. Tallyhound is handling the rest." : "Nothing needs you. Tallyhound is collecting for everyone else."}</p></div>
     <StartCard /><SetupCard />
     {s.clients.length ? <div className="pipe">{T.pipeline().map((p: Row, i: number) => <Link key={p.key} className="pstep" to={PIPE_TO[p.key] || "/clients"}><span className="pn">Step {i + 1}</span><b>{p.n}</b><span>{p.label}</span><small>{p.hint}</small></Link>)}</div> : null}
     {s.clients.length ? <>
@@ -111,7 +111,7 @@ export function Home() {
             <div className="bar" style={{ height: 10 }}>{SEGS.map((g) => <i key={g[0]} style={{ width: (100 * countBy(T, g[0])) / Math.max(1, s.engs.length) + "%", background: g[1], marginRight: 2 }} />)}</div></div>
           <div className="card"><div className="hd"><h2>Coming up</h2></div>
             {upcoming.length ? <div className="list">{upcoming.map((e) => { const c = T.client(e.clientId), it = T.nextItem(e); return <div className="li" key={e.id}><Icon name="clock" small /><div className="grow"><b>{cname(c)}</b><div className="small muted trunc">{e.status === "awaiting_consent" ? "Invitation reminder" : it ? (it.state === "requested" ? "Reminder: " : "Request: ") + iname(T, it) : "Next step"}</div></div><span className="small faint" style={{ whiteSpace: "nowrap" }}>{rel(T, e.next)}</span></div>; })}</div> : <Empty small>Nothing is due to go out. Reminders and next requests are listed here before they are sent.</Empty>}
-            <div className="bd small muted" style={{ borderTop: "1px solid var(--line2)" }}>Messages only go out {s.firm.quietStart} am to {s.firm.quietEnd - 12} pm, never on Sundays or federal holidays, at most one a day per client.</div></div>
+            <div className="bd small muted" style={{ borderTop: "1px solid var(--line2)" }}>{emailFirst(T) ? "Letters go on your working days at about " + T.LETTER_HOUR + " in the morning, never on a federal holiday or a day you are closed, and at most one a day per client." : "Messages only go out " + s.firm.quietStart + " am to " + (s.firm.quietEnd - 12) + " pm, never on Sundays or federal holidays, at most one a day per client."}</div></div>
           {s.tray.length ? <div className="card pad row"><span className="ico in_review"><Icon name="inbox" small /></span><div className="grow"><b>{plural(s.tray.length, "message")} from an unknown sender</b><div className="small muted">Tallyhound could not tell which client sent {s.tray.length === 1 ? "it" : "them"}</div></div><Link className="btn sm" to="/messages?show=unknown">Match to a client</Link></div> : null}
         </div>
       </div></> : null}

@@ -32,11 +32,11 @@ export function SignIn() {
 
   return <main className="auth">
     <p className="logo dark"><Logo size={36} /></p>
-    {error ? <div className="banner bad" role="alert">{error}</div> : null}
+    {error ? <div className="banner bad" role="alert" id="signin-error">{error}</div> : null}
     {step === "email" && <Card title="Sign in">
       <p className="muted">Enter your work email. We will send you a link. There is no password.</p>
-      <form className="col" style={{ gap: 8 }} onSubmit={run(async () => { await api.post("/auth/link", { email: email.trim() }); go("sent"); })}>
-        <label htmlFor="email">Work email</label><input id="email" type="email" autoComplete="email" required autoFocus value={email} onChange={(e) => setEmail(e.target.value)} />
+      <form className="col" style={{ gap: 8 }} noValidate onSubmit={run(async () => { if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) throw Object.assign(new Error("Enter your work email address, like name@yourfirm.com."), { code: "bad_email" }); await api.post("/auth/link", { email: email.trim() }); go("sent"); })}>
+        <label htmlFor="email">Work email</label><input id="email" type="email" autoComplete="email" required autoFocus aria-invalid={error ? true : undefined} aria-describedby={error ? "signin-error" : undefined} value={email} onChange={(e) => setEmail(e.target.value)} />
         <button className="btn pri" disabled={busy}>Email me a sign-in link</button>
         {signup ? <p className="small muted" style={{ marginTop: 6 }}>New to Tallyhound? <a href="/signup">Start a 14-day free trial</a></p> : null}
       </form>

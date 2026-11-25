@@ -78,7 +78,7 @@ scene("fetch lists: the import keeps SSNs out, reads last year's files in the br
   await page.goto(W.url + "/clients?show=off_season"); await page.getByRole("button", { name: /^Not this season/ }).waitFor(); assert.match(text(await page.locator("table").textContent()), /Ana Ruiz.*Not this season/);
   await page.goto(W.url + "/clients/" + ana.id); await page.getByRole("button", { name: "Bring back" }).click(); await page.getByText("Ana is back on for this season.").waitFor();
   T = await W.state(firmId); assert.equal(T.eng(ana.id).status, "not_started");
-  await page.goto(W.url + "/clients"); assert.match(text(await page.locator("table").textContent()), /Ana Ruiz.*Ready to fetch\s*Needs a look/);
+  await page.goto(W.url + "/clients"); const rows = text(await page.locator("table").textContent()); assert.match(rows, /Ana Ruiz.*Needs a look/); assert.ok(!/Ana Ruiz.*Ready to fetch/.test(rows), "a list nobody approved showed as Ready to fetch");
 }, { letters: true });
 
 scene("fetch lists: an approved list on the client's page (assign to a new contact, not needed and back, add a document, a note, a file read in the browser); Documents settings save; a New this year item adds to the list", async (W) => {
@@ -138,4 +138,12 @@ scene("fetch lists: on a 360 px phone the import's steps and the client's upload
   await page.getByRole("button", { name: "Skip" }).click(); await page.locator(".stat[data-n=look]").waitFor(); assert.ok(await noHorizontalScroll(page), "the lists step scrolls sideways");
   const sent = W.email.sent.find((m: any) => m.to === "maria@x.example")! as any, link = /\/u\/([A-Za-z0-9_-]+)/.exec(sent.body)![1]!; assert.ok(T.S.engs[0]);
   await page.goto(W.url + "/u/" + link); await page.waitForLoadState("load"); assert.ok(await noHorizontalScroll(page), "the upload page scrolls sideways");
+}, { letters: true });
+
+scene("fetch lists: the import's file buttons are reached with the keyboard alone", async (W) => {
+  await W.newFirm(); const page = await W.signIn("pat1@firm1.test");
+  await page.goto(W.url + "/add-clients"); await page.getByRole("heading", { name: "Bring in your client list" }).waitFor();
+  let found = false; for (let i = 0; i < 60 && !found; i++) { await page.keyboard.press("Tab"); found = await page.evaluate(() => { const a = document.activeElement as HTMLInputElement | null; return !!a && a.type === "file"; }); }
+  assert.ok(found, "Tab never reached the file input");
+  const ring = await page.evaluate(() => getComputedStyle((document.activeElement as HTMLElement).closest("label")!).outlineStyle); assert.equal(ring, "solid", "no visible focus on the button");
 }, { letters: true });

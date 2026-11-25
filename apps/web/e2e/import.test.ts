@@ -9,7 +9,7 @@ const text = (s: string | null) => (s || "").replace(/\s+/g, " ").trim();
 const CSV = ["Client Name First,Surname,E-mail Address,Cell,SSN,Fee,Staff", "Ana,Ruiz,ana@x.example,(615) 555-0133,123-45-6789,450,Pat", "No,Contact,,,987-65-4321,300,Pat", "BEN,OKAFOR,ben@x.example,615.555.0144,111-22-3333,275,Pat", ",,nobody@x.example,,,,"].join("\n");
 
 scene("T-24: a firm's export is imported in four steps, sensitive columns are never read, and the preview is what happens", async (W) => {
-  const { firmId } = await W.newFirm(), page = await W.signIn("pat1@firm1.test"); await page.locator(".gs.cur").getByRole("link", { name: "Import a list" }).click(); await page.getByText("Where is your client list today?").waitFor();
+  const { firmId } = await W.newFirm(), page = await W.signIn("pat1@firm1.test"); await page.locator(".gs.cur").getByRole("link", { name: "Add clients" }).click(); await page.getByText("Where is your client list today?").waitFor();
   await page.getByRole("button", { name: "Drake Tax" }).click(); assert.match(text(await page.locator(".steps-list").textContent()), /Report Manager/);
   await page.locator('input[type="file"]').setInputFiles({ name: "clients.xlsx", mimeType: "application/vnd.ms-excel", buffer: Buffer.from("PK") }); await page.getByText(/Save it as CSV first/).waitFor();
   await page.locator('input[type="file"]').setInputFiles({ name: "clients.csv", mimeType: "text/csv", buffer: Buffer.from(CSV) });
