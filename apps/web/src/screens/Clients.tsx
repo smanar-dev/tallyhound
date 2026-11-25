@@ -175,7 +175,7 @@ export function Clients() {
           {rows.length > limit ? <div className="bd row" style={{ justifyContent: "center", borderTop: "1px solid var(--line2)" }}><span className="small muted">Showing {limit} of {rows.length}</span><button className="btn sm" onClick={() => setLimit(limit + PAGE)}>Show {PAGE} more</button></div> : null}</>}
     </div>
     {ids.length && can() ? <div className="card pad row bulkbar" role="region" aria-label="Selected clients"><b>{ids.length} selected</b><span className="sp" />
-      <button className="btn sm" onClick={() => bulk("checkin")}>Send check-in</button><button className="btn sm" onClick={() => setDialog({ kind: "assign", ids })}>Choose a checklist</button><button className="btn sm" onClick={() => bulk("recommend")}>Add suggested documents</button>
+      {emailFirst(T) ? null : <><button className="btn sm" onClick={() => bulk("checkin")}>Send check-in</button><button className="btn sm" onClick={() => setDialog({ kind: "assign", ids })}>Choose a checklist</button></>}<button className="btn sm" onClick={() => bulk("recommend")}>Add suggested documents</button>
       <button className="btn sm" onClick={() => bulk("confirm")}>{emailFirst(T) ? "Approve lists" : "Confirm checklists"}</button><button className="btn sm" onClick={() => bulk("start")}>Go fetch</button><button className="btn sm" onClick={() => bulk("pause")}>Pause</button><button className="btn sm" onClick={() => bulk("resume")}>Resume</button>
       <button className="btn sm ghost" style={{ color: "#fff" }} onClick={clear}>Clear</button></div> : null}
     {dialog?.kind === "add" ? <AddClient onClose={() => setDialog(null)} /> : null}

@@ -53,11 +53,21 @@ for (const kind of KINDS) test("fetch lists (" + kind + "): a spreadsheet import
   // A contact: their own letter, their own link, only their own item, no news card.
   assert.equal(await act("addContact2", garcia.clientId, "Arjun Garcia", "arjun@x.example"), null); T = await state(); const p = T.client(garcia.clientId).contacts[0], w2 = T.S.items.find((i: any) => i.engId === ge.id && i.form === "W2");
   assert.equal(await act("assignItem", w2.id, p.id), null); for (let i = 0; i < 8; i++) { H.advance(6 * 3600); await H.worker.pass(); }
-  const toP = (H.email.sent as any[]).find((m) => m.to === "arjun@x.example"); assert.ok(toP, "no letter to the contact"); assert.match(toP.body, /^Hi Arjun,/); assert.match(String(toP.unsubscribe), /\/e\//); const key = /\/u\/[a-z]+-([a-z]{28})/.exec(toP.body)![1];
+  const toP = (H.email.sent as any[]).find((m) => m.to === "arjun@x.example"); assert.ok(toP, "no letter to the contact"); assert.match(toP.body, /^Hi Arjun,/); assert.match(String(toP.unsubscribe), /\/e\//); const key = /\/u\/[a-z]+-([a-z]{28})/.exec(toP.body)![1]!;
   const cp = words((await H.server.inject({ method: "GET", url: "/u/" + T.S.firm.slug + "-" + key })).body); assert.match(cp, /Hi Arjun Test CPAs 1 asked you for these, for Maria's tax return\. Test CPAs 1 still needs W-2 from Midtown Transit Authority/); assert.ok(!/1099-B|Anything new/.test(cp), "the contact saw more than their own item");
+  // Neither the contact's upload key nor any unsubscribe key reaches a browser.
+  const api = (await owner.get("/api/state")).raw.body, ekey = /\/e\/[a-z]+-([a-z]{28})/.exec(String(toP.unsubscribe))![1]!; assert.ok(!api.includes(key), "the contact's upload key reached the browser"); assert.ok(!api.includes(ekey), "an unsubscribe key reached the browser"); assert.ok(!/"ekey"/.test(api));
+  // The contact writes back to the firm's address: kept, and a person is told. Nothing is filed and no reply is sent.
+  const sentBefore = H.email.sent.length;
+  await H.postmarkPost("/hooks/postmark/inbound", { MessageID: "pm-arjun", OriginalRecipient: "test1@docs.tallyhound.test", From: "Arjun Garcia <arjun@x.example>", Subject: "Re: W-2", TextBody: "I will send it on Friday.", Headers: [{ Name: "Authentication-Results", Value: "mx; dmarc=pass" }], Attachments: [] });
+  await H.inbox.drain(); await H.worker.pass(); T = await state(); assert.ok(T.S.alerts.some((a: any) => a.kind === "contact_reply"), "nobody was told about the contact's reply"); assert.ok(T.S.msgs.some((m: any) => m.dir === "in" && m.contactId === p.id)); assert.equal(H.email.sent.length, sentBefore);
   // The contact unsubscribes: their link stops working and the item is the client's again.
   const un = /\/e\/([a-z]+-[a-z]{28})/.exec(String(toP.unsubscribe))![1]; await H.server.inject({ method: "POST", url: "/e/" + un, payload: "List-Unsubscribe=One-Click", headers: { "content-type": "application/x-www-form-urlencoded" } });
   T = await state(); assert.equal(T.client(garcia.clientId).contacts[0].emailOff, true); assert.equal(T.S.items.find((i: any) => i.id === w2.id).assignee, undefined); assert.equal((await H.server.inject({ method: "GET", url: "/u/" + T.S.firm.slug + "-" + key })).statusCode, 404);
+  // The client unsubscribes while a letter is made but not yet claimed: it is never sent.
+  await H.app.staff(firmId, ownerId, (T2: Engine) => { const e2 = T2.engOf(garcia.clientId); T2.S.msgs.push({ id: "m_unclaimed", engId: e2.id, dir: "out", kind: "auto", tpl: "L2", channel: "email", subject: "Your documents", body: "Hi Maria", status: "delivered", at: new Date(T2.S.now) }); T2.stopEmail(garcia.clientId, "link"); });
+  const n = H.email.sent.length; await H.worker.pass(); assert.equal((H.email.sent as any[]).slice(n).filter((m) => m.to === "maria@x.example").length, 0, "a letter went to a client who unsubscribed");
+  T = await state(); assert.equal(T.S.msgs.find((m: any) => m.id === "m_unclaimed").status, "discarded");
   await H.close();
 });
 

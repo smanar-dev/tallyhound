@@ -18,7 +18,8 @@ export interface ReadResult { kind: "organizer" | "return" | "source_doc" | "unk
 
 /** Drops every token next to a $ sign and every number longer than four digits. What is left can be stored. */
 export function stripNumbers(t: string): string {
-  return String(t || "").replace(/\$\s*[\d,.]+|[\d,.]*\d\s*\$/g, " ").split(/(\s+)/).map((w) => (w.replace(/\D/g, "").length > 4 ? "" : w)).join("").replace(/[ \t]+/g, " ").trim();
+  // A number split by single spaces, dots or hyphens (an SSN typed "123 45 6789") counts as one number.
+  return String(t || "").replace(/\$\s*[\d,.]+|[\d,.]*\d\s*\$/g, " ").replace(/(?<![\d,.])\d{2,}(?:[ .,-]\d+)+/g, (m) => (m.replace(/\D/g, "").length > 4 ? " " : m)).split(/(\s+)/).map((w) => (w.replace(/\D/g, "").length > 4 ? "" : w)).join("").replace(/[ \t]+/g, " ").trim();
 }
 const clean = (t: string) => stripNumbers(t).replace(/[\s:;,.|_-]+$/, "").replace(/^[\s:;,.|_-]+/, "").replace(/\s{2,}/g, " ").trim();
 

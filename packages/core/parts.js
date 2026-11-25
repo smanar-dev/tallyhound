@@ -18,6 +18,7 @@ const digits = (s) => String(s || "").replace(/\D/g, "").slice(-10);
 function terms(client) {
   const out = new Set(), m = digits(client.mobile); if (m.length === 10) out.add("m:" + m); if (client.email) out.add("e:" + String(client.email).toLowerCase());
   for (const a of Array.isArray(client.also) ? client.also : []) if (a && a.value) out.add((a.kind === "mobile" ? "m:" : "e:") + String(a.value));
+  for (const p of Array.isArray(client.contacts) ? client.contacts : []) if (p && p.email) out.add("e:" + String(p.email).toLowerCase());   // a contact's reply finds the client it is about
   return [...out];
 }
 

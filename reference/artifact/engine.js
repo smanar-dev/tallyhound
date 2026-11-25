@@ -902,7 +902,7 @@
      codes, payer and recipient names, a page number and the few words matched. Every token next to a $ sign and every number
      longer than four digits is dropped before anything is stored, here as well as in the reader. No file, and no full text. */
   const FIND_KINDS = ["payer", "schedule", "line", "recipient", "year"];
-  function cleanText(t) { return String(t || "").replace(/\$\s*[\d,.]+|[\d,.]*\d\s*\$/g, " ").split(/\s+/).filter((w) => !(w.replace(/\D/g, "").length > 4)).join(" ").replace(/[<>{}]/g, "").trim(); }
+  function cleanText(t) { return String(t || "").replace(/\$\s*[\d,.]+|[\d,.]*\d\s*\$/g, " ").replace(/(?<![\d,.])\d{2,}(?:[ .,-]\d+)+/g, (m) => (m.replace(/\D/g, "").length > 4 ? " " : m)).split(/\s+/).filter((w) => !(w.replace(/\D/g, "").length > 4)).join(" ").replace(/[<>{}]/g, "").trim(); }
   function cleanFinding(f) {
     if (!f || !FIND_KINDS.includes(f.kind)) return null; const o = { kind: f.kind, src: ["organizer", "doc", "return"].includes(f.src) ? f.src : "doc" };
     if (f.form && FORMS[f.form]) o.form = f.form; if (f.payer) o.payer = cleanText(f.payer).slice(0, 60) || null; if (f.value) o.value = cleanText(f.value).slice(0, 40); if (f.recipient) o.recipient = cleanText(f.recipient).slice(0, 60);
@@ -1151,7 +1151,7 @@
   function assignItem(iid, contactId) {
     const it = S.items.find((x) => x.id === iid), e = it && eng(it.engId), c = e && client(e.clientId); if (!it || !c) return "No such item"; if (!may()) return "Not allowed";
     if (contactId && !(c.contacts || []).some((x) => x.id === contactId && !x.emailOff)) return "Choose one of this client's contacts"; if (!OPEN.includes(it.state) && it.state !== "off") return "Only an item still owed can be assigned";
-    if (contactId) it.assignee = contactId; else delete it.assignee; const who = contactId ? c.contacts.find((x) => x.id === contactId).name : c.first;
+    if (contactId) it.assignee = contactId; else delete it.assignee; it.firmTouched = true; const who = contactId ? c.contacts.find((x) => x.id === contactId).name : c.first;
     listLog(e, itemTitle(it, "en") + " now asked of " + who); timeline(e, itemTitle(it, "en") + " will be asked of " + who, S.user.name); if (e.status === "in_progress" && LETTERS()) letterSoon(e); return null;
   }
   /* "Anything new in 2026?" on the upload page (docs/FETCH.md). Fourteen choices and one optional name. Notes go straight to the
@@ -1167,7 +1167,8 @@
   ];
   function clientNews(eid, choices, named) {
     const e = eng(eid), c = e && client(e.clientId); if (!e || !c) return null; const pick = NEWS.filter((n) => (choices || []).includes(n[0])); if (!pick.length) return null;
-    const nm = String(named || "").replace(/[<>{}]/g, "").replace(/\s+/g, " ").trim().slice(0, 60).replace(/\d{5,}/g, "").trim();
+    const sc = scrub(String(named || "")), nm = sc.hit.length ? "" : cleanText(sc.text.replace(/\s+/g, " ")).slice(0, 60);
+    if (sc.hit.length) scrubIn(String(named), e);
     (e.answers = e.answers || []).push({ at: new Date(S.now), choices: pick.map((n) => n[0]), named: nm || null });
     for (const n of pick) if (n[3]) addNote(e, n[3].replace("{year}", e.year), "client");
     const sug = []; let usedName = false;
@@ -1422,15 +1423,16 @@
       if (t.kind === "cant_reach" && e && c && (channelFor(c, e) || ["complete", "closed"].includes(e.status))) { t.status = "decided"; t.decision = "reachable_again"; t.by = "Tallyhound"; t.decidedAt = new Date(S.now); }
       if (t.snoozedUntil && t.snoozedUntil <= S.now) { delete t.snoozedUntil; t.reopenedAt = new Date(S.now); t.escalatedAt = null; (S.barks || []).forEach((b) => { if (b.status === "queued") b.taskIds = b.taskIds.filter((x) => x !== t.id); }); barkQueue(t, false); } });
     S.engs.forEach((e) => { if (e.next && e.next <= S.now) step(e); });
-    S.msgs.forEach((m) => { if (m.status === "approved" && m.sendAt && m.sendAt <= S.now) { const e = eng(m.engId), c = e && client(e.clientId); if (!e || e.takeover || ["closed", "opted_out", "paused"].includes(e.status) || (m.channel === "text" && c.textConsent !== "given")) { m.status = "discarded"; m.note = "No longer needed when sending hours began"; } else if (LETTERS() && !letterCheck(m.id)) { /* thrown away; a fresh one follows */ } else if (!allowedC(S.now, c)) m.sendAt = nextAllowedC(S.now, c); else { m.status = "delivered"; m.at = new Date(S.now); e.lastOut = new Date(S.now); } }
+    S.msgs.forEach((m) => { if (m.status === "approved" && m.sendAt && m.sendAt <= S.now) { const e = eng(m.engId), c = e && client(e.clientId); if (!e || e.takeover || ["closed", "opted_out", "paused"].includes(e.status) || (m.channel === "text" && c.textConsent !== "given") || (m.channel === "email" && !m.contactId && (c.emailOff || c.emailOk === false))) { m.status = "discarded"; m.note = "No longer needed when sending hours began"; } else if (LETTERS() && !letterCheck(m.id)) { /* thrown away; a fresh one follows */ } else if (!allowedC(S.now, c)) m.sendAt = nextAllowedC(S.now, c); else { m.status = "delivered"; m.at = new Date(S.now); e.lastOut = new Date(S.now); } }
       if (m.status === "approval" && S.now - m.at > S.firm.hound.slaHours * HOUR) { const e = eng(m.engId); if (e) alertx(e, "medium", "approval_wait", "A message to " + client(e.clientId).first + " " + client(e.clientId).last + " has waited over " + S.firm.hound.slaHours + " hours for approval. Nothing is sent until someone approves it.", "apw" + m.id); } });
     S.engs.forEach((e) => { const k = e.checkin; if (!k || k.doneAt || !k.afterOptIn || !k.pending || e.status !== "in_progress") return; const c = client(e.clientId); if (allowedC(S.now, c) && !e.takeover) { k.pending = null; k.sentAt = new Date(S.now); if (c.textConsent === "given") send(e, "M28", {}, "text"); } });
     S.engs.forEach((e) => { const k = e.checkin; if (!k || k.doneAt || e.status !== "not_started") return; const c = client(e.clientId);
+      if (k.pending && LETTERS()) { k.pending = null; return; }   // email-first: no check-in goes out
       if (k.pending) { if (allowedC(S.now, c)) { const ch = k.pending; k.pending = null; k.sentAt = new Date(S.now); const use = ch === "text" && c.textConsent !== "given" ? (c.email && c.emailOk ? "email" : null) : ch; if (use) send(e, "M28", {}, use); } return; }
-      if (!k.reminded && S.now - k.sentAt > 3 * DAY && allowedC(S.now, c)) { k.reminded = true; send(e, "M28R", {}, c.textConsent === "given" && c.mobile ? "text" : "email"); }
+      if (!k.reminded && !LETTERS() && S.now - k.sentAt > 3 * DAY && allowedC(S.now, c)) { k.reminded = true; send(e, "M28R", {}, c.textConsent === "given" && c.mobile ? "text" : "email"); }
       if (S.now - k.sentAt > 7 * DAY && !k.fallbackAt) {
-        if (S.firm.checkinFallback !== false && itemsOf(e.id).some(liveItem) && allowedC(S.now, c)) { k.fallbackAt = new Date(S.now); e.confirmed = true; const why = start(e.id); hlog(e, "decide", "No answer to the check-in after a week: started with the checklist on file", why ? "Could not start: " + why : "The client can still say what they do not have, and anything new is suggested to a person", "Rules"); alertx(e, "low", "checkin_quiet", c.first + " " + c.last + " did not answer the check-in in a week, so collecting started with the checklist on file.", "cq" + e.id); }
-        else if (S.firm.checkinFallback === false || !itemsOf(e.id).some(liveItem)) alertx(e, "low", "checkin_quiet", c.first + " " + c.last + " has not answered the check-in after a week. Choose a checklist for them and start collecting.", "cq" + e.id); } });
+        if (S.firm.checkinFallback !== false && !LETTERS() && itemsOf(e.id).some(liveItem) && allowedC(S.now, c)) { k.fallbackAt = new Date(S.now); e.confirmed = true; const why = start(e.id); hlog(e, "decide", "No answer to the check-in after a week: started with the checklist on file", why ? "Could not start: " + why : "The client can still say what they do not have, and anything new is suggested to a person", "Rules"); alertx(e, "low", "checkin_quiet", c.first + " " + c.last + " did not answer the check-in in a week, so collecting started with the checklist on file.", "cq" + e.id); }
+        else if (S.firm.checkinFallback === false || LETTERS() || !itemsOf(e.id).some(liveItem)) alertx(e, "low", "checkin_quiet", c.first + " " + c.last + " has not answered the check-in after a week. Choose a checklist for them and start collecting.", "cq" + e.id); } });
     S.engs.forEach((e) => { if (e.status === "closed" && e.purgeAfter && e.purgeAfter <= S.now && !e.purged) purge(e.id, "Tallyhound"); });
     retentionSweep();
     const H = S.firm.hound;
@@ -1706,7 +1708,10 @@
   // If that leaves no way to reach the client, the file comes to a person, exactly as a STOP with no email on file does.
   function stopEmail(cid, how) {
     const c = client(cid), e = c && engOf(cid); if (!c) return { ok: false, why: "Unknown client" }; if (c.emailOff) return { ok: true, already: true };
-    c.emailOff = true; c.emailOk = false; c.consentLog.push({ at: new Date(S.now), what: "Withdrawn: unsubscribed from email (" + (how || "link") + ")", channel: "email" }); audit("email.unsubscribed", c.first + " " + c.last, c.first);
+    c.emailOff = true; c.emailOk = false; c.consentLog.push({ at: new Date(S.now), what: "Withdrawn: unsubscribed from email (" + (how || "link") + ")", channel: "email" });
+    // Nothing waiting goes either: drafts for approval, and approved letters held for a working day.
+    if (e) S.msgs.forEach((m) => { if (m.engId === e.id && m.dir === "out" && m.channel === "email" && !m.contactId && ["approval", "approved"].includes(m.status)) { m.status = "discarded"; m.note = "Client unsubscribed from email"; } });
+    sameAddress(c.email, c); audit("email.unsubscribed", c.first + " " + c.last, c.first);
     if (e) { timeline(e, "Unsubscribed from email", c.first); if (!channelFor(c, e) && !["complete", "closed", "not_started", "paused"].includes(e.status)) { setStuck(e, "opted_out"); alertx(e, "high", "opted_out", c.first + " " + c.last + (LETTERS() ? " unsubscribed from email. Call them to collect the rest." : " unsubscribed from email and cannot be texted. Call them to collect the rest."), "eo" + c.id); } }
     return { ok: true };
   }
@@ -1714,7 +1719,25 @@
   function emailKey(c) { if (!c.ekey) c.ekey = linkKey(); return c.ekey; }
   function unsubscribeLink(c, p) { return S.firm.linkBase && c ? S.firm.linkBase + "/e/" + (S.firm.slug ? S.firm.slug + "-" : "") + emailKey(p || c) : ""; }
   /** A contact asked for some of a client's documents unsubscribed: nothing more goes to them, and what they were asked for goes back to the client. */
-  function stopContact(cid, pid) { const c = client(cid), p = c && (c.contacts || []).find((x) => x.id === pid), e = c && engOf(cid); if (!p) return { ok: false }; if (p.emailOff) return { ok: true, already: true }; p.emailOff = true; S.items.forEach((i) => { if (e && i.engId === e.id && i.assignee === pid) delete i.assignee; }); if (e) { timeline(e, p.name + " unsubscribed. What they were asked for is asked of " + c.first + " again"); if (e.status === "in_progress" && LETTERS()) letterSoon(e); } audit("email.unsubscribed", p.name + " (a contact of " + c.first + " " + c.last + ")", p.name); return { ok: true }; }
+  function stopContact(cid, pid) { const c = client(cid), p = c && (c.contacts || []).find((x) => x.id === pid), e = c && engOf(cid); if (!p) return { ok: false }; if (p.emailOff) return { ok: true, already: true }; p.emailOff = true; S.items.forEach((i) => { if (e && i.engId === e.id && i.assignee === pid) delete i.assignee; }); if (e) { timeline(e, p.name + " unsubscribed. What they were asked for is asked of " + c.first + " again"); alertx(e, "medium", "contact_stop", p.name + " asked to stop getting letters about " + c.first + " " + c.last + "'s documents. Nothing more goes to them; what they were asked for is back on " + c.first + "'s letter.", "cs" + pid); if (e.status === "in_progress" && LETTERS()) letterSoon(e); } audit("email.unsubscribed", p.name + " (a contact of " + c.first + " " + c.last + ")", p.name); sameAddress(p.email, p); return { ok: true }; }
+  /** Unsubscribing is by address: the same person as another client, or as a contact on someone else's return, stops there too. */
+  function sameAddress(email, except) {
+    const a = String(email || "").toLowerCase(); if (!a) return;
+    for (const x of S.clients) { if (x !== except && !x.emailOff && String(x.email || "").toLowerCase() === a) stopEmail(x.id, "same address"); for (const q of x.contacts || []) if (q !== except && !q.emailOff && String(q.email || "").toLowerCase() === a) stopContact(x.id, q.id); }
+  }
+  /** Which contact an address belongs to, for mail that comes in. */
+  function contactByAddress(email) { const a = String(email || "").toLowerCase(); if (!a) return null; for (const c of S.clients) { const p = (c.contacts || []).find((x) => String(x.email || "").toLowerCase() === a); if (p) return { c, p }; } return null; }
+  /** A contact wrote back. A request to stop is honoured at once; anything else is kept, scrubbed, and a person is told. Files are not filed from a contact's email: their link is the way in. */
+  function contactReply(cid, pid, text, files) {
+    const c = client(cid), p = c && (c.contacts || []).find((x) => x.id === pid), e = c && engOf(cid); if (!p || !e) return null;
+    const t = scrubIn(String(text || ""), e).slice(0, 4000), stop = OPTOUT.test(t) || /\bunsubscribe\b|\bstop (emailing|sending|these)\b|\bremove me\b/i.test(t);
+    S.msgs.push({ id: id("m"), engId: e.id, dir: "in", kind: "client", body: t, channel: "email", at: new Date(S.now), contactId: pid, intent: stop ? "stop" : "contact", understood: stop ? "Asked to stop" : "A reply from " + p.name });
+    if (stop) { stopContact(cid, pid); return "stop"; }
+    alertx(e, "medium", "contact_reply", p.name + " replied about " + c.first + " " + c.last + "'s documents" + (files ? ", with " + files + " attachment" + (files > 1 ? "s that were" : " that was") + " not filed (their upload link is the way to send them)" : "") + ". Read it on the client's page.", "cr" + pid + "_" + S.now);
+    return "reply";
+  }
+  /** A letter to a contact came back: nothing more goes to that address, their documents go back to the client, and a person is told. */
+  function contactBounced(cid, pid) { const c = client(cid), p = c && (c.contacts || []).find((x) => x.id === pid), e = c && engOf(cid); if (!p || p.emailOff) return null; const r = stopContact(cid, pid); p.bouncedAt = new Date(S.now); if (e) alertx(e, "medium", "contact_bounced", "A letter to " + p.name + " (for " + c.first + " " + c.last + ") came back. Check the address with " + c.first + ".", "cb" + pid); return r; }
   function contactByEmailKey(key) { for (const c of S.clients) { const p = (c.contacts || []).find((x) => x.ekey === key); if (p) return { c, p }; } return null; }
   /* Reply understanding, second version (TH-RPL, docs/REBRAND.md section 5). Five more things a reply can mean. The model (or, with
      no model, a few plain patterns) says which; code checks every field against what it was given and then acts only through
@@ -2313,6 +2336,7 @@
     if (LETTERS() && !letterCheck(m.id)) return "The list changed while this was waiting, so it was not sent. A new letter replaces it";
     if (LETTERS() && sentToday(m.sender || "firm") >= (senderFor(c).cap || Infinity)) { if (body) m.body = body; m.approvedBy = S.user.name; m.status = "approved"; m.sendAt = nextMorning(dayAfter(S.now)); return null; }
     if (m.channel === "text" && c.textConsent !== "given") { m.status = "discarded"; m.note = "Client opted out of texts"; return "This client opted out of texts. The draft was discarded"; }
+    if (m.channel === "email" && !m.contactId && (c.emailOff || c.emailOk === false)) { m.status = "discarded"; m.note = "Client unsubscribed from email"; return c.first + (c.emailOff ? " unsubscribed from email" : "'s email address bounced") + ". The draft was discarded"; }
     if (["closed", "opted_out"].includes(e.status)) { m.status = "discarded"; m.note = "File is " + e.status.replace("_", " "); return "This file is " + e.status.replace("_", " ") + ". The draft was discarded"; }
     if (body) m.body = body; m.approvedBy = S.user.name;
     if (PROACTIVE.includes(m.tpl) && !allowedC(S.now, c)) { m.status = "approved"; m.sendAt = nextAllowedC(S.now, c); hlog(e, "message", S.user.name + " approved: " + (TPL_USE[m.tpl] || "").toLowerCase() + ". Held until sending hours", "", "Rules"); return null; }
@@ -2780,6 +2804,8 @@
     return { facts, w2: Math.max(1, items.filter((i) => i.form === "W2").length), last: items.filter((i) => i.form !== "PRIOR").map((i) => ({ form: i.form, payer: i.payer || "" })), returning: items.some((i) => i.source === "prior_year" || i.source === "last_season") };
   }
   function sendCheckin(eid) {
+    // An email-first firm asks through the fetch list and the letter's "Anything new" card. The check-in would reach a client whose list nobody approved.
+    if (LETTERS()) return "Email-first firms ask what is new through the fetch list and the letter, not a check-in";
     if (S.firm.verified === false) return FIRMCHECK;
     const e = eng(eid), c = client(e.clientId);
     if (!access().ok) return access().reason;
@@ -2828,7 +2854,7 @@
     (k.adds || []).forEach((a, n) => { if (opt.add && !opt.add.includes(n)) return; S.items.push({ id: id("i"), engId: eid, form: a.form, payer: a.payer || null, state: "expected", source: "checkin", reason: a.reason }); added++; });
     [].concat(opt.custom === undefined ? k.customs || [] : opt.custom).map(cleanName).filter(Boolean).slice(0, 5).forEach((t) => { S.items.push({ id: id("i"), engId: eid, form: "OTHER", custom: t, payer: null, state: "expected", source: "checkin", reason: "Custom request from the check-in" }); added++; });
     (k.drops || []).forEach((iid) => { if (opt.drop && !opt.drop.includes(iid)) return; const it = S.items.find((x) => x.id === iid); if (it && ["expected", "requested"].includes(it.state)) { it.state = "removed"; it.note = "Client said in the check-in that this no longer applies"; removed++; } });
-    k.reviewedAt = new Date(S.now); k.reviewedBy = who; e.confirmed = true;
+    k.reviewedAt = new Date(S.now); k.reviewedBy = who; if (!LETTERS()) e.confirmed = true;
     timeline(e, "Check-in applied: " + added + " added, " + removed + " removed. Checklist confirmed", who); audit("checkin.applied", client(e.clientId).last + ": +" + added + " -" + removed, who);
     let started = false, why = null; if (opt.start && e.status === "not_started") { why = start(eid); started = !why; }
     if (["in_progress", "stuck"].includes(e.status)) { e.next = nextAllowed(new Date(S.now.getTime() + MIN)); started = true; }   // already collecting: carry on with the corrected list
@@ -2881,7 +2907,7 @@
   function confirmRemoved(eid) { const e = eng(eid); if (!e || !e.lastSeason) return "Nothing to confirm"; if (!may()) return "Not allowed"; e.lastSeason.confirmedAt = new Date(S.now); e.lastSeason.confirmedBy = S.user.name; timeline(e, "Confirmed what was left off from last season: " + ((e.lastSeason.removed || []).length || "nothing"), S.user.name); return null; }
   function rollForward(cid, year) {
     const c = client(cid), old = engOf(cid); if (!c || !old) return "No file for this client";
-    if (!["complete", "closed"].includes(old.status)) return "Still collecting for " + old.year;
+    if (!["complete", "closed", "off_season"].includes(old.status)) return "Still collecting for " + old.year;
     if (old.year >= year) return "Already on " + old.year;
     const its = itemsOf(old.id), keep = its.filter((i) => i.state === "received" && i.form !== "PRIOR"), none = its.filter((i) => ["waived", "says_none"].includes(i.state));
     const nm = (i) => (i.custom || FORMS[i.form].plain) + (i.payer ? " from " + i.payer : "");
@@ -2949,7 +2975,7 @@
     t.items.forEach((f) => { if (!have.includes(f)) { S.items.push({ id: id("i"), engId: eid, form: f, payer: null, state: "expected", source: "template", tpl: t.name }); n++; } });
     e.template = t.name;
     if (n) { timeline(e, "Checklist template applied: " + t.name + " (" + n + " added)", S.user.name); if (e.status === "complete") { e.status = "in_progress"; e.next = nextAllowed(S.now); } }
-    if (opt && opt.confirm) e.confirmed = true;
+    if (opt && opt.confirm && !LETTERS()) e.confirmed = true;   // email-first: the list still waits for Approve list
     audit("template.apply", t.name + " to " + client(e.clientId).last); return n;
   }
   /* Items proposed from last year's return. Staff choose which to add; nothing already on the checklist is duplicated. */
@@ -3016,7 +3042,7 @@
     if (e.status === "complete" && open) { e.status = "in_progress"; e.completedAt = null; e.step = 0; if (!e.next) e.next = nextAllowed(S.now); timeline(e, "Reopened: a document is outstanding again"); }
     else if (["in_progress", "stuck"].includes(e.status) && !open && any) { if (checkComplete(e)) finished(e); }
   }
-  window.TH = { importBegin, importMap, importDecide, importRecord, importPlace, importBuild, importApprove, importView, importsOpen, IMPORT_FIELDS, IMPORT_MAX_ROWS, stopContact, contactByEmailKey, cleanText, cleanFinding, attachRecord, confirmRecord, dropRecord, uploadList, laterItems, contactLink, listOf, buildList, sortList, tickItem, setIssuer, addCatalogItem, itemNeeded, rulePrecision, RULE_TEXT, approveList, approveMany, approveReady, setSeason, noteForPreparer, addNote, addContact2, assignItem, NEWS, clientNews, SOURCES, ONE_TIME, CATALOG, CATALOG_GROUPS, CATALOG_SEASON, RULES_VERSION, catalog, askPhrase, setCatalog, FIRM_RULES, firmRule, setFirmRule, payerShown, setAlias, aliasKey, pilotMeasures, PILOT, letterPreview, workDays, WORKDAYS_DEFAULT, LETTER_HOUR, attachmentWaiting, emailBounced, mirrorWant, MIRROR_STATUS, dayKey, sentToday, restartRun, letterSoon, inboundReply, portalLater, uploadResult, agreement, setConfirmAll, CONFIRM_MIN_DOCS, CONFIRM_MIN_AGREE, LETTERS, isWorkDay, nextMorning, addWorkDays, setWorkDays, letterItems, itemTitle, senderFor, setMailbox, setMailCap, setClientSendMode, letterCheck, linkFind, linkState, rotateLink, revokeLink, seasonLink, MAIL_CAP, LETTER, released, panelOf, PANEL, traceOf, TRACE_STEPS, keepTrace, activity, LIFE_SUGGEST, suggestFor, dumpOne, setDuty, cantReach, BARK_TARGETS, BARK_DEFAULT, CALL_OUTCOMES, setHold, askNow, holdOf, heldUntil, releaseOf, usualIssue, USUAL, formDisplay, filedName, SEND_HOUR_MIN_REPLIES, bestHour, SLOW_ITEM_ASKS, memoryWrite, memoryOf, clearMemory, setMemory, keepRemoved, confirmRemoved, addTask, BARK_KINDS, BARK_BATCH_MIN, BARK_SETTLE_MIN, REVIEW_OVERDUE_HOURS, barkRoute, barkDue, barkHeld, barkRead, barkWords, setMyBarks, setBarkRules, setStaffHours, staffHours, V2, WAIVE_REASONS, LASTING, CHANGE_WORDS, LATER_MAX_DAYS, ALREADY_SENT_LOOKBACK_DAYS, replyV2, setSpouse, VOICES, VOICE_TPL, VOICE_FIXED, voiceFor, setVoice, setClientVoice, setSignOff, previewVoice, verified, CADENCE_PRESETS, gapsOf, cadenceFor, setIntensity, setClientIntensity, undiscard, setClosedDays, startMany, deletionEvidence, setCallOk, plans, quoteFor, areaZone, zoneFor, addContact, removeContact, planEnded, setLine, isLandline, RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
+  window.TH = { contactReply, contactBounced, contactByAddress, importBegin, importMap, importDecide, importRecord, importPlace, importBuild, importApprove, importView, importsOpen, IMPORT_FIELDS, IMPORT_MAX_ROWS, stopContact, contactByEmailKey, cleanText, cleanFinding, attachRecord, confirmRecord, dropRecord, uploadList, laterItems, contactLink, listOf, buildList, sortList, tickItem, setIssuer, addCatalogItem, itemNeeded, rulePrecision, RULE_TEXT, approveList, approveMany, approveReady, setSeason, noteForPreparer, addNote, addContact2, assignItem, NEWS, clientNews, SOURCES, ONE_TIME, CATALOG, CATALOG_GROUPS, CATALOG_SEASON, RULES_VERSION, catalog, askPhrase, setCatalog, FIRM_RULES, firmRule, setFirmRule, payerShown, setAlias, aliasKey, pilotMeasures, PILOT, letterPreview, workDays, WORKDAYS_DEFAULT, LETTER_HOUR, attachmentWaiting, emailBounced, mirrorWant, MIRROR_STATUS, dayKey, sentToday, restartRun, letterSoon, inboundReply, portalLater, uploadResult, agreement, setConfirmAll, CONFIRM_MIN_DOCS, CONFIRM_MIN_AGREE, LETTERS, isWorkDay, nextMorning, addWorkDays, setWorkDays, letterItems, itemTitle, senderFor, setMailbox, setMailCap, setClientSendMode, letterCheck, linkFind, linkState, rotateLink, revokeLink, seasonLink, MAIL_CAP, LETTER, released, panelOf, PANEL, traceOf, TRACE_STEPS, keepTrace, activity, LIFE_SUGGEST, suggestFor, dumpOne, setDuty, cantReach, BARK_TARGETS, BARK_DEFAULT, CALL_OUTCOMES, setHold, askNow, holdOf, heldUntil, releaseOf, usualIssue, USUAL, formDisplay, filedName, SEND_HOUR_MIN_REPLIES, bestHour, SLOW_ITEM_ASKS, memoryWrite, memoryOf, clearMemory, setMemory, keepRemoved, confirmRemoved, addTask, BARK_KINDS, BARK_BATCH_MIN, BARK_SETTLE_MIN, REVIEW_OVERDUE_HOURS, barkRoute, barkDue, barkHeld, barkRead, barkWords, setMyBarks, setBarkRules, setStaffHours, staffHours, V2, WAIVE_REASONS, LASTING, CHANGE_WORDS, LATER_MAX_DAYS, ALREADY_SENT_LOOKBACK_DAYS, replyV2, setSpouse, VOICES, VOICE_TPL, VOICE_FIXED, voiceFor, setVoice, setClientVoice, setSignOff, previewVoice, verified, CADENCE_PRESETS, gapsOf, cadenceFor, setIntensity, setClientIntensity, undiscard, setClosedDays, startMany, deletionEvidence, setCallOk, plans, quoteFor, areaZone, zoneFor, addContact, removeContact, planEnded, setLine, isLandline, RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
     dump, load, blank, setNow, setUser, linkFor, linkLive, LINK_DAYS, consentFromPage, declineTexts, stopEmail, unsubscribeLink, CONSENT_WORDING,
     get S() { return S; }, FORMS, TPL, TPL_USE, QUESTIONS, STUCK, DAY, HOUR, MIN,
     client, eng, engOf, itemsOf, openItems, progress, fill, outputCheck, channelFor, allowed, nextAllowed, live, nextItem,

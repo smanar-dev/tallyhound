@@ -145,9 +145,9 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
     if (u.supportUntil) { const t = Date.now(), last = looked.get(u.id) || 0; if (t - last > 15 * 60000) { looked.set(u.id, t); await d.app.withFirm(u.firmId, (T: Engine) => { T.audit("support.view", u.name + " looked at the firm's pages", u.name); }); await d.auth.audit(u.firmId, u.id, "support.view"); } }
     // A client's link key opens that client's own pages. No screen needs it, so it never leaves the server.
     // The same goes for the copy of the link inside a sent message: staff see that a link was sent, not the link.
-    const keys: string[] = []; for (const c of s.state.clients || []) { if (c.key) keys.push(c.key); delete c.key; delete c.keyAt; delete c.code; }
+    const keys: string[] = []; for (const c of s.state.clients || []) { if (c.key) keys.push(c.key); delete c.key; delete c.keyAt; delete c.code; delete c.ekey; for (const p of c.contacts || []) delete p.ekey; }
     // v2: the season's upload link is the client's, and the mail layer's own ids are nobody's business in a browser (TH-WLB-1, TH-UPL-1).
-    for (const e of s.state.engs || []) { if (e.link) { if (e.link.key) keys.push(e.link.key); for (const k of e.link.old || []) keys.push(k); e.link = { at: e.link.at, revokedAt: e.link.revokedAt || null }; } if (e.mirror) e.mirror = { late: !!(e.mirror.err && e.mirror.err.told) }; delete e.thread; }
+    for (const e of s.state.engs || []) { if (e.link) { if (e.link.key) keys.push(e.link.key); for (const k of e.link.old || []) keys.push(k); for (const k of Object.values(e.link.contacts || {})) keys.push(String(k)); e.link = { at: e.link.at, revokedAt: e.link.revokedAt || null }; } if (e.mirror) e.mirror = { late: !!(e.mirror.err && e.mirror.err.told) }; delete e.thread; }
     if (u.role !== "owner") s.state.audit = [];   // the audit trail is the owner's to read (spec section 3)
     let out = JSON.stringify(s); for (const k of keys) out = out.split(k).join("(private link)");
     return reply.type("application/json").send(out);

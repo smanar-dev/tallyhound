@@ -221,6 +221,7 @@ function createApp({ store, sms, email, ai, clock, log, files, voice, cut, layer
       if (m.channel === "voice") { jobs.push({ id: m.id, channel: "voice", from: S.firm.smsNumber, to: c.mobile, body: m.body }); continue; }
       // Every email carries a way to stop them: a line at the foot, and the address the mail provider puts in the one-click header.
       const pc = m.contactId ? (c.contacts || []).find((x) => x.id === m.contactId) : null; if (m.contactId && (!pc || pc.emailOff)) { m.status = "discarded"; m.note = "That person no longer gets letters"; delete m.claimedAt; continue; }
+      if (!pc && (c.emailOff || c.emailOk === false)) { m.status = "discarded"; m.note = c.emailOff ? "Client unsubscribed from email" : "Client's email address bounced"; delete m.claimedAt; continue; }
       const un = T.unsubscribeLink ? T.unsubscribeLink(c, pc || undefined) : "", foot = un ? "\n\nYou're getting this because " + S.firm.name + " prepares your taxes. To stop these emails: https://" + un : "";
       const subject = m.subject || S.firm.sender + ": your " + e.year + " tax documents";
       const to = pc ? pc.email : c.email;
@@ -349,13 +350,18 @@ function createApp({ store, sms, email, ai, clock, log, files, voice, cut, layer
         if (seen(T, providerId)) return { handled: true, duplicate: true };
         if (!T.LETTERS || !T.LETTERS()) return { handled: false };
         const mine = T.S.clients.filter((x) => x.email && x.email.toLowerCase() === from0), c = pick(T, mine.length ? mine : T.S.clients.filter((x) => also(x, "email", from0)));
-        if (!c) { say("layer_reply_unknown", firmId); return { handled: true, client: null }; }
+        if (!c) {
+          // A contact on someone's return (a spouse with their own documents) writing back: a stop is honoured, anything else goes to a person.
+          const pc = T.contactByAddress ? T.contactByAddress(from0) : null;
+          if (pc) { const r = T.contactReply(pc.c.id, pc.p.id, String(text || ""), (attachments || []).length + (attachmentsHeld || 0)); return { handled: true, client: pc.c.id, contact: true, stop: r === "stop" || undefined }; }
+          say("layer_reply_unknown", firmId); return { handled: true, client: null };
+        }
         if (!T.canRead()) { await hold(T, firmId, c, attachments, "email"); if (!T.access().ok) T.inboundEmail(c.id, String(text || ""), [], null); return { handled: true, client: c.id, held: true }; }
         return lettersIn(T, firmId, c, String(text || ""), attachments, { proposed, attachmentsHeld });
       }, { emails: [from0] });
     },
     /** A letter bounced (TH-EML-8): the address stops being written to and a person is told. */
-    async layerBounce({ firmId, to, providerId }) { const a = addr(to); return withFirm(firmId, async (T) => { if (seen(T, providerId)) return { handled: true, duplicate: true }; const c = T.S.clients.find((x) => x.email && x.email.toLowerCase() === a); if (!c || !T.emailBounced) return { handled: true, client: null }; T.emailBounced(c.id); return { handled: true, client: c.id }; }, { emails: [a] }); },
+    async layerBounce({ firmId, to, providerId }) { const a = addr(to); return withFirm(firmId, async (T) => { if (seen(T, providerId)) return { handled: true, duplicate: true }; const c = T.S.clients.find((x) => x.email && x.email.toLowerCase() === a); if (!c) { const pc = T.contactByAddress ? T.contactByAddress(a) : null; if (pc) { T.contactBounced(pc.c.id, pc.p.id); return { handled: true, client: pc.c.id, contact: true }; } } if (!c || !T.emailBounced) return { handled: true, client: null }; T.emailBounced(c.id); return { handled: true, client: c.id }; }, { emails: [a] }); },
     /** TH-NTR-7, 8: once a night. Every mirrored engagement is compared with what the layer holds; anything that differs is put back
         to what Tallyhound says, and each status change the layer recorded is copied into the audit trail. Returns what it found. */
     async reconcile(firmId) {
@@ -428,6 +434,8 @@ function createApp({ store, sms, email, ai, clock, log, files, voice, cut, layer
         let byStaff = null;
         if (forwarded && forwarded.from && trusted !== false && staffAddr.includes(from)) { byStaff = from; from = addr(forwarded.from); body = forwarded.body != null ? forwarded.body : body; }
         const mine = T.S.clients.filter((x) => x.email && x.email.toLowerCase() === from), cands = mine.length ? mine : T.S.clients.filter((x) => also(x, "email", from)), known = pick(T, cands), c = trusted === false ? null : known;
+        const pc = !c && trusted !== false && T.contactByAddress ? T.contactByAddress(from) : null;
+        if (pc) { const r = T.contactReply(pc.c.id, pc.p.id, String(body || ""), 0); if (r === "stop" || !(attachments || []).some((f) => kindOf(f) === "ok")) return { handled: true, client: pc.c.id, contact: true, stop: r === "stop" || undefined }; }
         if (!c) {
           // Unknown or unconfirmed sender. Attachments are kept and read so a person can file them (a spouse writing from another address is common),
           // but nothing is sent back and nothing reaches a client's file until someone assigns it. A daily cap stops a stranger running up the bill.

@@ -12,7 +12,7 @@ const norm = (s: string) => s.toLowerCase().replace(/[^a-z]/g, "");
 
 test("numbers: every token longer than four digits and every token next to a $ sign is dropped; years and form numbers stay", () => {
   assert.equal(stripNumbers("W-2   Midtown Transit   52,310.00"), "W-2 Midtown Transit"); assert.equal(stripNumbers("Interest $412.00 from 1099-INT in 2025"), "Interest from 1099-INT in 2025");
-  assert.equal(stripNumbers("SSN 123-45-6789 EIN 62-1234567 acct 4455667788"), "SSN EIN acct"); assert.equal(stripNumbers("Box 1 and line 26"), "Box 1 and line 26");
+  assert.equal(stripNumbers("SSN 123-45-6789 EIN 62-1234567 acct 4455667788"), "SSN EIN acct"); assert.equal(stripNumbers("Box 1 and line 26"), "Box 1 and line 26"); assert.equal(stripNumbers("SSN 123 45 6789 at Acme"), "SSN at Acme"); assert.equal(stripNumbers("W-2 2025 organizer"), "W-2 2025 organizer");
 });
 test("the test set: 60 clients, joint and single, returning and new, organizers, returns, source documents and scans", () => {
   assert.equal(SET.length, 60); assert.ok(SET.filter((c) => c.spouse).length >= 15); assert.ok(SET.filter((c) => !c.returning).length >= 10);

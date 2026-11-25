@@ -163,3 +163,57 @@ test("year two: last season's filed documents are this season's proposal, ready 
   assert.equal(x.e.status, "complete"); T.closeEng(x.e.id); assert.equal(T.rollForward(x.c.id, 2027), null); const e2 = T.engOf(x.c.id);
   assert.equal(T.listOf(e2.id).status, "proposed"); assert.equal(e2.confirmed, false); assert.equal(T.listOf(e2.id).group, "ready"); assert.deepEqual(T.S.items.filter((i) => i.engId === e2.id).map((i) => [i.form, i.payer, i.source]).sort(), [["1098", "Hillcrest Mortgage", "last_season"], ["W2", "Midtown Transit", "last_season"]]);
 });
+
+// Review fixes (November 2026). Each closes a path that went round approval, opt-out or the data rules.
+test("review: an email-first firm cannot send the check-in, and an old check-in never approves a list after a week", () => {
+  const x = one([P("W2", "Midtown Transit")]); const T = x.T;
+  assert.match(T.sendCheckin(x.e.id), /fetch list/); assert.equal(T.S.msgs.length, 0);
+  x.e.checkin = { sentAt: new Date(T.S.now) }; T.advance(8 * T.DAY);
+  assert.equal(x.e.confirmed, false); assert.equal(T.listOf(x.e.id).status, "proposed"); assert.equal(x.e.status, "not_started"); assert.equal(T.S.msgs.length, 0, "no check-in reminder and no letter");
+  assert.ok(T.S.alerts.some((a) => a.kind === "checkin_quiet"));
+});
+test("review: after an unsubscribe, a draft waiting for approval is thrown away and cannot be approved; the timer drops an approved one", () => {
+  const x = one([P("W2", "Midtown Transit")]); const T = x.T; T.S.firm.hound.mode = "copilot"; T.approveList(x.e.id); T.advance(T.MIN);
+  const d = T.S.msgs.find((m) => m.dir === "out" && m.status === "approval"); assert.ok(d, "a draft waits for approval");
+  const held = { id: "m_held", engId: x.e.id, dir: "out", kind: "auto", tpl: "L2", channel: "email", body: "Hi Maria", status: "approval", at: new Date(T.S.now) }; T.S.msgs.push(held);
+  T.stopEmail(x.c.id, "link"); assert.equal(d.status, "discarded"); assert.equal(held.status, "discarded");
+  const late = { id: "m_late", engId: x.e.id, dir: "out", kind: "auto", tpl: "L2", channel: "email", body: "Hi Maria", status: "approval", at: new Date(T.S.now) }; T.S.msgs.push(late);
+  assert.match(T.approveMsg(late.id), /unsubscribed/); assert.equal(late.status, "discarded");
+  const ok = { id: "m_ok", engId: x.e.id, dir: "out", kind: "auto", tpl: "L2", channel: "email", body: "Hi Maria", status: "approved", sendAt: new Date(T.S.now), at: new Date(T.S.now) }; T.S.msgs.push(ok); T.advance(T.MIN);
+  assert.equal(ok.status, "discarded");
+});
+test("review: unsubscribing is by address: the same person as a client and as a contact on another return stops in both places, and a person is told", () => {
+  const T = firm(); const b = T.importBegin("c.csv", "First,Last,Email\nMaria,Garcia,maria@x.example\nArjun,Garcia,arjun@x.example"); T.importMap(b.id);
+  const [maria, arjun] = T.S.clients; assert.equal(T.addContact2(maria.id, "Arjun Garcia", "Arjun@x.example"), null); const p = maria.contacts[0];
+  T.stopEmail(arjun.id, "link"); assert.equal(p.emailOff, true); assert.ok(T.S.alerts.some((a) => a.kind === "contact_stop"));
+  T.addContact2(arjun.id, "Maria Garcia", "maria@x.example"); T.stopContact(arjun.id, arjun.contacts[0].id); assert.equal(maria.emailOff, true);
+});
+test("review: a contact's reply asking to stop is honoured; any other reply is kept scrubbed and a person is told; a bounce stops the contact", () => {
+  const x = one([P("W2", "Midtown Transit"), P("1099B", "Schwab")]); const T = x.T; T.addContact2(x.c.id, "Arjun Garcia", "arjun@x.example"); const p = x.c.contacts[0];
+  assert.equal(T.contactByAddress("ARJUN@x.example").p, p);
+  assert.equal(T.contactReply(x.c.id, p.id, "Is my SSN 123-45-6789 needed?", 0), "reply"); const m = T.S.msgs.find((y) => y.contactId === p.id && y.dir === "in"); assert.ok(!m.body.includes("123-45-6789")); assert.ok(T.S.alerts.some((a) => a.kind === "contact_reply"));
+  assert.equal(p.emailOff, undefined); assert.equal(T.contactReply(x.c.id, p.id, "please stop emailing me", 0), "stop"); assert.equal(p.emailOff, true);
+  T.addContact2(x.c.id, "Lena Garcia", "lena@x.example"); const q = x.c.contacts[1]; T.contactBounced(x.c.id, q.id); assert.equal(q.emailOff, true); assert.ok(T.S.alerts.some((a) => a.kind === "contact_bounced"));
+});
+test("review: the upload page's 'Anything new' name goes through scrub, and a name that held an identifier is not kept or suggested", () => {
+  const x = one([P("W2", "Midtown Transit")]); const T = x.T; T.approveList(x.e.id);
+  const t = T.clientNews(x.e.id, [T.NEWS[0][0]], "SSN 123-45-6789"); const m = T.S.msgs.find((y) => y.intent === "news");
+  assert.ok(!m.body.includes("6789")); assert.ok(!JSON.stringify(x.e.answers).includes("6789")); assert.ok(!t || t.suggest.every((s) => !s.payer));
+});
+test("review: numbers split by spaces, dots or hyphens count as one number when findings are cleaned", () => {
+  const T = firm(); assert.equal(T.cleanFinding({ kind: "payer", form: "W2", payer: "Acme 123 45 6789" }).payer, "Acme"); assert.equal(T.cleanText("Acme 12 345 Inc"), "Acme Inc"); assert.equal(T.cleanText("Box 12 34"), "Box 12 34"); assert.equal(T.cleanText("W-2 2025 from Acme"), "W-2 2025 from Acme");
+});
+test("review: rebuilding a proposed list keeps an item assigned to a contact", () => {
+  const x = one([P("W2", "Midtown Transit"), P("1099B", "Schwab")]); const T = x.T; T.addContact2(x.c.id, "Arjun Garcia", "arjun@x.example"); const p = x.c.contacts[0];
+  T.assignItem(x.on().find((i) => i.form === "1099B").id, p.id); T.attachRecord(x.e.id, { file: "more.pdf", kind: "doc", status: "read", findings: [P("1099INT", "First Farmers Bank", "doc")] }); T.buildList(x.e.id);
+  assert.equal(x.items().find((i) => i.form === "1099B").assignee, p.id);
+});
+test("review: a client set aside for the season rolls forward to the new year with a list to approve", () => {
+  const x = one([P("W2", "Midtown Transit")]); const T = x.T; T.setSeason(x.e.id, true); assert.equal(x.e.status, "off_season");
+  assert.equal(T.rollForward(x.c.id, x.e.year + 1), null); const e2 = T.engOf(x.c.id); assert.equal(e2.year, x.e.year + 1); assert.equal(T.listOf(e2.id).status, "proposed");
+});
+test("review: in an email-first firm a template or check-in answers never confirm a list; only Approve list does", () => {
+  const x = one([P("W2", "Midtown Transit")]); const T = x.T; const tid = T.templates()[0].id; T.applyTemplate(x.e.id, tid, { confirm: true });
+  assert.equal(x.e.confirmed, false); assert.equal(T.listOf(x.e.id).status, "proposed");
+  x.e.checkin = { doneAt: new Date(T.S.now), adds: [], drops: [] }; T.applyCheckin(x.e.id, {}); assert.equal(x.e.confirmed, false);
+});
