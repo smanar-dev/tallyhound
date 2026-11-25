@@ -81,3 +81,20 @@ test("TH-PLN: a paused file, a client nobody can reach, and a file not yet start
   x = firm(); x.c.email = ""; x.c.emailOk = false; x.T.inboundText(x.c.id, "STOP"); assert.match(x.plan().note!, /No way to reach/);
   const T: Engine = createEngine(); T.blank({ plan: "Practice", name: "Maple & Pine Tax Co.", email: "d@m.example", now: new Date(2027, 0, 25, 10, 5), users: [{ id: "u1", first: "Dana", name: "Dana Pine", role: "owner", email: "dana@m.example" }] }); T.setUser("u1"); T.importRows(T.parseCSV("First,Last,Email\nMaria,Garcia,maria@x.example")); assert.match(planFor(T, T.S.engs[0].id, createEngine).note!, /until you say go fetch/);
 });
+
+test("an email-first firm's plan: the letters that will go, each in the row of every document it names; a document that arrives leaves the next letters; the bark after the last", () => {
+  const T: Engine = createEngine(); T.blank({ letters: true, plan: "Practice", name: "Maple & Pine Tax Co.", email: "docs@maplepine.example", mode: "copilot", confirmAll: false, now: new Date(2027, 0, 25, 10, 5), users: [{ id: "u1", first: "Dana", name: "Dana Whitfield", role: "owner", email: "dana@maplepine.example" }] });
+  T.S.firm.linkBase = "send.tallyhound.example"; T.S.firm.slug = "maple"; T.importRows(T.parseCSV("First,Last,Email\nMaria,Garcia,maria@x.example")); const c = T.S.clients[0], e = T.engOf(c.id); T.itemsOf(e.id).find((i: any) => i.form === "W2").payer = "Acme Logistics"; e.confirmed = true; T.start(e.id); T.advance(5 * T.MIN);
+  const [w2, m] = T.itemsOf(e.id), P = planFor(T, e.id, createEngine), asks = P.events.filter((x) => ["request", "reminder", "final"].includes(x.kind));
+  assert.equal(asks[0]!.template, "L1"); assert.equal(asks[0]!.status, "queued", "the first letter waits for approval"); assert.deepEqual(asks[0]!.item_ids!.sort(), [w2.id, m.id].sort());
+  const planned = asks.filter((x) => x.status === "planned"); assert.deepEqual(planned.map((x) => x.template), ["L2", "L2", "L2", "L3"]); assert.ok(planned.every((x) => x.preview && /Upload them here|Upload here/.test(x.preview.body) && x.window!.start === "09:00"));
+  assert.equal(P.events.filter((x) => x.kind === "quiet").length, 1); assert.deepEqual(channelState(T, c).text, { available: false, unavailable_reason: "Letters go by email" });
+  // The W-2 arrives: the letters after it name only the mortgage statement, and the plan changed nothing.
+  const before = JSON.stringify(T.dump()); planFor(T, e.id, createEngine); assert.equal(JSON.stringify(T.dump()), before, "working out the plan changed the firm");
+  T.inboundDoc(c.id, { form: "W2", year: 2026, payer: "Acme Logistics" }, "portal"); const P2 = planFor(T, e.id, createEngine);
+  assert.ok(P2.events.filter((x) => x.status === "planned" && x.item_ids).every((x) => !x.item_ids!.includes(w2.id) && x.item_ids!.includes(m.id))); assert.ok(P2.events.some((x) => x.kind === "arrived" && x.item_id === w2.id));
+  // With the mail layer and no mailbox, nothing is planned and the plan says why.
+  const U: Engine = createEngine(); U.blank({ letters: true, mail: "mailbox", plan: "Practice", name: "F", email: "f@f.example", mode: "autopilot", now: new Date(2027, 0, 25, 10, 5), users: [{ id: "u1", first: "Dana", name: "Dana Whitfield", role: "owner", email: "d@f.example" }] });
+  U.importRows(U.parseCSV("First,Last,Email\nMaria,Garcia,maria@x.example")); const ue = U.S.engs[0]; U.setMailbox("u1", { provider: "google", address: "d@f.example" }); ue.confirmed = true; U.start(ue.id); U.setMailbox("u1", null);
+  assert.match(String(planFor(U, ue.id, createEngine).note), /Dana Whitfield has no mailbox connected/);
+});

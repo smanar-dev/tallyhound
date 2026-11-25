@@ -9,6 +9,17 @@ import { dshort, emailFirst, STAT } from "../lib/fmt";
 
 function Bars({ rows }: { rows: [string, number][] }) { const m = Math.max(1, ...rows.map((r) => r[1])); return <div>{rows.map((r) => <div className="hb" key={r[0]}><span>{r[0]}</span><div className="track"><i style={{ width: (100 * r[1]) / m + "%" }} /></div><b>{r[1]}</b></div>)}</div>; }
 
+// The pilot's six measures (v2 spec, section 11), each against the target to carry on and the line at which to stop. The engine works them out.
+const PSTATE: Record<string, [string, string]> = { on_track: ["On track", "good"], watch: ["Watch", "warn"], stop: ["Past the line", "bad"], early: ["Too early to tell", ""] };
+function PilotCard() {
+  const { T } = useFirm(), M = T.pilotMeasures();
+  return <div className="card"><div className="hd"><h2>The pilot's measures</h2><span className="sp" /><span className="small muted">{M.clients} {M.clients === 1 ? "client" : "clients"} sent a first letter</span></div>
+    <div className="tbl"><table style={{ minWidth: 0 }}><thead><tr><th>Measure</th><th className="num">Now</th><th>Target</th><th>Rethink if</th><th></th></tr></thead><tbody>{M.rows.map((r: Row) => <tr key={r.key}>
+      <td><b>{r.label}</b><div className="small muted">{r.n ? r.of : "No cases yet"}</div></td><td className="num">{r.display}</td><td className="small">{r.target}</td><td className="small">{r.stopAt || "No line set"}</td>
+      <td><span className={"chip " + PSTATE[r.state]![1]}>{PSTATE[r.state]![0]}</span></td></tr>)}</tbody></table></div>
+    <div className="bd small muted">Worked out from what happened, not from estimates. Staff touches count decisions in the review queue and messages a person wrote; approving letters is counted apart ({M.approvals} so far). {M.note}</div></div>;
+}
+
 export function Progress() {
   const { T } = useFirm(), s = T.S, EM = emailFirst(T), docs: Row[] = s.docs.filter((d: Row) => d.engId), checked = new Set<string>(s.tasks.filter((t: Row) => t.docId).map((t: Row) => t.docId)), open = openTasks(T);
   const done: number[] = s.engs.filter((e: Row) => e.completedAt && e.startedAt).map((e: Row) => (e.completedAt - e.startedAt) / T.DAY).sort((a: number, b: number) => a - b), med = done.length ? done[Math.floor(done.length / 2)]! : null;
@@ -21,6 +32,7 @@ export function Progress() {
   const pers: Row[] = s.engs.filter((e: Row) => T.cadenceFor(e).key === "persistent"), rest: Row[] = s.engs.filter((e: Row) => T.cadenceFor(e).key !== "persistent"), pm = medOf(pers), rm = medOf(rest);
   if (!s.clients.length) return <Page title="Progress"><div className="card"><Empty><div className="big"><Icon name="chart" /></div><b>Nothing to measure yet.</b><br />Once clients are in and collecting, this page shows how fast files complete and how many documents needed a person.<br /><Link className="btn pri" style={{ marginTop: 12 }} to="/add-clients">Add clients</Link></Empty></div></Page>;
   return <Page title="Progress">
+    {EM ? <PilotCard /> : null}
     {pers.length ? <div className="card pad row"><span className="ico"><Icon name="chart" small /></span><div className="grow"><b>{pers.length} {pers.length === 1 ? "client is" : "clients are"} on Persistent</b><div className="small muted">{pm === null ? "None of them has finished yet." : "Median " + pm.toFixed(1) + " days to all fetched" + (rm === null ? "." : ", against " + rm.toFixed(1) + " for everyone else.")} These are your own numbers, not a promise.</div></div></div> : null}
     {setup !== null ? <div className="card pad row"><span className="ico"><Icon name="clock" small /></span><div className="grow"><b>{setup < 90 ? setup + " minutes" : Math.round(setup / 60) + " hours"} from creating this firm to its first message</b><div className="small muted">The target is under an hour, with no call to us.</div></div></div> : null}
     <div className="grid g4">{([[med === null ? "n/a" : med.toFixed(1), "Median days to a complete file", "from first message"], [(docs.length ? Math.round((100 * auto) / docs.length) : 0) + "%", "Accepted with no staff touch", docs.length + " documents in"], [outs, "Automated messages sent", s.msgs.filter((m: Row) => m.dir === "in").length + " replies"], EM ? [s.clients.filter((c: Row) => c.emailOff).length, "Asked for no more emails", "of " + s.clients.length + " clients"] : [s.clients.filter((c: Row) => c.textConsent === "withdrawn").length, "Opted out of texts", "of " + s.clients.length + " clients"]] as [string | number, string, string][]).map((x) => <div className="card stat" key={x[1]}><b>{x[0]}</b><span>{x[1]}</span><small>{x[2]}</small></div>)}</div>

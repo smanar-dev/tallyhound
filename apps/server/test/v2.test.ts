@@ -245,3 +245,28 @@ test("TH-UPL-3: when the service is on https, a client page asked for in the cle
   const tls = await H.server.inject({ method: "GET", url: u, headers: { "x-forwarded-proto": "https" } }); assert.equal(tls.statusCode, 200); assert.match(tls.body, /Hi Maria/);
   await H.close();
 });
+
+test("v2: an owner changes a letter's wording; it keeps its line breaks, must keep the list and the link, passes the message check, and the next letter uses it", async () => {
+  const H = await build("memory", { letters: true }), { firmId, ownerId } = await H.newFirm(), owner = await H.signInAs("pat1@firm1.test");
+  const act = async (fn: string, ...args: unknown[]) => (await owner.post("/api/act", { fn, args })).json.result;
+  const ok = "Dear {first},\n\nFor your {year} return we are still waiting on:\n\n{items}\n\nPlease upload them here when you can:\n{link}\n\nWith thanks,\n{sign_name}\n{firm}";
+  assert.equal(await act("saveWording", "L1", ok.replace("{link}", "the page"), "professional"), "It must keep {link}");
+  assert.equal(await act("saveWording", "L1", ok.replace("still waiting on", "waiting on, so you get your refund,"), "professional"), "It would not pass the message check: blocked word \"refund\"");
+  assert.equal(await act("saveWording", "L1", ok.replace("{firm}", "{firm} {bank}"), "professional"), "Tallyhound does not know {bank}");
+  assert.equal(await act("saveWording", "L1", ok, "professional"), null);
+  await H.app.staff(firmId, ownerId, (T: Engine) => { assert.match(T.S.firm.templates.en.L1, /^Dear \{first\},¶¶For your/); T.S.firm.hound.mode = "autopilot"; T.importRows(T.parseCSV("First,Last,Email\nMaria,Garcia,maria@x.example")); const e = T.S.engs[0]; e.confirmed = true; T.start(e.id); }); await H.worker.pass();
+  assert.match((H.email.sent[0] as any).body, /^Dear Maria,\n\nFor your 2026 return we are still waiting on:\n\n {2}- W-2 wage statement\n {2}- 1098 \(mortgage interest statement\)\n\nPlease upload them here when you can:\nhttps:\/\/go\.tallyhound\.test\/u\//);
+  assert.equal(await act("resetWording", "L1", "professional"), null); const T = createEngine(); T.load((await H.store.readState(firmId))!); assert.equal(T.S.firm.templates.en.L1, undefined);
+  // A reply's wording in a letters firm must keep the upload link it carries.
+  assert.equal(await act("saveWording", "M8", "Sorry, part of that one is hard to read. Could you take it again?", "professional"), "It must keep {link}");
+  await H.close();
+});
+
+test("v2: the morning note says how many letters went out since the last one and how many are waiting for approval", async () => {
+  const { createNotifier } = await import("../src/notify.ts");
+  const T = createEngine(); T.blank({ letters: true, plan: "Practice", name: "Maple & Pine", email: "docs@m.example", mode: "copilot", now: new Date(2027, 0, 25, 10, 5), users: [{ id: "u1", first: "Dana", name: "Dana Whitfield", role: "owner", email: "dana@m.example" }] });
+  T.importRows(T.parseCSV("First,Last,Email\nMaria,Garcia,maria@x.example\nLuis,Ortega,luis@x.example")); const [a, b] = T.S.engs; a.confirmed = b.confirmed = true; T.start(a.id); T.start(b.id); T.advance(5 * T.MIN);
+  const d = T.S.msgs.find((m: any) => m.engId === a.id && m.tpl === "L1"); T.setUser("u1"); assert.equal(T.approveMsg(d.id, null), null); d.sentAt = new Date(T.S.now);
+  T.setNow(new Date(2027, 0, 26, 7, 30)); const mails = createNotifier({ appUrl: "https://app.tallyhound.test" }).collect(T, [{ id: "u1", name: "Dana Whitfield", email: "dana@m.example", role: "owner" } as any]);
+  const note = mails.find((m: any) => m.kind === "digest"); assert.ok(note, "no morning note"); assert.match(note!.body, /Letters\n {2}1 letter went out since the last note\n {2}1 letter is waiting for your approval/); assert.ok(!/neeter/i.test(note!.body));
+});

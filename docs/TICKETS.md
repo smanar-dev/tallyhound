@@ -533,6 +533,13 @@ Source: the v2 tech spec. `docs/V2.md` maps it onto this codebase, lists what is
 82. T-186, clean-ups: a person removed from the firm has their mailbox disconnected; closing a firm removes every assistant before the key is destroyed.
 83. T-187, the documents: `docs/neeter/BRIEF.md` (to send Neeter: the four extensions, the calls, the webhook, white label, what it holds, nine questions, how we would test together), `RUNBOOK.md` (from answers to a first firm, daily checks, taking it out again), `AGREEMENT.md` (what the contract must cover, questions for counsel).
 
+# Round 21 (November 25): the last code
+
+84. T-188, the Plan tab for letters. `plan.ts` knows L1 to L3; a letter appears in the row of every document it names; the plan for a client whose preparer has no mailbox says so; working out a plan changes nothing.
+85. T-189, letter wording an owner can change, per voice, with the message check, line breaks kept, and `{first}`, `{items}` and `{link}` required. A document with no issuer named reads as "W-2 wage statement", not "W-2 (W-2 wage statement)".
+86. T-190, the pilot's measures (spec section 11): `pilotMeasures` in the engine, the card on Progress, `admin pilot-report`.
+87. T-191, the morning overview says which letters went out and which wait for approval.
+
 ## Everything still to be done (November 25)
 
 Nothing in `docs/TICKETS.md` is unbuilt. What is left needs something code cannot supply.
@@ -547,6 +554,6 @@ Nothing in `docs/TICKETS.md` is unbuilt. What is left needs something code canno
 
 **Only possible in a pilot:** the six pilot measures in the spec; whether a person agrees with the sniff test 98% of the time; whether the one-click steps are right 95% of the time; willingness to pay.
 
-**Known limits, by choice:** a staff click and the timer still load the whole firm; the Plan tab is hidden for email-first firms until it is redrawn for letters; staff sign in with an emailed link, not with Google; the demo in `reference/artifact` is still a texting firm; the texting code and its tests remain in the repository, switched off.
+**Known limits, by choice:** a staff click and the timer still load the whole firm; staff sign in with an emailed link, not with Google; the demo in `reference/artifact` is still a texting firm; the texting code and its tests remain in the repository, switched off.
 
 **Outside this repository:** the marketing website and video changed to email-first with no texting claim; the brand book's asset list.

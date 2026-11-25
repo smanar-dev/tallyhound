@@ -100,3 +100,4 @@ fieldset.kinds{border:1px solid var(--line);border-radius:12px;padding:10px 12px
 .letterhead{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:0;font-size:13px}.letterhead dt{color:var(--slate)}.letterhead dd{margin:0;overflow-wrap:anywhere}
 .daybox{display:flex;flex-wrap:wrap;gap:10px}.daybox label{display:flex;align-items:center;gap:6px}
 .confirmbar{align-items:center;border-bottom:1px solid var(--line2);background:var(--good-bg)}
+.wbox.tall{min-height:320px;white-space:pre-wrap}

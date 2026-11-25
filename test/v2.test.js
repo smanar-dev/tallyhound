@@ -157,6 +157,9 @@ test("the wording of every letter, in every voice, passes the output check and h
     const L = letters(T, e); assert.equal(L.length, 5); for (const m of L) { assert.deepEqual(T.outputCheck(m.body, "email", { year: 2026 }), []); assert.ok(!/text|reply with a photo|STOP|\{|¶|§/i.test(m.body), voice + ": " + m.body); assert.match(m.body, /Dana Whitfield\nMaple & Pine Tax Co\.$/); } }
   const { T } = lfirm(); for (const v of ["professional", "warm", "brief"]) for (const code of Object.keys(T.LETTER[v].en)) assert.ok(!/reply with a photo|photo by reply|YES or NO|by text/i.test(T.LETTER[v].en[code]), v + " " + code);
 });
+test("a document with no issuer named reads as its own name: W-2 wage statement, never W-2 (W-2 wage statement)", () => {
+  const { T, e } = lfirm(); const w2 = item(T, e, "W2"); w2.payer = ""; assert.equal(T.itemTitle(w2, "en"), "W-2 wage statement"); assert.equal(T.itemTitle(item(T, e, "1098"), "en"), "1098 from Hillcrest Mortgage"); item(T, e, "1098").payer = ""; assert.equal(T.itemTitle(item(T, e, "1098"), "en"), "1098 (mortgage interest statement)");
+});
 test("TH-EML-2: the next letter can be read before it goes, word for word, without the client's link and without changing anything", () => {
   const { T, c, e } = lfirm(); e.confirmed = true; const before = JSON.stringify(T.dump()), p0 = T.letterPreview(e.id);
   assert.equal(p0.code, "L1"); assert.equal(p0.subject, "3 documents for your 2026 tax return"); assert.match(p0.body, /\(Maria's private upload link\)/); assert.equal(JSON.stringify(T.dump()), before, "reading the preview changed the firm");
@@ -169,4 +172,19 @@ test("approving a letter someone edited in the browser sends the client's real l
   const shown = d.body.split(e.link.key).join("(private link)"); assert.ok(!shown.includes(e.link.key));   // what the browser is given
   assert.match(T.approveMsg(d.id, shown.replace("Hi Maria,", "Dear Maria,").replace(/https:\S+/, "")), /Keep the client's link/); assert.equal(d.status, "approval");
   assert.equal(T.approveMsg(d.id, shown.replace("Hi Maria,", "Dear Maria,")), null); assert.equal(d.status, "delivered"); assert.ok(d.body.startsWith("Dear Maria,")); assert.ok(d.body.includes(real)); assert.ok(!d.body.includes("(private link)"));
+});
+test("section 11: the pilot's measures are worked out from the record, each against its target and its stop line, and say when there are too few cases", () => {
+  const { T } = lfirm(); T.setUser("u1"); let M = T.pilotMeasures(); assert.equal(M.clients, 0); assert.ok(M.rows.every((r) => r.state === "early" && r.display === "No cases yet")); assert.equal(M.rows.length, 6);
+  // Ten clients: letters go; six complete within a fortnight through the link, one sends a document by email, one unsubscribes.
+  T.importRows(T.parseCSV("First,Last,Email\n" + Array.from({ length: 9 }, (_, i) => "C" + i + ",Client,c" + i + "@x.example").join("\n"))); T.S.engs.forEach((e) => { e.confirmed = true; T.itemsOf(e.id).forEach((i, k) => { if (k) i.state = "removed"; }); }); T.startMany(T.S.engs.map((e) => e.id)); T.advance(T.HOUR);
+  const engs = T.S.engs.slice(); T.advance(3 * T.DAY);
+  engs.slice(0, 6).forEach((e) => { const it = T.itemsOf(e.id)[0]; T.inboundDoc(e.clientId, { form: it.form, year: 2026, payer: it.payer }, "portal"); });
+  const e7 = engs[6], it7 = T.itemsOf(e7.id)[0]; T.inboundEmail(e7.clientId, "", [{ form: it7.form, year: 2026, payer: it7.payer }], null); T.stopEmail(engs[7].clientId, "link");
+  T.inboundReply(engs[8].clientId, "Can I send it after the 15th?", { intent: "send_after_date", confidence: "high", legacy_intent: "will_send_later", date: "2027-02-15", item_id: T.itemsOf(engs[8].id)[0].id }); const st = T.S.tasks.find((t) => t.kind === "step" && t.status === "open"); T.decideTask(st.id, "apply_step", null);
+  T.advance(22 * T.DAY); M = T.pilotMeasures(); const r = Object.fromEntries(M.rows.map((x) => [x.key, x]));
+  assert.equal(M.clients, 10); assert.equal(r.complete21.of, "7 of 10"); assert.equal(r.complete21.display, "70%"); assert.equal(r.complete21.state, "on_track"); assert.equal(r.complete21.target, "60% or more"); assert.equal(r.complete21.stopAt, "under 40%");
+  assert.equal(r.byLink.of, "6 of 7"); assert.equal(r.byLink.state, "early", "seven documents are too few to judge");
+  assert.equal(r.unsub.of, "1 of 10"); assert.equal(r.unsub.state, "early"); assert.equal(r.touches.of, "1 touches for 10 clients"); assert.equal(r.touches.display, "0.1"); assert.equal(r.touches.state, "on_track"); assert.equal(r.steps.of, "1 of 1");
+  // The person checking documents: 100 agreed of 104 is under the 95% stop line.
+  T.S.firm.agree = { W2: { n: 104, ok: 98 } }; assert.equal(Object.fromEntries(T.pilotMeasures().rows.map((x) => [x.key, x])).agree.state, "stop");
 });

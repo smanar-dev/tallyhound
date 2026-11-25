@@ -125,16 +125,20 @@ export const ACTIONS: Record<string, Rule> = {
   // must keep every blank of the wording it replaces and pass the same check as a message, filled with sample data, never a client.
   saveWording: { role: "owner", n: 3, run: (T, [code, text, v]) => {
     const k = String(code || ""), voice = v && T.VOICES[String(v)] ? String(v) : "professional", pro = voice === "professional";
-    if (!Object.hasOwn(T.TPL.en, k)) return "No such message"; if (T.COMPLIANCE.includes(k) || k === "M31") return "This wording is required by law and cannot be changed";
+    // v2: an email-first firm edits its letters and replies as they are sent: the letter wording, with the upload link where one belongs.
+    // A letter keeps its line breaks, and must keep the client's name, the list of what is owed and the link.
+    const LT = T.LETTERS() ? (T.LETTER[voice] && T.LETTER[voice].en[k]) || T.LETTER.professional.en[k] || null : null, multi = /^L\d$/.test(k);
+    if (!Object.hasOwn(T.TPL.en, k) && !LT) return "No such message"; if (T.COMPLIANCE.includes(k) || k === "M31") return "This wording is required by law and cannot be changed";
     if (!pro && T.VOICE_FIXED.includes(k)) return "This message has one wording in every voice";
-    const std = String(pro ? T.TPL.en[k] : T.VOICE_TPL[voice].en[k] || T.TPL.en[k]), body = String(text ?? "").replace(/[<>]/g, "").replace(/\s+/g, " ").trim();
-    if (body.length < 10 || body.length > 600) return "Write between 10 and 600 characters"; if (/!/.test(body)) return "No exclamation marks";
-    const blanks = (t: string) => [...new Set(t.match(/\{\w+\}/g) || [])], need = blanks(std).filter((x) => x !== "{sign_off}"), lost = need.filter((x) => !body.includes(x)), odd = blanks(body).filter((x) => !need.includes(x) && !["{first}", "{firm}", "{preparer}", "{year}", "{sign_off}"].includes(x));
+    const std = String(LT || (pro ? T.TPL.en[k] : T.VOICE_TPL[voice].en[k] || T.TPL.en[k]));
+    const body = multi ? String(text ?? "").replace(/\r/g, "").split("\n").map((l) => l.replace(/[<>¶§]/g, "").replace(/\s+/g, " ").trim()).join("¶").replace(/¶{3,}/g, "¶¶").replace(/^¶+|¶+$/g, "") : String(text ?? "").replace(/[<>¶§]/g, "").replace(/\s+/g, " ").trim();
+    if (multi ? body.length < 40 || body.length > 1500 : body.length < 10 || body.length > 600) return multi ? "Write between 40 and 1,500 characters" : "Write between 10 and 600 characters"; if (/!/.test(body)) return "No exclamation marks";
+    const blanks = (t: string) => [...new Set(t.match(/\{\w+\}/g) || [])], need = multi ? ["{first}", "{items}", "{link}"] : blanks(std).filter((x) => x !== "{sign_off}"), lost = need.filter((x) => !body.includes(x)), odd = blanks(body).filter((x) => !need.includes(x) && !blanks(std).includes(x) && !["{first}", "{firm}", "{preparer}", "{year}", "{sign_off}", "{sign_name}"].includes(x));
     if (lost.length) return "It must keep " + lost.join(", "); if (odd.length) return "Tallyhound does not know " + odd.join(", ");
     const c = { id: "", first: "Maria", last: "Garcia", lang: "en", voice, preparer: T.S.user ? T.S.user.id : null }, year = T.S.firm.taxYear || 2026;
     const F = T.S.firm, slot: Record<string, string> = pro ? (F.templates.en = F.templates.en || {}) : (((F.templatesBy = F.templatesBy || {})[voice] = F.templatesBy[voice] || {}).en = F.templatesBy[voice].en || {});
     const was = slot[k]; slot[k] = body;
-    const errs = T.outputCheck(T.fill(k, c, null, { voice, item: { form: "W2", payer: "Acme Health" }, n: 3, k: 2, question: "Did you start a new job?", doc_year: year - 1, summary: "We have your W-2.", missing: "the second page is missing", fix: "the second page", list: "your W-2", date: "March 1", link: "go.tallyhound.example/u/k3x9" }), "email", { year, doc_year: year - 1 }).filter((x: string) => !x.startsWith("digit run"));
+    const errs = T.outputCheck(T.fill(k, c, null, { voice, item: { form: "W2", payer: "Acme Health" }, n: 3, k: 2, question: "Did you start a new job?", doc_year: year - 1, summary: "We have your W-2.", missing: "the second page is missing", fix: "the second page", list: "your W-2", date: "March 1", link: "https://go.tallyhound.example/u/maple-abcdefghijkmnpqrstuvwxyzab", items: "§- W-2 from Acme Health¶§- 1099-INT from First Farmers Bank", usual_issue: "It usually arrives by January 31." }), "email", { year, doc_year: year - 1 }).filter((x: string) => !x.startsWith("digit run"));
     if (errs.length) { if (was === undefined) delete slot[k]; else slot[k] = was; return "It would not pass the message check: " + errs.join(", "); }
     T.audit("settings.wording", k + " changed" + (pro ? "" : " (" + T.VOICES[voice].label + ")")); return null; } },
   resetWording: { role: "owner", n: 2, run: (T, [code, v]) => { const k = String(code || ""), voice = v && T.VOICES[String(v)] ? String(v) : "professional", slot = voice === "professional" ? T.S.firm.templates.en : ((T.S.firm.templatesBy || {})[voice] || {}).en; if (slot && Object.hasOwn(slot, k)) { delete slot[k]; T.audit("settings.wording", k + " back to the standard wording" + (voice === "professional" ? "" : " (" + T.VOICES[voice].label + ")")); } return null; } },

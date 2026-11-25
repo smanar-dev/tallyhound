@@ -19,7 +19,7 @@ scene("v2: in approve mode Go fetch drafts one letter listing every document; Ap
   await page.getByRole("button", { name: "Go fetch" }).click(); await page.getByText(/^Off it goes\. The first letter goes by email/).waitFor();
   await page.getByRole("tab", { name: /Conversation/ }).click(); const draft = page.getByLabel(/^Draft: The first letter/); await draft.waitFor();
   assert.equal(W.email.sent.length, mails, "the first letter is a draft, not an email"); const body = await draft.inputValue();
-  assert.match(body, /^Hi Sam,\n\nTo prepare your 2026 return we still need:\n\n {2}- W-2 \(W-2 wage statement\)\n {2}- 1098 \(mortgage interest statement\)\n\nUpload them here\. No account or password needed:\n/); assert.match(text(await page.locator(".convo").textContent()), /Subject: 2 documents for your 2026 tax return/);
+  assert.match(body, /^Hi Sam,\n\nTo prepare your 2026 return we still need:\n\n {2}- W-2 wage statement\n {2}- 1098 \(mortgage interest statement\)\n\nUpload them here\. No account or password needed:\n/); assert.match(text(await page.locator(".convo").textContent()), /Subject: 2 documents for your 2026 tax return/);
   await page.getByRole("button", { name: "Approve and send" }).first().click(); await page.getByText("Approved. It goes out now.").waitFor(); await draft.waitFor({ state: "detached" });
   const sent = W.email.sent.at(-1)! as any; assert.equal(W.email.sent.length, mails + 1); assert.equal(sent.to, "sam@x.example"); assert.equal(sent.subject, "2 documents for your 2026 tax return"); assert.match(sent.body, /https:\/\/go\.tallyhound\.test\/u\/[a-z]+-[a-z]{28}\n/); assert.equal(W.sms.sent.length, 0);
   // The letter keeps its lines on screen, and one client can be set to send on its own.
@@ -40,7 +40,10 @@ scene("v2: the Next letter card is the letter that will go, and a document that 
   T = await W.state(firmId); assert.notEqual(T.S.engs[0].link.key, key); assert.equal(T.linkFind(key).state, "revoked");
   await card.getByRole("button", { name: "Switch the link off" }).click(); await page.getByText("The link is switched off.").waitFor(); T = await W.state(firmId); assert.equal(T.linkFind(T.S.engs[0].link.key).state, "revoked"); await card.getByText(/Switched off Jan 25/).waitFor();
   // No tab for the week-by-week plan, and the contact details say nothing about a mobile agreement.
-  assert.equal(await page.getByRole("tab", { name: "Plan" }).count(), 0); await page.getByRole("tab", { name: "Details" }).click(); await page.getByLabel("Phone, for calls").waitFor(); assert.equal(await page.getByRole("heading", { name: "OK to text" }).count(), 0);
+  // The Plan tab: the letters still to come, each in the row of every document it names, worded as they will go.
+  await page.getByRole("tab", { name: "Plan" }).click(); await page.getByRole("heading", { name: "Follow-up plan" }).waitFor(); const grid = page.getByRole("table", { name: /^Follow-up plan for / }); assert.ok((await grid.locator(".pm.planned").count()) >= 2, "no letters are planned");
+  await grid.locator(".pm.planned").first().click(); assert.match(await page.locator(".planpreview").innerText(), /in the morning/); assert.equal(await page.getByRole("group", { name: "Preview by" }).count(), 0, "a letter offers a text preview");
+  await page.getByRole("tab", { name: "Details" }).click(); await page.getByLabel("Phone, for calls").waitFor(); assert.equal(await page.getByRole("heading", { name: "OK to text" }).count(), 0);
 }, { letters: true });
 
 scene("v2: a reply that names a later day waits in the review queue as a suggested step; nothing changes until Do it", async (W) => {
@@ -82,8 +85,9 @@ scene("v2: Settings for an email-first firm: letters from the Tallyhound address
   await page.getByLabel("Friday").click({ force: true, noWaitAfter: true }); await page.getByRole("button", { name: "Save working days" }).click(); await page.getByText(/^Saved\. Letters already planned move/).waitFor(); T = await W.state(firmId); assert.deepEqual(T.S.firm.workDays, [1, 2, 3, 4]);
   assert.match(text(await page.locator("ol.rhythm").textContent()), /Day 0\s*First letter\s*Working day 2\s*Follow-up\s*Working day 5\s*Follow-up\s*Working day 9\s*Follow-up\s*Working day 14\s*Last reminder/);
   // The wording page shows each letter as it is sent, by voice, and does not offer to edit it.
-  await page.getByRole("tab", { name: "Message wording" }).click(); await page.getByRole("heading", { name: "The first letter" }).waitFor(); assert.match(text(await page.locator(".bub.letter").textContent()), /Hi Maria, To prepare your 2026 return we still need: - W-2 from Acme Health - 1099-INT from First Farmers Bank/); assert.equal(await page.locator("textarea").count(), 0);
-  await page.getByLabel("Voice").selectOption("brief"); await page.getByText(/Upload here, no account needed:/).waitFor();
+  await page.getByRole("tab", { name: "Message wording" }).click(); await page.getByRole("heading", { name: "The first letter" }).waitFor(); assert.match(text(await page.locator(".bub.letter").textContent()), /Hi Maria, To prepare your 2026 return we still need: - W-2 from Acme Health - 1099-INT from First Farmers Bank/); const box = page.getByLabel(/^Wording: /); await box.fill((await box.inputValue()).replace("Thank you,", "With thanks,")); await page.getByRole("button", { name: "Save", exact: true }).click(); await page.getByText(/^Saved\. Clients get the new wording/).waitFor(); await page.getByRole("button", { name: "Back to the standard wording" }).waitFor();
+  await box.fill((await box.inputValue()).replace("{link}", "")); await page.getByRole("button", { name: "Save", exact: true }).click(); await page.getByText("It must keep {link}.").waitFor();
+  await page.getByLabel("Voice").selectOption("brief"); await page.locator(".bub.letter").getByText(/Upload here, no account needed:/).waitFor();
 }, { letters: true });
 
 scene("v2: with the mail service, a preparer connects their own mailbox in one visit to Google; until then letters wait; disconnecting stops them", async (W) => {

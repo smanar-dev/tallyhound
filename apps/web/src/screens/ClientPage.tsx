@@ -358,7 +358,6 @@ export function ClientPage() {
   const s = T.S, EM = emailFirst(T), u = s.users.find((x: Row) => x.id === c.preparer), docs = s.docs.filter((d: Row) => d.engId === e.id).length, msgs = s.msgs.filter((m: Row) => m.engId === e.id && m.status !== "discarded").length, rc = T.recommend(e.id).add.length;
   const TABS: [string, string, (string | number | null)?][] = [["checklist", "Checklist", T.verified(e.id).n + " of " + T.verified(e.id).m], ["suggested", "Suggested", rc ? rc + " to add" : null], ["documents", "Documents", docs], ["conversation", "Conversation", msgs], ["plan", "Plan"], ["activity", "Activity"], ["details", "Details"]];
   // v2: the week-by-week plan was drawn for one request per message. An email-first firm reads the next letter on the right instead.
-  if (EM) TABS.splice(TABS.findIndex((t) => t[0] === "plan"), 1);
   const tab = TABS.some((t) => t[0] === params.get("tab")) ? params.get("tab")! : "checklist", ctx = { T, e, c };
   // The viewer opens over the page and its address says which document, so a link to it can be shared with a colleague at the firm.
   const docIds: string[] = s.docs.filter((d: Row) => d.engId === e.id).sort((a: Row, b: Row) => a.at - b.at).map((d: Row) => d.id), viewing = params.get("doc");

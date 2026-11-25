@@ -62,13 +62,16 @@ export function createNotifier({ appUrl }: { appUrl: string }) {
         const needs = needsYou(T), done = S.engs.filter((e: any) => e.status === "complete" && e.completedAt && +new Date(e.completedAt) > since).map((e: any) => T.client(e.clientId)).filter(Boolean);
         for (const u of staff) {
           if (u.morningOff) continue;
-          const wait = needs.filter((n) => mine(u, n.c)), quiet = wait.filter((n) => n.stuck && n.stuck !== "opted_out"), rest = wait.filter((n) => !quiet.includes(n)), fin = done.filter((c: any) => mine(u, c)); if (!wait.length && !fin.length) continue;
+          // v2: the morning overview (spec section 2) also says which letters went out since the last note and which are waiting for a click.
+          const L = S.firm.letters ? S.msgs.filter((m: any) => /^L\d$/.test(m.tpl) && mine(u, T.client((T.eng(m.engId) || {}).clientId))) : [], went = L.filter((m: any) => (m.sentAt || m.status === "delivered") && +new Date(m.at) > since), drafts = L.filter((m: any) => m.status === "approval");
+          const wait = needs.filter((n) => mine(u, n.c)), quiet = wait.filter((n) => n.stuck && n.stuck !== "opted_out"), rest = wait.filter((n) => !quiet.includes(n)), fin = done.filter((c: any) => mine(u, c)); if (!wait.length && !fin.length && !went.length && !drafts.length) continue;
           const held = T.barkHeld(u.id) as Record<string, number>, heldParts = Object.keys(held).map((k) => held[k] + " " + T.BARK_KINDS[k]), things = needs.filter((x) => mine(u, x.c)).length;
           const parts = ["Good morning, " + firstName(u) + ". " + (things ? things + (things === 1 ? " thing" : " things") + " in the review queue." : "Nothing in the review queue.") + " Everyone else is on track."];
           if (heldParts.length) parts.push("Since you left yesterday\n" + heldParts.map((x) => "  " + x).join("\n"));
           if (rest.length) parts.push("Waiting for you (" + new Set(rest.map((n) => n.c.id)).size + ")\n" + list(rest.map((n) => short(n.c))));
           if (quiet.length) parts.push("Gone quiet (" + new Set(quiet.map((n) => n.c.id)).size + ")\n" + list(quiet.map((n) => short(n.c))));
           if (fin.length) parts.push("All fetched since the last note (" + fin.length + ")\n" + list(fin.map(short)));
+          if (went.length || drafts.length) parts.push("Letters\n" + (went.length ? "  " + went.length + (went.length === 1 ? " letter" : " letters") + " went out since the last note\n" : "") + (drafts.length ? "  " + drafts.length + (drafts.length === 1 ? " letter is" : " letters are") + " waiting for your approval" : "").replace(/\n$/, ""));
           parts.push("Open Tallyhound: " + url + (wait.length ? "/needs-you" : "/"), "No documents or details are ever sent by email.\n\n" + S.firm.name + ", by Tallyhound");
 
           out.push({ to: u.email, kind: "digest", subject: "Tallyhound: " + things + (things === 1 ? " thing" : " things") + " in the review queue" + (!things && fin.length ? ", " + fin.length + " all fetched" : ""), body: parts.join("\n\n") });
