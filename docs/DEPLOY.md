@@ -42,7 +42,10 @@ Put every one of these in the host's secret store, never in the repo.
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_MESSAGING_SERVICE_SID` | for texts | Without them texting is "not connected" and Tallyhound collects by email |
 | `TH_MAIL_LAYER` | optional | Unset: client letters go from each firm's Tallyhound address through Postmark. `neeter`: letters go from each preparer's own mailbox through the mail layer (`docs/V2.md`); needs the three settings below and a Google or Microsoft sign-in app. `fake`: a stand-in in memory for a trial run; refused in production |
 | `NEETER_BASE_URL`, `NEETER_PARTNER_KEY` | with `TH_MAIL_LAYER=neeter` | The layer's address and Tallyhound's partner key. Each firm's own key is made with it, sealed, and replaced every 90 days |
-| `NEETER_WEBHOOK_SECRET` | with `TH_MAIL_LAYER=neeter` | The secret the layer signs its calls to `/hooks/neeter` with |
+| `NEETER_WEBHOOK_SECRET` | with `TH_MAIL_LAYER=neeter` and replies pushed | At least 32 random characters, shared with the layer, which signs its calls to `/hooks/neeter` with it |
+| `NEETER_SEND` | optional | `letters` (default): the layer sends Tallyhound's letter. `due_date`: the layer can only send its own follow-up on a due date; a pilot stopgap (`docs/neeter/RUNBOOK.md`) |
+| `NEETER_REPLIES` | optional | `webhook` (default): the layer pushes replies to `/hooks/neeter`. `poll`: the timer fetches them |
+| `NEETER_TRACE` | optional | `on`: one log line per call to the layer, with its method, path without ids, status and time. No bodies |
 | `TH_SYSTEM_NUMBER` | for text barks to staff | Tallyhound's own number, in E.164 form, on the same Twilio account. It must be a different number from every firm's client number. Without it nobody can add a mobile under My alerts, and barks go in the app and by email only. Point its incoming-message webhook at `/hooks/twilio` so a STOP from staff is honoured |
 | `ANTHROPIC_API_KEY` | for reading | Without it documents go to a person and messages use the standard wording |
 | `TH_MODEL_DAILY_CAP_USD` | no | Most the model may cost one firm in a day. Default 10 |

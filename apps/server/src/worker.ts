@@ -7,14 +7,14 @@ import type { Notifier, StaffMail, StaffMailer, SystemSms } from "./notify.ts";
 import { snapshot, type FirmSnapshot, type OpsStore, type Watch } from "./ops.ts";
 
 export interface WorkerStatus { lastPass: Date | null; firms: number; failed: number; lastError: string | null }
-export function createWorker({ app, auth, clock, log, inbox, notify, mailer, ops, watch, lines, billing, cleanup, expireSupport, systemSms, reconcileHour }: { reconcileHour?: number | null; notify?: Notifier; mailer?: StaffMailer; ops?: OpsStore; watch?: Watch; lines?: (firmId: string) => Promise<number>; cleanup?: { sweep(force?: boolean): Promise<number> }; expireSupport?: () => Promise<number>; systemSms?: SystemSms; billing?: { check(firmId: string, b: { state: string; pausedUntil: Date | null }): Promise<void> }; app: App; auth: AuthStore; clock: () => Date; log?: (event: string, ...ids: unknown[]) => void; inbox?: { drain(): Promise<number>; sweep(): Promise<number>; counts(): Promise<{ waiting: number; dead: number }> } }) {
+export function createWorker({ app, auth, clock, log, inbox, notify, mailer, ops, watch, lines, billing, cleanup, expireSupport, systemSms, reconcileHour, layerPoll, layerMaintain }: { reconcileHour?: number | null; layerPoll?: (firmId: string) => Promise<number>; layerMaintain?: (firmId: string) => Promise<void>; notify?: Notifier; mailer?: StaffMailer; ops?: OpsStore; watch?: Watch; lines?: (firmId: string) => Promise<number>; cleanup?: { sweep(force?: boolean): Promise<number> }; expireSupport?: () => Promise<number>; systemSms?: SystemSms; billing?: { check(firmId: string, b: { state: string; pausedUntil: Date | null }): Promise<void> }; app: App; auth: AuthStore; clock: () => Date; log?: (event: string, ...ids: unknown[]) => void; inbox?: { drain(): Promise<number>; sweep(): Promise<number>; counts(): Promise<{ waiting: number; dead: number }> } }) {
   const status: WorkerStatus = { lastPass: null, firms: 0, failed: 0, lastError: null }; const failedBefore = new Map<string, number>(); let deadBefore = 0, running = false, timer: NodeJS.Timeout | null = null, quick: NodeJS.Timeout | null = null;
   // TH-NTR-7: once a night each firm's copy in the mail layer is compared with Tallyhound and put right. reconcileHour is the hour
   // (server time) after which it runs; null or undefined means there is no mail layer.
   let reconciledOn = "";
   async function reconcileAll(ids: string[]): Promise<void> {
     if (reconcileHour == null) return; const now = clock(), day = now.toISOString().slice(0, 10); if (reconciledOn === day || now.getHours() < reconcileHour) return; reconciledOn = day;
-    for (const id of ids) { try { const r = await app.reconcile(id); if (log && r.checked) log("reconciled", id, r.checked, r.drift.length); if (watch && r.drift.length) await watch.tell("drift", id, r.drift.length + " records in the email service did not match Tallyhound overnight and were put back"); } catch (err) { if (log) log("reconcile_failed", id, (err as Error).message); } }
+    for (const id of ids) { try { if (layerMaintain) await layerMaintain(id); const r = await app.reconcile(id); if (log && r.checked) log("reconciled", id, r.checked, r.drift.length); if (watch && r.drift.length) await watch.tell("drift", id, r.drift.length + " records in the email service did not match Tallyhound overnight and were put back"); } catch (err) { if (log) log("reconcile_failed", id, (err as Error).message); } }
   }
   async function pass(): Promise<WorkerStatus> {
     if (running) return status; running = true;
@@ -23,6 +23,7 @@ export function createWorker({ app, auth, clock, log, inbox, notify, mailer, ops
       const ids = await auth.activeFirmIds(); let failed = 0;
       for (const id of ids) { try {
         // The same load and save as the tick: what to email staff is decided and marked with the firm locked, and sent after the save.
+        if (layerPoll) { try { const n = await layerPoll(id); if (n && log) log("layer_polled", id, n); } catch (err) { if (log) log("layer_poll_failed", id, (err as Error).message); } }   // replies, when the layer cannot call us
         if (lines) { try { await lines(id); } catch (err) { if (log) log("lookup_failed", id, (err as Error).message); } }   // before the tick, so a landline is known before the first send
         const people = notify && mailer ? await auth.usersOfFirm(id) : []; let mails: StaffMail[] = [], snap: FirmSnapshot | null = null, bill: { state: string; pausedUntil: Date | null } | null = null;
         await app.withFirm(id, (T: Engine) => { T.tick(); mails = notify && mailer ? notify.collect(T, people) : []; snap = ops ? snapshot(T) : null; const b = T.billing(); bill = { state: b.state, pausedUntil: b.pausedUntil ? new Date(b.pausedUntil) : null }; return true; });

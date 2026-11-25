@@ -7,6 +7,8 @@
 export class LayerError extends Error { code: string; constructor(code: "unreachable" | "refused" | "schema" | "no_mailbox", message: string) { super(message); this.code = code; } }
 export type TaskStatus = "Open" | "Completed" | "Done" | "On hold" | "Canceled";
 export const TASK_STATUS: TaskStatus[] = ["Open", "Completed", "Done", "On hold", "Canceled"];
+/** One thing the layer tells us: a reply it read, a letter that came back, or a test. The same shape pushed or fetched (docs/neeter/contract.json). */
+export interface LayerEvent { id?: string; type?: "reply" | "bounce" | "ping" | string; assistant_id?: string; from?: string; to?: string; text?: string; proposed_status?: string; attachment_count?: number; attachments?: { name?: string; content_type?: string; content_base64?: string }[]; at?: string }
 export interface LayerProject { name: string; closed: boolean; tasks: { id: string; title: string; status: TaskStatus }[]; history: { taskId: string; at: string; from: string | null; to: string; by: string }[] }
 
 /** What the layer does, addressed by assistant (one per connected mailbox). Every write carries a key and may be repeated safely (TH-NTR-3). */
@@ -21,6 +23,12 @@ export interface MailLayer {
   /** Sends one letter now, exactly as written, from the preparer's own address, with no signature or footer added (TH-WLB-2). */
   sendLetter(a: { firmId: string; assistantId: string; key: string; projectId: string; to: string; subject: string; body: string; thread?: string | null; unsubscribe?: string }): Promise<{ id: string; thread: string }>;
   getProject(a: { firmId: string; assistantId: string; projectId: string }): Promise<LayerProject | null>;
+  /** Only when the layer cannot call us: the events for one assistant since a cursor it gave us last time. */
+  listEvents?(a: { firmId: string; assistantId: string; cursor: string | null }): Promise<{ events: LayerEvent[]; cursor: string | null }>;
+  /** A harmless question with Tallyhound's own partner key, for the connection check. Says who the layer thinks we are. */
+  whoAmI?(): Promise<string>;
+  /** Once a night per firm: replaces the firm's key when it is 90 days old (TH-NTR-9). */
+  maintain?(firmId: string): Promise<void>;
 }
 type ByOwner<T> = T extends { assistantId: string } ? Omit<T, "assistantId"> & { owner: string } : T;
 /** The same, as the pipeline calls it: by the staff user whose mailbox it is. */
@@ -47,6 +55,7 @@ export function checkNames(fields: Record<string, unknown>): void {
 export function guarded(layer: MailLayer): MailLayer {
   return { ...layer,
     provision: (a) => layer.provision(a), remove: (a) => layer.remove(a), forgetProject: (a) => layer.forgetProject(a), getProject: (a) => layer.getProject(a),
+    listEvents: layer.listEvents ? (a) => layer.listEvents!(a) : undefined, whoAmI: layer.whoAmI ? () => layer.whoAmI!() : undefined, maintain: layer.maintain ? (f) => layer.maintain!(f) : undefined,
     async upsertProject(a) { checkNames({ name: a.name, email: a.email, due: a.due }); return layer.upsertProject(a); },
     async upsertTask(a) { checkNames({ title: a.title, note: a.note }); if (!TASK_STATUS.includes(a.status)) throw new LayerError("schema", "Unknown status"); return layer.upsertTask(a); },
     async sendLetter(a) { if (/\battachment\b.*base64|^%PDF/im.test(a.body)) throw new LayerError("schema", "A letter never carries a file"); return layer.sendLetter(a); } };

@@ -1,0 +1,1391 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "Tallyhound mail layer contract",
+  "version": "0.1.0-draft",
+  "description": "What Tallyhound calls on the mail layer, and what it expects the layer to send back. Written by Tallyhound on November 25, 2026, before Neeter's own interface was known. Every path, field and status here is a proposal to agree with Neeter, not a description of Neeter's API. When the real interface is known, change apps/server/src/integrations/neeter/index.ts and this file together; apps/server/test/neeter.test.ts fails if they disagree.\n\nWhite label: nothing the layer sends to a client may name the layer. Letters go from the CPA's own address, exactly as written, with no signature, footer, tracking pixel or 'sent by' line added. Only names reach the layer: a client's name and email address, a form's name and who issues it. Never a document, an amount or an identifier."
+ },
+ "servers": [
+  {
+   "url": "{NEETER_BASE_URL}",
+   "variables": {
+    "NEETER_BASE_URL": {
+     "default": "https://api.layer.example"
+    }
+   }
+  }
+ ],
+ "security": [
+  {
+   "firmKey": []
+  }
+ ],
+ "components": {
+  "securitySchemes": {
+   "partnerKey": {
+    "type": "http",
+    "scheme": "bearer",
+    "description": "Tallyhound's own key (NEETER_PARTNER_KEY). Used only to make and revoke each firm's key and to ask who we are."
+   },
+   "firmKey": {
+    "type": "http",
+    "scheme": "bearer",
+    "description": "One key per firm, limited to that firm's assistants. Tallyhound keeps it sealed with the firm's own encryption key and replaces it every 90 days (TH-NTR-9)."
+   }
+  },
+  "schemas": {
+   "TaskStatus": {
+    "type": "string",
+    "enum": [
+     "Open",
+     "Completed",
+     "Done",
+     "On hold",
+     "Canceled"
+    ],
+    "description": "Open: owed by the client. Completed: the client says it is sent and Tallyhound is checking. Done: verified by Tallyhound (set only by Tallyhound). On hold: no follow-ups. Canceled: not needed."
+   },
+   "Event": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "id",
+     "type",
+     "assistant_id"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "description": "Unique per event. Tallyhound acts on each id once, however often it is delivered."
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "reply",
+       "bounce",
+       "ping"
+      ]
+     },
+     "assistant_id": {
+      "type": "string",
+      "description": "Whose mailbox it happened in."
+     },
+     "at": {
+      "type": "string",
+      "description": "When, ISO 8601.",
+      "format": "date-time"
+     },
+     "from": {
+      "type": "string",
+      "description": "reply: the sender's address. Only replies on threads Tallyhound started, from senders on the firm's client list, should be sent; Tallyhound drops anything else."
+     },
+     "to": {
+      "type": "string",
+      "description": "bounce: the address that did not accept the letter."
+     },
+     "text": {
+      "type": "string",
+      "description": "reply: the plain text of the reply. Quoted earlier messages may be left in; Tallyhound strips them.",
+      "maxLength": 50000
+     },
+     "proposed_status": {
+      "type": "string",
+      "enum": [
+       "Open",
+       "Completed",
+       "Done",
+       "On hold",
+       "Canceled"
+      ],
+      "description": "reply: the layer's own reading, if it has one. Advice only: Tallyhound's rules decide."
+     },
+     "attachment_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "How many files the reply carried, whether or not they are included below."
+     },
+     "attachments": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {
+       "type": "object",
+       "additionalProperties": false,
+       "properties": {
+        "name": {
+         "type": "string"
+        },
+        "content_type": {
+         "type": "string"
+        },
+        "content_base64": {
+         "type": "string",
+         "description": "The file itself. Up to 25 MB each. Leave the list empty if files cannot be handed over: Tallyhound then asks a person to forward the email."
+        }
+       }
+      }
+     }
+    }
+   },
+   "ProjectWrite": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "external_id",
+     "name",
+     "contact_email",
+     "closed"
+    ],
+    "properties": {
+     "external_id": {
+      "type": "string",
+      "description": "Tallyhound's engagement id."
+     },
+     "name": {
+      "type": "string",
+      "description": "\"Garcia, Maria 2026\". Never a number that could identify the client."
+     },
+     "contact_email": {
+      "type": "string",
+      "format": "email"
+     },
+     "closed": {
+      "type": "boolean",
+      "description": "true once every document is in or the file is closed: no more follow-ups."
+     },
+     "due_date": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "format": "date",
+      "description": "The morning Tallyhound plans the next letter. Advice for the layer's board; Tallyhound sends the letter itself unless NEETER_SEND=due_date."
+     }
+    }
+   },
+   "TaskWrite": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "external_id",
+     "title",
+     "owed_by",
+     "status"
+    ],
+    "properties": {
+     "external_id": {
+      "type": "string",
+      "description": "Tallyhound's checklist item id."
+     },
+     "title": {
+      "type": "string",
+      "description": "The form and who issues it: \"W-2 from Acme Logistics\". No amounts, no identifiers.",
+      "maxLength": 200
+     },
+     "owed_by": {
+      "const": "client"
+     },
+     "status": {
+      "$ref": "#/components/schemas/TaskStatus"
+     },
+     "note": {
+      "type": "string",
+      "description": "Why, in words: \"Held until March 15\", \"Passed the sniff test\".",
+      "maxLength": 200
+     }
+    }
+   }
+  }
+ },
+ "paths": {
+  "/v1/partner": {
+   "get": {
+    "operationId": "whoAmI",
+    "summary": "Who the layer thinks we are. Used by the connection check.",
+    "security": [
+     {
+      "partnerKey": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "OK",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": false,
+         "properties": {
+          "id": {
+           "type": "string"
+          },
+          "name": {
+           "type": "string"
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Wrong or expired key."
+     },
+     "404": {
+      "description": "No such assistant, project or task (for GET: Tallyhound treats it as gone)."
+     },
+     "409": {
+      "description": "Same Idempotency-Key with different content."
+     },
+     "429": {
+      "description": "Slow down. Tallyhound retries with backoff."
+     },
+     "5XX": {
+      "description": "Tallyhound retries with backoff for 24 hours, then tells a person."
+     }
+    }
+   }
+  },
+  "/v1/keys": {
+   "post": {
+    "operationId": "makeFirmKey",
+    "summary": "Make a key limited to one Tallyhound firm.",
+    "security": [
+     {
+      "partnerKey": []
+     }
+    ],
+    "parameters": [
+     {
+      "name": "Idempotency-Key",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "maxLength": 120
+      },
+      "description": "Tallyhound's record id and a hash of what the write should hold. A repeated key must change nothing and return the first answer (TH-NTR-3). This is what lets Tallyhound retry after an outage without ever sending a letter twice."
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "account",
+         "scope"
+        ],
+        "properties": {
+         "account": {
+          "type": "string",
+          "description": "Tallyhound's firm id."
+         },
+         "scope": {
+          "const": "account"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "key"
+         ],
+         "properties": {
+          "key": {
+           "type": "string"
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Wrong or expired key."
+     },
+     "404": {
+      "description": "No such assistant, project or task (for GET: Tallyhound treats it as gone)."
+     },
+     "409": {
+      "description": "Same Idempotency-Key with different content."
+     },
+     "429": {
+      "description": "Slow down. Tallyhound retries with backoff."
+     },
+     "5XX": {
+      "description": "Tallyhound retries with backoff for 24 hours, then tells a person."
+     }
+    }
+   }
+  },
+  "/v1/keys/revoke": {
+   "post": {
+    "operationId": "revokeFirmKey",
+    "security": [
+     {
+      "partnerKey": []
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "key"
+        ],
+        "properties": {
+         "key": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "204": {
+      "description": "Revoked."
+     },
+     "401": {
+      "description": "Wrong or expired key."
+     },
+     "404": {
+      "description": "No such assistant, project or task (for GET: Tallyhound treats it as gone)."
+     },
+     "409": {
+      "description": "Same Idempotency-Key with different content."
+     },
+     "429": {
+      "description": "Slow down. Tallyhound retries with backoff."
+     },
+     "5XX": {
+      "description": "Tallyhound retries with backoff for 24 hours, then tells a person."
+     }
+    }
+   }
+  },
+  "/v1/assistants": {
+   "post": {
+    "operationId": "provision",
+    "summary": "EXTENSION 1. Make the assistant for one CPA's mailbox from the permission the CPA gave Tallyhound's own Google or Microsoft app. No Neeter sign-in, screen or email reaches the CPA.",
+    "parameters": [
+     {
+      "name": "Idempotency-Key",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "maxLength": 120
+      },
+      "description": "Tallyhound's record id and a hash of what the write should hold. A repeated key must change nothing and return the first answer (TH-NTR-3). This is what lets Tallyhound retry after an outage without ever sending a letter twice."
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "external_id",
+         "provider",
+         "address",
+         "refresh_token",
+         "scopes"
+        ],
+        "properties": {
+         "external_id": {
+          "type": "string",
+          "description": "Tallyhound's staff user id."
+         },
+         "provider": {
+          "type": "string",
+          "enum": [
+           "google",
+           "microsoft"
+          ]
+         },
+         "address": {
+          "type": "string",
+          "format": "email"
+         },
+         "refresh_token": {
+          "type": "string",
+          "description": "Issued to Tallyhound's own sign-in app. The layer uses it to send and to read replies on threads Tallyhound started."
+         },
+         "scopes": {
+          "type": "array",
+          "items": {
+           "type": "string"
+          }
+         },
+         "white_label": {
+          "const": true
+         },
+         "signature": {
+          "const": false,
+          "description": "Add no signature to anything sent."
+         },
+         "auto_send": {
+          "const": true,
+          "description": "EXTENSION 3. Send when told to, with no click by the CPA."
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "id"
+         ],
+         "properties": {
+          "id": {
+           "type": "string",
+           "description": "The layer's own id. Tallyhound stores it and never shows it to anyone."
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Wrong or expired key."
+     },
+     "404": {
+      "description": "No such assistant, project or task (for GET: Tallyhound treats it as gone)."
+     },
+     "409": {
+      "description": "Same Idempotency-Key with different content."
+     },
+     "429": {
+      "description": "Slow down. Tallyhound retries with backoff."
+     },
+     "5XX": {
+      "description": "Tallyhound retries with backoff for 24 hours, then tells a person."
+     }
+    }
+   }
+  },
+  "/v1/assistants/{assistantId}": {
+   "delete": {
+    "operationId": "remove",
+    "summary": "Remove an assistant and everything it holds. Sending and reading stop at once (TH-MBX-3). Tell us the time limit for deleting its data.",
+    "parameters": [
+     {
+      "name": "assistantId",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "Removed."
+     },
+     "401": {
+      "description": "Wrong or expired key."
+     },
+     "404": {
+      "description": "No such assistant, project or task (for GET: Tallyhound treats it as gone)."
+     },
+     "409": {
+      "description": "Same Idempotency-Key with different content."
+     },
+     "429": {
+      "description": "Slow down. Tallyhound retries with backoff."
+     },
+     "5XX": {
+      "description": "Tallyhound retries with backoff for 24 hours, then tells a person."
+     }
+    }
+   }
+  },
+  "/v1/assistants/{assistantId}/projects": {
+   "post": {
+    "operationId": "createProject",
+    "summary": "One project per client engagement.",
+    "parameters": [
+     {
+      "name": "assistantId",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "Idempotency-Key",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "maxLength": 120
+      },
+      "description": "Tallyhound's record id and a hash of what the write should hold. A repeated key must change nothing and return the first answer (TH-NTR-3). This is what lets Tallyhound retry after an outage without ever sending a letter twice."
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ProjectWrite"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "id"
+         ],
+         "properties": {
+          "id": {
+           "type": "string",
+           "description": "The layer's own id. Tallyhound stores it and never shows it to anyone."
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Wrong or expired key."
+     },
+     "404": {
+      "description": "No such assistant, project or task (for GET: Tallyhound treats it as gone)."
+     },
+     "409": {
+      "description": "Same Idempotency-Key with different content."
+     },
+     "429": {
+      "description": "Slow down. Tallyhound retries with backoff."
+     },
+     "5XX": {
+      "description": "Tallyhound retries with backoff for 24 hours, then tells a person."
+     }
+    }
+   }
+  },
+  "/v1/assistants/{assistantId}/projects/{projectId}": {
+   "put": {
+    "operationId": "updateProject",
+    "parameters": [
+     {
+      "name": "assistantId",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "projectId",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "Idempotency-Key",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "maxLength": 120
+      },
+      "description": "Tallyhound's record id and a hash of what the write should hold. A repeated key must change nothing and return the first answer (TH-NTR-3). This is what lets Tallyhound retry after an outage without ever sending a letter twice."
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ProjectWrite"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "id"
+         ],
+         "properties": {
+          "id": {
+           "type": "string",
+           "description": "The layer's own id. Tallyhound stores it and never shows it to anyone."
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Wrong or expired key."
+     },
+     "404": {
+      "description": "No such assistant, project or task (for GET: Tallyhound treats it as gone)."
+     },
+     "409": {
+      "description": "Same Idempotency-Key with different content."
+     },
+     "429": {
+      "description": "Slow down. Tallyhound retries with backoff."
+     },
+     "5XX": {
+      "description": "Tallyhound retries with backoff for 24 hours, then tells a person."
+     }
+    }
+   },
+   "patch": {
+    "operationId": "setDueDate",
+    "summary": "Only in the stopgap mode (NEETER_SEND=due_date): moves the due date so the layer's own follow-up goes on the right morning.",
+    "parameters": [
+     {
+      "name": "assistantId",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "projectId",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "Idempotency-Key",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "maxLength": 120
+      },
+      "description": "Tallyhound's record id and a hash of what the write should hold. A repeated key must change nothing and return the first answer (TH-NTR-3). This is what lets Tallyhound retry after an outage without ever sending a letter twice."
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "due_date"
+        ],
+        "properties": {
+         "due_date": {
+          "type": "string",
+          "format": "date"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "id"
+         ],
+         "properties": {
+          "id": {
+           "type": "string",
+           "description": "The layer's own id. Tallyhound stores it and never shows it to anyone."
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Wrong or expired key."
+     },
+     "404": {
+      "description": "No such assistant, project or task (for GET: Tallyhound treats it as gone)."
+     },
+     "409": {
+      "description": "Same Idempotency-Key with different content."
+     },
+     "429": {
+      "description": "Slow down. Tallyhound retries with backoff."
+     },
+     "5XX": {
+      "description": "Tallyhound retries with backoff for 24 hours, then tells a person."
+     }
+    }
+   },
+   "get": {
+    "operationId": "getProject",
+    "summary": "The project, its tasks and every status change, for the nightly comparison (TH-NTR-7, 8).",
+    "parameters": [
+     {
+      "name": "assistantId",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "projectId",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "include",
+      "in": "query",
+      "schema": {
+       "const": "tasks,history"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "OK",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "name",
+          "closed",
+          "tasks",
+          "history"
+         ],
+         "properties": {
+          "name": {
+           "type": "string"
+          },
+          "closed": {
+           "type": "boolean"
+          },
+          "tasks": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+             "id",
+             "title",
+             "status"
+            ],
+            "properties": {
+             "id": {
+              "type": "string"
+             },
+             "title": {
+              "type": "string"
+             },
+             "status": {
+              "$ref": "#/components/schemas/TaskStatus"
+             }
+            }
+           }
+          },
+          "history": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+             "task_id",
+             "at",
+             "to"
+            ],
+            "properties": {
+             "task_id": {
+              "type": "string"
+             },
+             "at": {
+              "type": "string",
+              "format": "date-time"
+             },
+             "from": {
+              "type": [
+               "string",
+               "null"
+              ]
+             },
+             "to": {
+              "type": "string"
+             },
+             "by": {
+              "type": "string",
+              "description": "client, tallyhound, or the layer"
+             }
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Wrong or expired key."
+     },
+     "404": {
+      "description": "No such assistant, project or task (for GET: Tallyhound treats it as gone)."
+     },
+     "409": {
+      "description": "Same Idempotency-Key with different content."
+     },
+     "429": {
+      "description": "Slow down. Tallyhound retries with backoff."
+     },
+     "5XX": {
+      "description": "Tallyhound retries with backoff for 24 hours, then tells a person."
+     }
+    }
+   },
+   "delete": {
+    "operationId": "forgetProject",
+    "summary": "When a client's records are deleted on schedule.",
+    "parameters": [
+     {
+      "name": "assistantId",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "projectId",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "Idempotency-Key",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "maxLength": 120
+      },
+      "description": "Tallyhound's record id and a hash of what the write should hold. A repeated key must change nothing and return the first answer (TH-NTR-3). This is what lets Tallyhound retry after an outage without ever sending a letter twice."
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "Deleted."
+     },
+     "401": {
+      "description": "Wrong or expired key."
+     },
+     "404": {
+      "description": "No such assistant, project or task (for GET: Tallyhound treats it as gone)."
+     },
+     "409": {
+      "description": "Same Idempotency-Key with different content."
+     },
+     "429": {
+      "description": "Slow down. Tallyhound retries with backoff."
+     },
+     "5XX": {
+      "description": "Tallyhound retries with backoff for 24 hours, then tells a person."
+     }
+    }
+   }
+  },
+  "/v1/assistants/{assistantId}/projects/{projectId}/tasks": {
+   "post": {
+    "operationId": "createTask",
+    "summary": "One task per document owed by the client.",
+    "parameters": [
+     {
+      "name": "assistantId",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "projectId",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "Idempotency-Key",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "maxLength": 120
+      },
+      "description": "Tallyhound's record id and a hash of what the write should hold. A repeated key must change nothing and return the first answer (TH-NTR-3). This is what lets Tallyhound retry after an outage without ever sending a letter twice."
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/TaskWrite"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "id"
+         ],
+         "properties": {
+          "id": {
+           "type": "string",
+           "description": "The layer's own id. Tallyhound stores it and never shows it to anyone."
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Wrong or expired key."
+     },
+     "404": {
+      "description": "No such assistant, project or task (for GET: Tallyhound treats it as gone)."
+     },
+     "409": {
+      "description": "Same Idempotency-Key with different content."
+     },
+     "429": {
+      "description": "Slow down. Tallyhound retries with backoff."
+     },
+     "5XX": {
+      "description": "Tallyhound retries with backoff for 24 hours, then tells a person."
+     }
+    }
+   }
+  },
+  "/v1/assistants/{assistantId}/projects/{projectId}/tasks/{taskId}": {
+   "put": {
+    "operationId": "updateTask",
+    "parameters": [
+     {
+      "name": "assistantId",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "projectId",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "taskId",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "Idempotency-Key",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "maxLength": 120
+      },
+      "description": "Tallyhound's record id and a hash of what the write should hold. A repeated key must change nothing and return the first answer (TH-NTR-3). This is what lets Tallyhound retry after an outage without ever sending a letter twice."
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/TaskWrite"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "id"
+         ],
+         "properties": {
+          "id": {
+           "type": "string",
+           "description": "The layer's own id. Tallyhound stores it and never shows it to anyone."
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Wrong or expired key."
+     },
+     "404": {
+      "description": "No such assistant, project or task (for GET: Tallyhound treats it as gone)."
+     },
+     "409": {
+      "description": "Same Idempotency-Key with different content."
+     },
+     "429": {
+      "description": "Slow down. Tallyhound retries with backoff."
+     },
+     "5XX": {
+      "description": "Tallyhound retries with backoff for 24 hours, then tells a person."
+     }
+    }
+   }
+  },
+  "/v1/assistants/{assistantId}/projects/{projectId}/letters": {
+   "post": {
+    "operationId": "sendLetter",
+    "summary": "EXTENSION 2. Send one letter now, from the CPA's own mailbox, exactly as written. Follow-ups go as replies on the same thread.",
+    "parameters": [
+     {
+      "name": "assistantId",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "projectId",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "Idempotency-Key",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "maxLength": 120
+      },
+      "description": "Tallyhound's record id and a hash of what the write should hold. A repeated key must change nothing and return the first answer (TH-NTR-3). This is what lets Tallyhound retry after an outage without ever sending a letter twice."
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "to",
+         "subject",
+         "body",
+         "send_now",
+         "add_signature"
+        ],
+        "properties": {
+         "to": {
+          "type": "string",
+          "format": "email"
+         },
+         "subject": {
+          "type": "string",
+          "maxLength": 200
+         },
+         "body": {
+          "type": "string",
+          "description": "Plain text. Send it unchanged.",
+          "maxLength": 20000
+         },
+         "thread_id": {
+          "type": [
+           "string",
+           "null"
+          ],
+          "description": "Reply on this thread when given."
+         },
+         "list_unsubscribe": {
+          "type": [
+           "string",
+           "null"
+          ],
+          "description": "Put in the List-Unsubscribe header with List-Unsubscribe-Post: List-Unsubscribe=One-Click."
+         },
+         "send_now": {
+          "const": true
+         },
+         "add_signature": {
+          "const": false
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "OK",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "id",
+          "thread_id"
+         ],
+         "properties": {
+          "id": {
+           "type": "string"
+          },
+          "thread_id": {
+           "type": "string"
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Wrong or expired key."
+     },
+     "404": {
+      "description": "No such assistant, project or task (for GET: Tallyhound treats it as gone)."
+     },
+     "409": {
+      "description": "Same Idempotency-Key with different content."
+     },
+     "429": {
+      "description": "Slow down. Tallyhound retries with backoff."
+     },
+     "5XX": {
+      "description": "Tallyhound retries with backoff for 24 hours, then tells a person."
+     }
+    }
+   }
+  },
+  "/v1/assistants/{assistantId}/events": {
+   "get": {
+    "operationId": "listEvents",
+    "summary": "EXTENSION 4, the fallback. Only if the layer cannot call POST /hooks/neeter: the events since a cursor (NEETER_REPLIES=poll).",
+    "parameters": [
+     {
+      "name": "assistantId",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "cursor",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "OK",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "events",
+          "cursor"
+         ],
+         "properties": {
+          "events": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/Event"
+           }
+          },
+          "cursor": {
+           "type": [
+            "string",
+            "null"
+           ]
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Wrong or expired key."
+     },
+     "404": {
+      "description": "No such assistant, project or task (for GET: Tallyhound treats it as gone)."
+     },
+     "409": {
+      "description": "Same Idempotency-Key with different content."
+     },
+     "429": {
+      "description": "Slow down. Tallyhound retries with backoff."
+     },
+     "5XX": {
+      "description": "Tallyhound retries with backoff for 24 hours, then tells a person."
+     }
+    }
+   }
+  }
+ },
+ "webhooks": {
+  "tallyhoundEvents": {
+   "post": {
+    "operationId": "hooksNeeter",
+    "summary": "EXTENSION 4. The layer calls Tallyhound at {APP_URL}/hooks/neeter with each reply it read and each letter that bounced.",
+    "description": "Sign every call: header x-layer-signature: t=<unix seconds>,v1=<hex HMAC-SHA256 of \"<t>.\" followed by the exact body, keyed with NEETER_WEBHOOK_SECRET>. Calls older than five minutes are refused. 200 or 202 means received; anything else, retry with backoff for at least 24 hours. Send {\"id\":\"...\",\"type\":\"ping\"} to test.",
+    "security": [],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Event"
+       },
+       "examples": {
+        "reply": {
+         "value": {
+          "id": "evt_1001",
+          "type": "reply",
+          "assistant_id": "as_1",
+          "at": "2027-01-27T15:04:00Z",
+          "from": "Maria Garcia <maria@x.example>",
+          "text": "Can I send the W-2 after the 15th?\n\nOn Mon, Jan 25, 2027 Dana Whitfield wrote:\n> Hi Maria,",
+          "proposed_status": "On hold",
+          "attachment_count": 0,
+          "attachments": []
+         }
+        },
+        "reply_with_file": {
+         "value": {
+          "id": "evt_1002",
+          "type": "reply",
+          "assistant_id": "as_1",
+          "from": "maria@x.example",
+          "text": "Here it is",
+          "attachment_count": 1,
+          "attachments": [
+           {
+            "name": "1098.pdf",
+            "content_type": "application/pdf",
+            "content_base64": "JVBERi0xLjQK"
+           }
+          ]
+         }
+        },
+        "bounce": {
+         "value": {
+          "id": "evt_1003",
+          "type": "bounce",
+          "assistant_id": "as_1",
+          "to": "maria@x.example"
+         }
+        },
+        "ping": {
+         "value": {
+          "id": "evt_ping",
+          "type": "ping"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Taken."
+     },
+     "202": {
+      "description": "Not ours (unknown assistant or a mailbox since disconnected). Do not retry."
+     },
+     "401": {
+      "description": "Signature missing, wrong or older than five minutes."
+     }
+    }
+   }
+  }
+ }
+}

@@ -21,7 +21,7 @@ export const SCOPES: Record<Provider, string[]> = {
   google: ["openid", "email", "https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.readonly"],
   microsoft: ["openid", "email", "offline_access", "https://graph.microsoft.com/User.Read", "https://graph.microsoft.com/Mail.Send", "https://graph.microsoft.com/Mail.Read"]
 };
-export interface MailboxRow { firmId: string; userId: string; provider: Provider; address: string; scopes: string[]; status: "active" | "revoked" | "error"; assistantId: string | null; sealedToken: Buffer | null; connectedAt: Date; revokedAt: Date | null }
+export interface MailboxRow { firmId: string; userId: string; provider: Provider; address: string; scopes: string[]; status: "active" | "revoked" | "error"; assistantId: string | null; sealedToken: Buffer | null; connectedAt: Date; revokedAt: Date | null; pollCursor?: string | null; linked?: boolean }
 export interface MailboxStore {
   get(firmId: string, userId: string): Promise<MailboxRow | null>; list(firmId: string): Promise<MailboxRow[]>; put(r: MailboxRow): Promise<void>; byAssistant(assistantId: string): Promise<MailboxRow | null>;
   key(firmId: string): Promise<{ sealed: Buffer; issuedAt: Date } | null>; putKey(firmId: string, sealed: Buffer, issuedAt: Date): Promise<void>;
@@ -33,11 +33,11 @@ export function memoryMailboxStore(): MailboxStore {
 }
 interface Db { query(sql: string, args?: unknown[]): Promise<{ rows: Record<string, unknown>[] }> }
 export function postgresMailboxStore(pool: Db): MailboxStore {
-  const row = (r: Record<string, unknown>): MailboxRow => ({ firmId: r.firm_id as string, userId: r.user_id as string, provider: r.provider as Provider, address: r.address as string, scopes: (r.scopes as string[]) || [], status: r.status as MailboxRow["status"], assistantId: (r.assistant_id as string) || null, sealedToken: r.sealed_token ? Buffer.from(r.sealed_token as Buffer) : null, connectedAt: r.connected_at as Date, revokedAt: (r.revoked_at as Date) || null });
+  const row = (r: Record<string, unknown>): MailboxRow => ({ firmId: r.firm_id as string, userId: r.user_id as string, provider: r.provider as Provider, address: r.address as string, scopes: (r.scopes as string[]) || [], status: r.status as MailboxRow["status"], assistantId: (r.assistant_id as string) || null, sealedToken: r.sealed_token ? Buffer.from(r.sealed_token as Buffer) : null, connectedAt: r.connected_at as Date, revokedAt: (r.revoked_at as Date) || null, pollCursor: (r.poll_cursor as string) || null, linked: r.linked === true });
   return {
     async get(f, u) { const r = (await pool.query("select * from mailbox_connection where firm_id = $1 and user_id = $2", [f, u])).rows[0]; return r ? row(r) : null; },
     async list(f) { return (await pool.query("select * from mailbox_connection where firm_id = $1 order by connected_at", [f])).rows.map(row); },
-    async put(r) { await pool.query("insert into mailbox_connection (firm_id, user_id, provider, address, scopes, status, assistant_id, sealed_token, connected_at, revoked_at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) on conflict (firm_id, user_id) do update set provider = excluded.provider, address = excluded.address, scopes = excluded.scopes, status = excluded.status, assistant_id = excluded.assistant_id, sealed_token = excluded.sealed_token, connected_at = excluded.connected_at, revoked_at = excluded.revoked_at", [r.firmId, r.userId, r.provider, r.address, r.scopes, r.status, r.assistantId, r.sealedToken, r.connectedAt, r.revokedAt]); },
+    async put(r) { await pool.query("insert into mailbox_connection (firm_id, user_id, provider, address, scopes, status, assistant_id, sealed_token, connected_at, revoked_at, poll_cursor, linked) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) on conflict (firm_id, user_id) do update set provider = excluded.provider, address = excluded.address, scopes = excluded.scopes, status = excluded.status, assistant_id = excluded.assistant_id, sealed_token = excluded.sealed_token, connected_at = excluded.connected_at, revoked_at = excluded.revoked_at, poll_cursor = excluded.poll_cursor, linked = excluded.linked", [r.firmId, r.userId, r.provider, r.address, r.scopes, r.status, r.assistantId, r.sealedToken, r.connectedAt, r.revokedAt, r.pollCursor || null, r.linked === true]); },
     async byAssistant(a) { const r = (await pool.query("select * from mailbox_connection where assistant_id = $1 and status = 'active'", [a])).rows[0]; return r ? row(r) : null; },
     async key(f) { const r = (await pool.query("select sealed_key, issued_at from mail_layer_key where firm_id = $1", [f])).rows[0]; return r ? { sealed: Buffer.from(r.sealed_key as Buffer), issuedAt: r.issued_at as Date } : null; },
     async putKey(f, sealed, issuedAt) { await pool.query("insert into mail_layer_key (firm_id, sealed_key, issued_at) values ($1,$2,$3) on conflict (firm_id) do update set sealed_key = excluded.sealed_key, issued_at = excluded.issued_at", [f, sealed, issuedAt]); }
@@ -102,6 +102,33 @@ export function createMailboxes(d: MailboxDeps) {
       await d.store.put({ ...row, status: "revoked", sealedToken: null, assistantId: null, revokedAt: d.clock() }); say("mailbox_disconnected", firmId, row.provider); return true;
     },
     async status(firmId: string) { return (await d.store.list(firmId)).filter((r) => r.status === "active").map(view); },
+    /** For the admin command: every mailbox of a firm, with the layer's id, never the token. */
+    async adminList(firmId: string) { return (await d.store.list(firmId)).map((r) => ({ ...view(r), assistantId: r.assistantId, linked: r.linked === true, revokedAt: r.revokedAt })); },
+    /* If the layer cannot make an assistant from our sign-in (docs/neeter/RUNBOOK.md, "If Neeter cannot provision"), the preparer is set
+       up at the layer some other way and Tallyhound is told the assistant's id here. Tallyhound then holds no token of theirs, so a
+       disconnect removes the assistant but cannot withdraw the permission at Google: the page says where the preparer does that. */
+    async linkExisting(firmId: string, userId: string, a: { assistantId: string; provider: Provider; address: string }): Promise<void> {
+      if (!/^[A-Za-z0-9_-]{1,100}$/.test(a.assistantId)) throw new MailboxError("assistant", "That does not look like an assistant id");
+      const address = String(a.address || "").trim().toLowerCase(); if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(address)) throw new MailboxError("address", "Give the mailbox's address");
+      if (await d.store.byAssistant(a.assistantId)) throw new MailboxError("taken", "That assistant is already linked");
+      const was = await d.store.get(firmId, userId); if (was && was.status === "active") await api.disconnect(firmId, userId);
+      await d.store.put({ firmId, userId, provider: a.provider, address, scopes: SCOPES[a.provider], status: "active", assistantId: a.assistantId, sealedToken: null, connectedAt: d.clock(), revokedAt: null, linked: true });
+      await changed(firmId, userId, { provider: a.provider, address }); say("mailbox_linked", firmId, a.provider);
+    },
+    /** Closing a firm: every mailbox is disconnected and every assistant removed, before the firm's key is destroyed (the tokens are sealed with it). */
+    async removeAll(firmId: string): Promise<number> { let n = 0; for (const r of await d.store.list(firmId)) if (r.status === "active" && (await api.disconnect(firmId, r.userId))) n++; return n; },
+    /** Only when the layer cannot call us: fetches what each connected mailbox's assistant has for us and hands each event on. Returns how many. */
+    async poll(firmId: string, handle: (e: import("./maillayer.ts").LayerEvent) => Promise<unknown>): Promise<number> {
+      if (!d.layer.listEvents) return 0; let n = 0;
+      for (const r of await d.store.list(firmId)) {
+        if (r.status !== "active" || !r.assistantId) continue;
+        try { const got = await d.layer.listEvents({ firmId, assistantId: r.assistantId, cursor: r.pollCursor || null }); for (const e of got.events.slice(0, 200)) { await handle({ ...e, assistant_id: r.assistantId }); n++; } if (got.cursor !== (r.pollCursor || null)) await d.store.put({ ...r, pollCursor: got.cursor }); }
+        catch (err) { say("layer_poll_failed", firmId, err instanceof LayerError ? err.code : "error"); }
+      }
+      return n;
+    },
+    async maintain(firmId: string): Promise<void> { if (d.layer.maintain && (await d.store.list(firmId)).some((r) => r.status === "active")) await d.layer.maintain(firmId); },
+    whoAmI: d.layer.whoAmI ? () => d.layer.whoAmI!() : null,
     async firmOfAssistant(assistantId: string): Promise<{ firmId: string; userId: string } | null> { const r = await d.store.byAssistant(String(assistantId || "")); return r ? { firmId: r.firmId, userId: r.userId } : null; },
     /** The layer as the pipeline uses it: by the staff user whose mailbox it is. */
     pipeline: (() => {

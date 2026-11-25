@@ -1,7 +1,7 @@
 // A stand-in for the mail layer, for tests and for running the whole product on one machine (TH-NTR-1). It keeps what it is told in
 // memory, honours every key exactly once, can be switched off to act out an outage, and lets a test change a task behind
 // Tallyhound's back to act out drift.
-import { LayerError, type LayerProject, type MailLayer, type TaskStatus } from "../../maillayer.ts";
+import { LayerError, type LayerEvent, type LayerProject, type MailLayer, type TaskStatus } from "../../maillayer.ts";
 
 export interface FakeLayer extends MailLayer {
   down: boolean; calls: number;
@@ -11,11 +11,17 @@ export interface FakeLayer extends MailLayer {
   tasks: Map<string, { projectId: string; title: string; status: TaskStatus; note: string }>;
   /** Changes a task as if someone had edited the layer's own list by hand. */
   tamper(taskId: string, status: TaskStatus): void;
+  /** Puts an event in the queue that listEvents hands out, as if the layer had read a reply and could not call us. */
+  queue(e: LayerEvent): void; events: LayerEvent[];
 }
 export function fakeLayer(clock: () => Date = () => new Date()): FakeLayer {
   const seen = new Map<string, unknown>(), history: LayerProject["history"] = []; let n = 0;
   const L: FakeLayer = {
-    down: false, calls: 0, letters: [], assistants: new Map(), projects: new Map(), tasks: new Map(),
+    down: false, calls: 0, events: [], queue(e) { L.events.push(e); },
+    async listEvents(a) { gate(a.assistantId); const from = a.cursor ? +a.cursor : 0, mine = L.events.map((e, i) => [i, e] as const).filter(([i, e]) => i >= from && e.assistant_id === a.assistantId); return { events: mine.map(([, e]) => e), cursor: String(L.events.length) }; },
+    async whoAmI() { gate(); return "Tallyhound (stand-in)"; },
+    async maintain() { gate(); },
+    letters: [], assistants: new Map(), projects: new Map(), tasks: new Map(),
     tamper(taskId, status) { const t = L.tasks.get(taskId); if (t) { history.push({ taskId, at: clock().toISOString(), from: t.status, to: status, by: "client" }); t.status = status; } },
     async provision(a) { gate(); const id = "as" + ++n; L.assistants.set(id, { firmId: a.firmId, userId: a.userId, provider: a.provider, address: a.address, scopes: a.scopes }); return { assistantId: id }; },
     async remove(a) { gate(); L.assistants.delete(a.assistantId); for (const [id, p] of L.projects) if (p.assistantId === a.assistantId) { L.projects.delete(id); for (const [tid, t] of L.tasks) if (t.projectId === id) L.tasks.delete(tid); } },

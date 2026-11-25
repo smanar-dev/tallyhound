@@ -18,6 +18,7 @@ import { guarded, type MailLayer } from "./maillayer.ts";
 import { createMailboxes, layerKeys, postgresMailboxStore } from "./mailbox.ts";
 import { neeter } from "./integrations/neeter/index.ts";
 import { fakeLayer } from "./integrations/neeter/fake.ts";
+import { layerEvent } from "./layerevents.ts";
 import { s3Bucket } from "./bucket.ts";
 import { kmsKeyring } from "./keys.ts";
 import { createClosure } from "./closure.ts";
@@ -80,7 +81,11 @@ export function runtime() {
   if (layerName && !["neeter", "fake"].includes(layerName)) throw new Error("TH_MAIL_LAYER must be neeter, fake or unset");
   if (layerName === "fake" && production) throw new Error("TH_MAIL_LAYER=fake is for a trial run on one machine, not for production");
   if (layerName && !sk.google && !sk.microsoft) throw new Error("TH_MAIL_LAYER needs a sign-in app: set GOOGLE_CLIENT_ID or MICROSOFT_CLIENT_ID with its secret");
-  const layerRaw: MailLayer | undefined = layerName === "neeter" ? neeter({ baseUrl: need("NEETER_BASE_URL"), partnerKey: need("NEETER_PARTNER_KEY"), keys: layerKeys(mailboxStore, secrets0), clock, log }) : layerName === "fake" ? fakeLayer(clock) : undefined;
+  // How Neeter answered the four questions (docs/neeter/RUNBOOK.md): it sends our letter, or only its own follow-up on a due date;
+  // it calls us with replies, or we ask it every few minutes.
+  const layerSend = (env("NEETER_SEND") || "letters") as "letters" | "due_date", layerReplies = (env("NEETER_REPLIES") || "webhook") as "webhook" | "poll";
+  if (!["letters", "due_date"].includes(layerSend)) throw new Error("NEETER_SEND must be letters or due_date"); if (!["webhook", "poll"].includes(layerReplies)) throw new Error("NEETER_REPLIES must be webhook or poll");
+  const layerRaw: MailLayer | undefined = layerName === "neeter" ? neeter({ baseUrl: need("NEETER_BASE_URL"), partnerKey: need("NEETER_PARTNER_KEY"), keys: layerKeys(mailboxStore, secrets0), clock, log, send: layerSend, trace: env("NEETER_TRACE") === "on" }) : layerName === "fake" ? fakeLayer(clock) : undefined;
   const mailboxes = layerRaw ? createMailboxes({ store: mailboxStore, secrets: secrets0, layer: guarded(layerRaw), google: sk.google, microsoft: sk.microsoft, appUrl, stateSecret: need("TH_LINK_SECRET"), clock, log }) : undefined;
   const app = createApp({ store, sms, email, ai, clock, log, files: storage ? storage.files : undefined, voice, cut: pdfCut, layer: mailboxes ? mailboxes.pipeline : undefined });
   if (mailboxes) mailboxes.onChange(async (firmId, userId, info) => { await app.withFirm(firmId, (T: Engine) => T.setMailbox(userId, info)); });
@@ -103,12 +108,13 @@ export function runtime() {
   // TH-BRK-10: Tallyhound's own number for texting staff who asked for it. A separate number from every firm's client number.
   const systemSms = twilio && env("TH_SYSTEM_NUMBER") ? { number: env("TH_SYSTEM_NUMBER")!, send: async (to: string, body: string) => { await twilio.send({ from: env("TH_SYSTEM_NUMBER")!, to, body, idempotencyKey: "staff:" + to + ":" + Date.now() }); } } : undefined;
   const hooks = { cleanup, store, inbox, twilioAuthToken: env("TWILIO_AUTH_TOKEN") || undefined, postmarkHook: env("POSTMARK_HOOK_PASSWORD") ? { user: env("POSTMARK_HOOK_USER") || "postmark", pass: env("POSTMARK_HOOK_PASSWORD") } : undefined };
-  return { systemSms, production, appUrl, pool, store, auth, app, signIn, firms, inbox, hooks, prepare, clock, log, root: ROOT, bucket, keyring, sms, email, twilioOn: !!twilio, emailOn: !!env("POSTMARK_TOKEN"), mailer, notify: createNotifier({ appUrl }), ops, lookup, storage, billing, cleanup, voiceOn: !!voice, mailboxes, layerHook: layerName === "neeter" ? { secret: need("NEETER_WEBHOOK_SECRET") } : undefined,
+  return { systemSms, production, appUrl, pool, store, auth, app, signIn, firms, inbox, hooks, prepare, clock, log, root: ROOT, bucket, keyring, sms, email, twilioOn: !!twilio, emailOn: !!env("POSTMARK_TOKEN"), mailer, notify: createNotifier({ appUrl }), ops, lookup, storage, billing, cleanup, voiceOn: !!voice, mailboxes, layerHook: layerName === "neeter" && layerReplies === "webhook" ? { secret: need("NEETER_WEBHOOK_SECRET") } : undefined, layerMode: layerName ? { name: layerName, send: layerSend, replies: layerReplies } : null,
+    layerPoll: mailboxes && (layerName === "fake" || layerReplies === "poll") ? (firmId: string) => mailboxes.poll(firmId, (e) => layerEvent({ app, firmOfAssistant: (a) => mailboxes.firmOfAssistant(a), prepare, log }, e)) : undefined,
     prior: ai ? createPrior({ read: (firmId, prompt, images) => forFirm(firmId, () => ai.json(prompt, { images, tier: "default" })), prompt: () => kitPrompts.priorReturn(), forms: () => createEngine().FORMS }) : undefined,   // T-46
     domains: env("POSTMARK_ACCOUNT_TOKEN") ? createDomains({ app, accountToken: env("POSTMARK_ACCOUNT_TOKEN")!, log }) : undefined,   // T-110
     // Public sign-up (TH_SIGNUP=on) and the price page. New sign-ups go on the second price list when TH_PRICE_TEST=on (T-97).
     signup: { store: postgresSignupStore(pool), open: env("TH_SIGNUP") === "on", inboxDomain: env("TH_INBOX_DOMAIN") || "docs.tallyhound.com", priceBook: (env("TH_PRICE_TEST") === "on" ? "B" : "A") as "A" | "B", clock, inboxTaken: async (a: string) => !!(await store.firmIdByInbox(a)), mail: (to: string, subject: string, body: string) => mailer.staff(to, subject, body), tell: env("TH_ALERT_EMAIL") ? (subject: string, body: string) => mailer.staff(env("TH_ALERT_EMAIL")!, "Tallyhound: " + subject, body) : undefined },
-    ask: ai ? createAsk({ model: ai, readState: (id) => store.readState(id), createEngine, wallNow: (T) => (T.S.firm.iana ? wallTime(clock(), T.S.firm.iana) : clock()) }) : undefined, closure: createClosure({ store, auth, markers: bucket, clock, log }),
+    ask: ai ? createAsk({ model: ai, readState: (id) => store.readState(id), createEngine, wallNow: (T) => (T.S.firm.iana ? wallTime(clock(), T.S.firm.iana) : clock()) }) : undefined, closure: createClosure({ store, auth, markers: bucket, clock, log, beforeDestroy: mailboxes ? (id) => mailboxes.removeAll(id) : undefined }),
     // TH_ALERT_EMAIL: where the developer is told that sends are failing, a firm's turn failed, or an arriving message was lost.
     watch: env("TH_ALERT_EMAIL") ? createWatch({ to: env("TH_ALERT_EMAIL")!, send: (to, subject, body) => mailer.staff(to, subject, body), clock, log }) : undefined };
 }

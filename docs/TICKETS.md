@@ -524,6 +524,15 @@ Source: the v2 tech spec. `docs/V2.md` maps it onto this codebase, lists what is
 76. T-180, running without the layer. With `TH_MAIL_LAYER` unset the same letters go from each firm's Tallyhound address through Postmark and replies come back there. This is the default and needs nothing new.
 77. T-181, the staff app for email-first firms: no texting on any screen; Settings, Mailbox (connect, disconnect, working days, the daily cap, the human check and its agreement table); the next letter and the upload link on a client's page; letters with their line breaks in the conversation; suggested steps and "Agree" in the review queue.
 
+# Round 20 (November 25): ready for Neeter
+
+78. T-182, the contract. `docs/neeter/contract.json` (OpenAPI 3.1): every call to the layer and the signed webhook, with examples. A test fails if the adapter calls anything the contract does not list, leaves out a required field, sends one it does not list, or skips an Idempotency-Key; or if the contract lists a call the adapter never makes. The webhook takes the contract's own examples.
+79. T-183, the conformance suite: provision, project, tasks, every status, repeated keys, read back with history, a figure refused, one letter sent twice and received once, delete, remove. It passes against the stand-in; `npm run test:layer` runs it against Neeter's sandbox once `NEETER_SANDBOX_*` is set.
+80. T-184, Neeter's possible answers as settings: `NEETER_SEND=due_date` (its own follow-up on a due date, a pilot stopgap); `NEETER_REPLIES=poll` (the timer fetches events, keeping its place, migration 018); `admin link-mailbox` (an assistant set up at Neeter by hand). Replies take one path whichever way they arrive (`layerevents.ts`).
+81. T-185, go-live tools. `check-services` checks the layer's settings for sense, prints the addresses to register, and asks Neeter who we are; `admin mailboxes`, `link-mailbox`, `disconnect-mailbox`, `layer-reconcile`, `layer-poll`, `layer-rotate-key`, `layer-ping`, `set-mail`. `NEETER_TRACE=on` logs each call without ids or bodies. Each firm's key is replaced at 90 days by the nightly run.
+82. T-186, clean-ups: a person removed from the firm has their mailbox disconnected; closing a firm removes every assistant before the key is destroyed.
+83. T-187, the documents: `docs/neeter/BRIEF.md` (to send Neeter: the four extensions, the calls, the webhook, white label, what it holds, nine questions, how we would test together), `RUNBOOK.md` (from answers to a first firm, daily checks, taking it out again), `AGREEMENT.md` (what the contract must cover, questions for counsel).
+
 ## Everything still to be done (November 25)
 
 Nothing in `docs/TICKETS.md` is unbuilt. What is left needs something code cannot supply.

@@ -8,19 +8,29 @@
 // and deliver replies (POST /hooks/neeter).
 //
 // Each firm has its own key, limited to that firm's mailboxes, sealed with the firm's key, replaced every 90 days (TH-NTR-9).
-// Nothing here logs a body, an address or a key.
-import { LayerError, type LayerProject, type MailLayer, type TaskStatus } from "../../maillayer.ts";
+// Nothing here logs a body, an address or a key. With trace on, each call is logged as its method, its path with every id taken
+// out, its status and how long it took.
+//
+// Two answers Neeter may give are settings here, not code (docs/neeter/RUNBOOK.md):
+//   send: "letters"   Neeter sends Tallyhound's letter when asked (the design).
+//   send: "due_date"  Neeter can only send its own follow-up the morning before a task's due date. The letter is not sent by us;
+//                     the project's due date is set to tomorrow and Neeter's own wording goes. A stopgap for the pilot only.
+//   Replies: pushed to POST /hooks/neeter, or fetched with listEvents when Neeter cannot call us (the worker's layerPoll).
+// The paths and fields below must match docs/neeter/contract.json; apps/server/test/neeter.test.ts checks that they do.
+import { LayerError, type LayerEvent, type LayerProject, type MailLayer, type TaskStatus } from "../../maillayer.ts";
 
 export const KEY_DAYS = 90;
 export interface KeyStore { get(firmId: string): Promise<{ key: string; issuedAt: Date } | null>; put(firmId: string, key: string, issuedAt: Date): Promise<void> }
-export interface NeeterDeps { baseUrl: string; partnerKey: string; keys: KeyStore; clock: () => Date; fetch?: typeof fetch; log?: (event: string, ...ids: unknown[]) => void; timeoutMs?: number }
+export interface NeeterDeps { baseUrl: string; partnerKey: string; keys: KeyStore; clock: () => Date; fetch?: typeof fetch; log?: (event: string, ...ids: unknown[]) => void; timeoutMs?: number; send?: "letters" | "due_date"; trace?: boolean }
+export const template = (path: string) => path.replace(/\?.*$/, "").replace(/\/(assistants|projects|tasks|letters|keys)\/[^/]+/g, "/$1/{id}");
 
 export function neeter(d: NeeterDeps): MailLayer & { rotateKey(firmId: string): Promise<void>; keyAge(firmId: string): Promise<number | null> } {
   const f = d.fetch || fetch, base = d.baseUrl.replace(/\/+$/, ""), say = d.log || (() => {});
   async function raw(key: string, method: string, path: string, body?: unknown, idem?: string): Promise<Record<string, unknown>> {
-    let r: Response;
+    let r: Response; const t0 = Date.now(), trace = (st: number | string) => { if (d.trace) say("layer_call", method, template(path), st, Date.now() - t0); };
     try { r = await f(base + path, { method, headers: { authorization: "Bearer " + key, "content-type": "application/json", ...(idem ? { "idempotency-key": idem } : {}) }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(d.timeoutMs || 15000) }); }
-    catch { throw new LayerError("unreachable", "The email service could not be reached"); }
+    catch { trace("no answer"); throw new LayerError("unreachable", "The email service could not be reached"); }
+    trace(r.status);
     if (r.status >= 500 || r.status === 429 || r.status === 408) throw new LayerError("unreachable", "The email service is not answering (" + r.status + ")");
     if (r.status === 404 && method === "GET") return { missing: true };
     if (!r.ok) throw new LayerError("refused", "The email service refused the request (" + r.status + ")");
@@ -42,7 +52,12 @@ export function neeter(d: NeeterDeps): MailLayer & { rotateKey(firmId: string): 
     async upsertProject(a) { const j = await call(a.firmId, a.remoteId ? "PUT" : "POST", a.remoteId ? P(a.assistantId, a.remoteId) : A(a.assistantId) + "/projects", { external_id: a.key.split(":")[0], name: a.name, contact_email: a.email, closed: a.closed, due_date: a.due }, a.key); return { id: String(j.id || a.remoteId || "") }; },
     async upsertTask(a) { const path = P(a.assistantId, a.projectId) + "/tasks" + (a.remoteId ? "/" + encodeURIComponent(a.remoteId) : ""), j = await call(a.firmId, a.remoteId ? "PUT" : "POST", path, { external_id: a.key.split(":")[0], title: a.title, owed_by: "client", status: a.status, note: a.note }, a.key); return { id: String(j.id || a.remoteId || "") }; },
     async forgetProject(a) { await call(a.firmId, "DELETE", P(a.assistantId, a.projectId), undefined, a.key); },
-    async sendLetter(a) { const j = await call(a.firmId, "POST", P(a.assistantId, a.projectId) + "/letters", { to: a.to, subject: a.subject, body: a.body, thread_id: a.thread || null, list_unsubscribe: a.unsubscribe || null, send_now: true, add_signature: false }, a.key); return { id: String(j.id || ""), thread: String(j.thread_id || a.thread || "") }; },
+    async sendLetter(a) {
+      if (d.send === "due_date") { const due = new Date(d.clock().getTime() + 86400000).toISOString().slice(0, 10); await call(a.firmId, "PATCH", P(a.assistantId, a.projectId), { due_date: due }, a.key + ":due"); return { id: "due:" + a.key, thread: a.thread || "" }; }
+      const j = await call(a.firmId, "POST", P(a.assistantId, a.projectId) + "/letters", { to: a.to, subject: a.subject, body: a.body, thread_id: a.thread || null, list_unsubscribe: a.unsubscribe || null, send_now: true, add_signature: false }, a.key); return { id: String(j.id || ""), thread: String(j.thread_id || a.thread || "") }; },
+    async listEvents(a) { const j = await call(a.firmId, "GET", A(a.assistantId) + "/events" + (a.cursor ? "?cursor=" + encodeURIComponent(a.cursor) : "")), list = (Array.isArray(j.events) ? j.events : []) as LayerEvent[]; return { events: list.map((x) => ({ ...x, assistant_id: x.assistant_id || a.assistantId })), cursor: j.cursor == null ? a.cursor : String(j.cursor) }; },
+    async whoAmI() { const j = await raw(d.partnerKey, "GET", "/v1/partner"); return String(j.name || j.id || "an account with no name"); },
+    async maintain(firmId) { const k = await d.keys.get(firmId); if (k && d.clock().getTime() - k.issuedAt.getTime() >= KEY_DAYS * 86400000) await mint(firmId, k.key); },
     async getProject(a) {
       const j = await call(a.firmId, "GET", P(a.assistantId, a.projectId) + "?include=tasks,history"); if (j.missing) return null;
       const tasks = (Array.isArray(j.tasks) ? j.tasks : []) as Record<string, unknown>[], history = (Array.isArray(j.history) ? j.history : []) as Record<string, unknown>[];

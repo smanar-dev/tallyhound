@@ -8,7 +8,8 @@ import { kitAuth, kitRegistration } from "./kit.ts";
 import { BillingError, type Billing } from "./billing.ts";
 import { SLUG, StorageError, type Storage } from "./storage.ts";
 import { hookSigned, MailboxError, type Mailboxes, type Provider } from "./mailbox.ts";
-import { kitEmailIn } from "./kit.ts";
+import { layerEvent } from "./layerevents.ts";
+import type { LayerEvent } from "./maillayer.ts";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import cookie from "@fastify/cookie";
 import QRCode from "qrcode";
@@ -297,14 +298,9 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
     s.addContentTypeParser("application/json", { parseAs: "buffer", bodyLimit: 30 * 1024 * 1024 }, (_req, b, done) => done(null, b));
     s.post("/hooks/neeter", async (req, reply) => {
       const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0); if (!hookSigned(d.layerHook!.secret, String(req.headers["x-layer-signature"] || ""), raw, new Date())) return reply.code(401).send({ error: "signature" });
-      let j: Record<string, unknown>; try { j = JSON.parse(raw.toString("utf8")) as Record<string, unknown>; } catch { return reply.code(400).send({ error: "bad_request" }); }
-      const id = str(j.id).slice(0, 80), where = await d.mailboxes!.firmOfAssistant(str(j.assistant_id)); if (!id || !where) return reply.code(202).send({ ok: true });   // not ours, or a mailbox since disconnected: nothing is kept
-      if (j.type === "bounce") { await d.app.layerBounce({ firmId: where.firmId, to: str(j.to), providerId: "ly-" + id }); return { ok: true }; }
-      if (j.type !== "reply") return reply.code(202).send({ ok: true });
-      const sent = (Array.isArray(j.attachments) ? j.attachments : []).slice(0, 10) as { content_type?: string; content_base64?: string; name?: string }[];
-      const files = await Promise.all(sent.filter((a) => typeof a.content_base64 === "string").map((a) => ready({ bytes: Buffer.from(a.content_base64!, "base64"), contentType: str(a.content_type), name: str(a.name).slice(0, 120) }, d.prepare || {})));
-      const r = await d.app.layerReply({ firmId: where.firmId, from: str(j.from), text: kitEmailIn.stripReply(str(j.text)).slice(0, 5000), proposed: str(j.proposed_status), attachments: files.filter((x) => !x.refused), attachmentsHeld: Math.max(0, (+(j.attachment_count as number) || 0) - files.length), providerId: "ly-" + id });
-      say("layer_reply", where.firmId, r && r.client ? "matched" : "unmatched"); if (d.nudge) d.nudge(where.firmId); return { ok: true };
+      let j: LayerEvent; try { j = JSON.parse(raw.toString("utf8")) as LayerEvent; } catch { return reply.code(400).send({ error: "bad_request" }); }
+      const r = await layerEvent({ app: d.app, firmOfAssistant: (a) => d.mailboxes!.firmOfAssistant(a), prepare: d.prepare, nudge: d.nudge, log: say }, j);
+      return r === "ignored" ? reply.code(202).send({ ok: true }) : { ok: true, ...(r === "ping" ? { ping: true } : {}) };
     });
   });
 
@@ -371,7 +367,8 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
   f.post("/api/support", { preHandler: full }, async (req) => { const b = body(req), u = req.who!.user, r = await d.firms.addSupport(u.firmId, u, { email: str(b.email), name: str(b.name), hours: Number(b.hours) }); return { id: r.id, until: r.until.toISOString() }; });
   f.post("/api/users", { preHandler: full }, async (req) => { const b = body(req), u = req.who!.user; return { id: await d.firms.addUser(u.firmId, u, { email: str(b.email), name: str(b.name), role: str(b.role) as Role }) }; });
   f.post("/api/users/:id/role", { preHandler: full }, async (req) => { const u = req.who!.user; await d.firms.setRole(u.firmId, u, (req.params as { id: string }).id, str(body(req).role) as Role); return { ok: true }; });
-  f.delete("/api/users/:id", { preHandler: full }, async (req) => { const u = req.who!.user; return { ok: true, ...(await d.firms.removeUser(u.firmId, u, (req.params as { id: string }).id)) }; });
+  // A person who leaves the firm: their mailbox is disconnected and its assistant removed, so no letter goes from it again.
+  f.delete("/api/users/:id", { preHandler: full }, async (req) => { const u = req.who!.user, id = (req.params as { id: string }).id, r = await d.firms.removeUser(u.firmId, u, id); if (d.mailboxes) await d.mailboxes.disconnect(u.firmId, id).catch(() => say("mailbox_disconnect_failed", u.firmId)); return { ok: true, ...r }; });
 
   // ---- the staff web app (apps/web, built by `npm run build`) ----
   // Files under /assets carry a fingerprint in their name, so a browser may keep them. Every other address gets the app's one page,

@@ -6,13 +6,16 @@ import type { AuthStore } from "./authstore.ts";
 import type { KitStore } from "./kit.ts";
 
 export interface Markers { put(key: string, bytes: Buffer): Promise<void>; get(key: string): Promise<Buffer | null> }
-export interface ClosureDeps { store: KitStore; auth: AuthStore; markers: Markers; clock: () => Date; log?: (event: string, ...ids: unknown[]) => void }
+export interface ClosureDeps { store: KitStore; auth: AuthStore; markers: Markers; clock: () => Date; log?: (event: string, ...ids: unknown[]) => void;
+  /** v2: before the key goes, every connected mailbox is disconnected and its assistant removed at the mail layer (the tokens are sealed with the key). */
+  beforeDestroy?: (firmId: string) => Promise<unknown> }
 const marker = (firmId: string) => "closed/" + firmId;
 
-export function createClosure({ store, auth, markers, clock, log }: ClosureDeps) {
+export function createClosure({ store, auth, markers, clock, log, beforeDestroy }: ClosureDeps) {
   async function destroy(firmId: string, why: string, by: string) {
     for (const u of await auth.usersOfFirm(firmId)) if (!u.leftAt) await auth.deactivateUser(u.id, clock());   // nobody signs in to a closed firm
     if (!store.destroyFirm) throw new Error("This store cannot close a firm");
+    if (beforeDestroy) { try { await beforeDestroy(firmId); } catch (err) { if (log) log("firm_mailboxes_not_removed", firmId, (err as Error).message); } }   // the closure goes ahead: an assistant left behind is removed by hand (docs/neeter/RUNBOOK.md)
     await store.destroyFirm(firmId);   // the key goes first: every sealed byte is unreadable from here, then the rows and files
     await auth.audit(firmId, by, why); if (log) log("firm_destroyed", firmId, why);
   }

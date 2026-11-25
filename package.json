@@ -19,7 +19,8 @@
     "build": "vite build -c apps/web/vite.config.ts",
     "dev:web": "vite -c apps/web/vite.config.ts",
     "test:e2e": "node --test apps/web/e2e/*.test.ts",
-    "local:setup": "node tools/local-setup.mjs"
+    "local:setup": "node tools/local-setup.mjs",
+    "test:layer": "node --test --test-name-pattern=\"conformance suite|contract|webhook takes\" apps/server/test/neeter.test.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

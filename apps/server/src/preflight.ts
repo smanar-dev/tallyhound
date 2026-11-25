@@ -7,7 +7,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 
 export interface Check { name: string; state: "ok" | "failed" | "not set"; detail: string }
-export interface PreflightDeps { env: (k: string) => string; fetch?: typeof fetch; db?: () => Promise<string>; files?: () => Promise<string>; key?: () => Promise<string>; model?: () => Promise<string>; sendEmail?: (to: string) => Promise<string>; sendText?: (to: string) => Promise<string> }
+export interface PreflightDeps { layer?: () => Promise<string>; env: (k: string) => string; fetch?: typeof fetch; db?: () => Promise<string>; files?: () => Promise<string>; key?: () => Promise<string>; model?: () => Promise<string>; sendEmail?: (to: string) => Promise<string>; sendText?: (to: string) => Promise<string> }
 
 export async function preflight(d: PreflightDeps, o: { email?: string; text?: string } = {}): Promise<Check[]> {
   const f = d.fetch || fetch, env = d.env, out: Check[] = [];
@@ -29,6 +29,19 @@ export async function preflight(d: PreflightDeps, o: { email?: string; text?: st
   await run("Stripe", !!sk, "STRIPE_SECRET_KEY: plans are started with the admin command and invoiced by hand", async () => { const notes: string[] = []; for (const p of ["SOLO", "PRACTICE", "FIRM", "LARGE", "SOLO_B", "PRACTICE_B", "FIRM_B", "LARGE_B"]) { const id = env("STRIPE_PRICE_" + p); if (!id) continue; const j = await get("https://api.stripe.com/v1/prices/" + encodeURIComponent(id), { authorization: "Bearer " + sk }); if (!j.active) throw new Error("price " + p + " is not active"); if (!j.recurring || j.recurring.interval !== "month") throw new Error("price " + p + " is not a monthly price"); notes.push(p.toLowerCase() + " $" + (Number(j.unit_amount) / 100)); } if (!notes.length) throw new Error("no STRIPE_PRICE_<PLAN> is set, so there is nothing to sell"); return (sk.startsWith("sk_test_") ? "TEST mode, " : "live, ") + notes.join(", ") + (env("STRIPE_WEBHOOK_SECRET") ? "" : ". SET STRIPE_WEBHOOK_SECRET"); });
   for (const [name, id, slugs] of [["Google Drive", "GOOGLE_CLIENT_ID", ["google"]], ["Microsoft (OneDrive, SharePoint)", "MICROSOFT_CLIENT_ID", ["onedrive", "sharepoint"]], ["Dropbox", "DROPBOX_APP_KEY", ["dropbox"]]] as [string, string, string[]][])
     await run(name, !!env(id), id + ": firms cannot connect it", async () => "keys are set. It can only be proved by connecting one from Settings, Finished files. The service must list this return address: " + slugs.map((s) => env("APP_URL").replace(/\/$/, "") + "/api/storage/" + s + "/callback").join(" and "));
+  // v2: the mail layer (docs/neeter/RUNBOOK.md). Its settings are checked for sense first, then one question with the partner key.
+  const ml = env("TH_MAIL_LAYER"), app = env("APP_URL").replace(/\/$/, "");
+  await run("Mail layer settings", !!ml, "TH_MAIL_LAYER: letters go from each firm's Tallyhound address through Postmark", async () => {
+    if (ml === "fake") return "the stand-in, held in memory. For a trial run only";
+    const miss = ["NEETER_BASE_URL", "NEETER_PARTNER_KEY"].concat(env("NEETER_REPLIES") === "poll" ? [] : ["NEETER_WEBHOOK_SECRET"]).filter((k) => !env(k)); if (miss.length) throw new Error("missing " + miss.join(", "));
+    if (!/^https:\/\//.test(env("NEETER_BASE_URL"))) throw new Error("NEETER_BASE_URL must start with https://");
+    if (env("NEETER_REPLIES") !== "poll" && env("NEETER_WEBHOOK_SECRET").length < 32) throw new Error("NEETER_WEBHOOK_SECRET is shorter than 32 characters");
+    if (!env("GOOGLE_CLIENT_ID") && !env("MICROSOFT_CLIENT_ID")) throw new Error("no sign-in app: set GOOGLE_CLIENT_ID or MICROSOFT_CLIENT_ID so preparers can connect a mailbox");
+    const notes = ["letters " + (env("NEETER_SEND") === "due_date" ? "by DUE DATE (Neeter's own wording; pilot stopgap)" : "sent in Tallyhound's words"), "replies " + (env("NEETER_REPLIES") === "poll" ? "fetched by the timer" : "pushed to " + app + "/hooks/neeter")];
+    notes.push("sign-in return addresses to register: " + [env("GOOGLE_CLIENT_ID") ? app + "/api/mailbox/google/callback" : "", env("MICROSOFT_CLIENT_ID") ? app + "/api/mailbox/microsoft/callback" : ""].filter(Boolean).join(" and "));
+    return notes.join("; ");
+  });
+  await run("Mail layer (Neeter)", ml === "neeter" && !!d.layer, "TH_MAIL_LAYER=neeter", () => d.layer!());
   if (o.email) await run("A real email to " + o.email, !!d.sendEmail, "POSTMARK_TOKEN", () => d.sendEmail!(o.email!));
   if (o.text) await run("A real text to " + o.text, !!d.sendText, "TWILIO_ACCOUNT_SID", () => d.sendText!(o.text!));
   return out;
