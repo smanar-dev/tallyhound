@@ -9,6 +9,7 @@ import { chromium, type Browser, type Page } from "playwright";
 import sharp from "sharp";
 import { build } from "../../server/test/harness.ts";
 import { createEngine, kitAuth, kitMemory, type Engine } from "../../server/src/kit.ts";
+import { SCOPES } from "../../server/src/mailbox.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 if (!existsSync(join(HERE, "../dist/index.html"))) throw new Error("Build the web app first: npm run build");
@@ -21,10 +22,16 @@ const SAYS_NONE = { intent: "says_none", item_id: null, summary: "does not have 
 // A real photograph, so the browser can actually draw it: a pale page with a dark band, 900 by 1200.
 export const PHOTO: Buffer = await sharp({ create: { width: 900, height: 1200, channels: 3, background: "#f4f1e8" } }).composite([{ input: { create: { width: 700, height: 90, channels: 3, background: "#22324a" } }, top: 120, left: 100 }]).jpeg({ quality: 70 }).toBuffer();
 
-export async function world() {
+// letters: every firm made in this world is email-first (docs/V2.md). The default is the texting code kept for a later release.
+// layer: letters go from each preparer's own mailbox through the stand-in mail layer, and Google's sign-in is stood in for too.
+export async function world(o: { letters?: boolean; layer?: boolean } = {}) {
   const reading: { doc: Record<string, unknown>; text: Record<string, unknown> } = { doc: CLEAN_W2, text: SAYS_NONE };
   const ai = kitMemory.fakeAI((p: string) => (p.startsWith("You read photos") ? reading.doc : p.startsWith("You read text messages") ? reading.text : null));
-  const port = await freePort(), url = "http://127.0.0.1:" + port, H = await build("memory", { ai, appUrl: url,
+  const port = await freePort(), url = "http://127.0.0.1:" + port, H = await build("memory", { ai, appUrl: url, letters: o.letters === true, layer: o.layer === true,
+    // A stand-in for Google's sign-in when a preparer connects a mailbox: one good code, one mailbox address.
+    mailFetch: (async (u: unknown, init: RequestInit = {}) => { const ok = (v: unknown, st = 200) => new Response(JSON.stringify(v), { status: st, headers: { "content-type": "application/json" } }), body = String(init.body || "");
+      if (String(u) === "https://oauth2.googleapis.com/token") return body.includes("code=good-code") ? ok({ access_token: "at-1", refresh_token: "rt-1", scope: SCOPES.google.join(" ") }) : ok({ error: "invalid_grant" }, 400);
+      if (String(u).startsWith("https://openidconnect.googleapis.com/")) return ok({ email: "pat@mapleandpine.example", email_verified: true }); return ok({}); }) as unknown as typeof fetch,
     // A stand-in for the model reading a prior-year return.
     prior: () => ({ tax_year: 2025, is_return: true, note: "A 2025 return", items: [{ form: "1099INT", payer: "First Farmers Bank", why: "Interest on Schedule B" }, { form: "1098", payer: "", why: "Mortgage interest" }] }), signup: { open: true },
     // A stand-in for the mail service's Domains API: one domain, whose records are "found" once DNS.found is set.
@@ -79,8 +86,31 @@ export async function busyFirmWithDoubt(W: World) {
   await W.app.inboundSms({ to: "+16155550101", from: "+16155550111", body: "", media: [{ bytes: PHOTO, contentType: "image/jpeg" }], providerId: "doubt1" }); W.reading.doc = W.CLEAN_W2; return r;
 }
 
+// An email-first firm in the middle of its season (docs/V2.md): three clients, letters sent on their own from the firm's
+// Tallyhound address. Maria has had her first letter and owes a W-2 and a mortgage statement; Sam is ready to fetch; Ana is new.
+export const INBOX = "test1@docs.tallyhound.test";
+export async function emailFirm(W: World, o: { mode?: string; confirmAll?: boolean } = {}) {
+  const { firmId, ownerId } = await W.newFirm(); W.reading.doc = { ...W.CLEAN_W2, recipient_name: "MARIA GARCIA" };
+  await W.app.staff(firmId, ownerId, (T: Engine) => { T.S.firm.hound.mode = o.mode || "autopilot"; T.S.firm.confirmAll = o.confirmAll === true; T.S.firm.phone = "(615) 555-0100";
+    T.importRows(T.parseCSV("First,Last,Email\nMaria,Garcia,maria@x.example\nSam,Lee,sam@x.example\nAna,Ruiz,ana@x.example"));
+    const [maria, sam] = T.S.engs; T.itemsOf(maria.id).find((i: { form: string }) => i.form === "W2").payer = "Acme Logistics"; T.itemsOf(maria.id).find((i: { form: string }) => i.form === "1098").payer = "Hillcrest Mortgage";
+    maria.confirmed = true; T.start(maria.id); sam.confirmed = true; });
+  await W.worker.pass();
+  return { firmId, ownerId };
+}
+// The same firm a little later: Maria has uploaded a W-2 that waits for a person to confirm, has written that the mortgage
+// statement will come after the 15th (a suggested step), and a stranger has written in.
+export async function busyEmailFirm(W: World) {
+  const r = await emailFirm(W, { confirmAll: true }), T: Engine = await W.state(r.firmId), maria = T.S.engs[0];
+  await W.app.clientUpload({ firmId: r.firmId, clientId: T.S.clients[0].id, files: [{ bytes: JPEG, contentType: "image/jpeg" }], providerId: "up-" + "a".repeat(24) });
+  W.reading.text = { intent: "send_after_date", confidence: "high", legacy_intent: "will_send_later", date: "2027-02-15", person: null, change: null, also_document: false, item_id: T.itemsOf(maria.id).find((i: { form: string }) => i.form === "1098").id, later_days: null };
+  await W.app.inboundEmail({ to: INBOX, from: "maria@x.example", body: "Can I send the mortgage statement after the 15th?", attachments: [], providerId: "v1", trusted: true });
+  await W.app.inboundEmail({ to: INBOX, from: "stranger@example.org", body: "Is this the right address for my forms?", attachments: [], providerId: "v2", trusted: true });
+  return r;
+}
+
 // One browser test. Whatever happens, the server and the browser pages are closed, so a failure is reported instead of hanging the run;
 // and every test ends by checking that the browser logged no error (a blocked script or style would show up there).
-export function scene(title: string, fn: (W: World) => Promise<void>) {
-  test(title, { timeout: 180000 }, async () => { const W = await world(); try { await fn(W); assert.deepEqual(W.errors, [], "the browser reported errors"); } finally { await W.end(); } });
+export function scene(title: string, fn: (W: World) => Promise<void>, o: { letters?: boolean; layer?: boolean } = {}) {
+  test(title, { timeout: 240000 }, async () => { const W = await world(o); try { await fn(W); assert.deepEqual(W.errors, [], "the browser reported errors"); } finally { await W.end(); } });
 }

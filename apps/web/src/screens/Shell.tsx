@@ -6,7 +6,7 @@ import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useFirm } from "../lib/firm";
 import { api } from "../lib/api";
 import { draftsToApprove, needsYou, type Row } from "../lib/select";
-import { cname, senderState, STAT, when } from "../lib/fmt";
+import { cname, emailFirst, senderState, STAT, when } from "../lib/fmt";
 import { Avatar, Chip, Icon, UserAvatar } from "../components/ui";
 import { Modal } from "../components/Modal";
 import type { IconName } from "../lib/icons";
@@ -54,7 +54,7 @@ export function Side({ open, onClose }: { open: boolean; onClose: () => void }) 
         {item("/hound", "The hound", "spark")}
         <div className="navsec">More</div>
         {item("/add-clients", "Add clients", "upload")}{item("/messages", "All messages", "inbox", s.tray.length)}{item("/progress", "Progress", "chart")}{item("/help", "How it works", "eye")}
-        {can("owner") ? item("/settings", "Settings", "gear") : null}
+        {can("owner") ? item("/settings", "Settings", "gear") : emailFirst(T) && T.S.firm.mail === "mailbox" && can() ? item("/settings?tab=mailbox", "My mailbox", "mail") : null}
       </nav>
       <div className="grow" />
       <div className="who"><UserAvatar user={s.user} small /><span className="me trunc">{me.name}<small>{ROLE[me.role]}</small></span><button className="btn sm ghost" onClick={signOut}>Sign out</button></div>
@@ -99,12 +99,13 @@ function Search() {
 }
 
 export function Banners() {
-  const { T, can, act } = useFirm(), f = T.S.firm, acc = T.access(), nav = useNavigate();
+  const { T, can, act, me } = useFirm(), f = T.S.firm, acc = T.access(), nav = useNavigate();
   return <>
     {acc.state === "trial" && (acc.daysLeft <= 7 || acc.clientsLeft === 0) ? <div className="banner info" style={{ display: "flex" }}><Icon name="clock" small /><span>Free trial: {acc.daysLeft} day{acc.daysLeft === 1 ? "" : "s"} left{acc.clientsLeft === 0 ? ", and all " + T.TRIAL_CLIENTS + " trial clients are in use" : ""}. Collecting stops when it ends unless you choose a plan.</span>{can("owner") ? <button className="btn sm" onClick={() => nav("/settings?tab=plan")}>See plans</button> : null}</div> : null}
     {acc.state === "checking" ? <div className="banner info" style={{ display: "flex" }}><Icon name="clock" small /><span>{acc.reason} Nothing is sent to clients until it is done.</span></div> : null}
-    {f.stopped ? <div className="banner bad"><Icon name="alert" small />All automated messages are stopped. Nothing is sent until an owner resumes.{can("owner") ? <button className="btn sm" onClick={() => void act("resumeAll").then(() => undefined, () => undefined)}>Resume messages</button> : null}</div> : null}
-    {senderState(f) === "filed" ? <div className="banner note"><Icon name="alert" small />Your texting number is still being approved by the carriers. Email requests go out now; texts start once it's approved.</div> : null}
+    {f.stopped ? <div className="banner bad"><Icon name="alert" small />{emailFirst(T) ? "All letters are stopped." : "All automated messages are stopped."} Nothing is sent until an owner resumes.{can("owner") ? <button className="btn sm" onClick={() => void act("resumeAll").then(() => undefined, () => undefined)}>Resume messages</button> : null}</div> : null}
+    {emailFirst(T) && f.mail === "mailbox" && can() && !((T.S.users.find((u: { id: string }) => u.id === me.id) || {}).mailbox && T.S.users.find((u: { id: string }) => u.id === me.id).mailbox.status === "active") ? <div className="banner note" style={{ display: "flex" }}><Icon name="mail" small /><span>Connect your mailbox so letters to your clients can go out.</span><button className="btn sm" onClick={() => nav("/settings?tab=mailbox")}>Connect</button></div> : null}
+    {!emailFirst(T) && senderState(f) === "filed" ? <div className="banner note"><Icon name="alert" small />Your texting number is still being approved by the carriers. Email requests go out now; texts start once it's approved.</div> : null}
   </>;
 }
 

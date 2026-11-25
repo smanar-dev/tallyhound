@@ -9,7 +9,7 @@ import { Page } from "./Shell";
 import { Modal } from "../components/Modal";
 import { Avatar, Empty, Icon, StatusChip, UserAvatar } from "../components/ui";
 import { inPill, openTasks, PILLS, readyToStart, type Row } from "../lib/select";
-import { cname, dt, iname, ISTATE, phone, plural, rel } from "../lib/fmt";
+import { cname, dt, emailFirst, iname, ISTATE, phone, plural, rel } from "../lib/fmt";
 
 const PAGE = 200;
 
@@ -46,13 +46,13 @@ function AddClient({ onClose }: { onClose: () => void }) {
     <div className="grid g2">
       <label className="f">First name<input type="text" value={v.first} onChange={set("first")} autoComplete="off" /></label>
       <label className="f">Last name<input type="text" value={v.last} onChange={set("last")} autoComplete="off" /></label>
-      <label className="f">Mobile<input type="tel" placeholder="10 digits" value={v.mobile} onChange={set("mobile")} autoComplete="off" /></label>
+      <label className="f">{emailFirst(T) ? "Phone, for calls (optional)" : "Mobile"}<input type="tel" placeholder="10 digits" value={v.mobile} onChange={set("mobile")} autoComplete="off" /></label>
       <label className="f">Email<input type="email" value={v.email} onChange={set("email")} autoComplete="off" /></label>
       <label className="f">Kind of return<select value={v.rtype} onChange={set("rtype")}>{Object.keys(T.RETURNS).map((k) => <option key={k} value={k}>{T.RETURNS[k].label} ({T.RETURNS[k].form})</option>)}</select></label>
       {v.rtype === "1040" ? <label className="f">Checklist<select value={v.template} onChange={set("template")}>{T.templates().map((t: Row) => <option key={t.id} value={t.id}>{t.name} ({t.items.length})</option>)}</select></label>
         : <label className="f">Business, trust or organization name<input type="text" value={v.entity} onChange={set("entity")} /></label>}
     </div>
-    <p className="small muted">Needs a name and either a mobile number or an email. Nothing goes out until you say go fetch.</p>
+    <p className="small muted">{emailFirst(T) ? "Needs a name and an email address: letters go by email. A phone number is only for your own calls." : "Needs a name and either a mobile number or an email."} Nothing goes out until you say go fetch.</p>
   </Modal>;
 }
 
@@ -81,7 +81,7 @@ function AssignChecklist({ ids, onClose, onDone }: { ids: string[]; onClose: () 
 function StartCollecting({ onClose }: { onClose: () => void }) {
   const { T, act, toast } = useFirm(), nav = useNavigate(), s = T.S, ready = readyToStart(T), unconf: Row[] = s.engs.filter((e: Row) => e.status === "not_started" && !e.confirmed);
   const [step, setStep] = useState(1), [pick, setPick] = useState(() => new Set<string>(ready.map((e) => e.id))), [busy, setBusy] = useState(false);
-  const first = ready.find((e) => pick.has(e.id)), fc = first ? T.client(first.clientId) : null, byText = !!fc && fc.textConsent === "given" && s.firm.senderStatus === "approved";
+  const first = ready.find((e) => pick.has(e.id)), fc = first ? T.client(first.clientId) : null, EM = emailFirst(T), letter: Row | null = EM && first ? T.letterPreview(first.id) : null, byText = !!fc && fc.textConsent === "given" && s.firm.senderStatus === "approved";
   const toggle = (id: string) => { const n = new Set(pick); if (n.has(id)) n.delete(id); else n.add(id); setPick(n); };
   const go = async () => {
     setBusy(true); const docs = [...pick].reduce((n, id) => n + T.openItems(id).length, 0);
@@ -96,15 +96,20 @@ function StartCollecting({ onClose }: { onClose: () => void }) {
   return <Modal title="Go fetch" wide onClose={onClose} head={steps} footer={foot}>
     {step === 1 ? <>
       {ready.length ? <><p className="muted">These clients have a confirmed checklist and have not been contacted.</p>
-        <div className="list card" style={{ boxShadow: "none" }}>{ready.map((e) => { const c = T.client(e.clientId); return <label className="li" style={{ cursor: "pointer" }} key={e.id}><input type="checkbox" checked={pick.has(e.id)} onChange={() => toggle(e.id)} /><Avatar first={c.first} last={c.last} small /><span className="grow"><b>{cname(c)}</b><span className="small muted"> · {plural(T.itemsOf(e.id).length, "document")} · {c.textConsent === "given" ? "texts" : c.email ? "email invitation" : "no way to reach them"}</span></span></label>; })}</div></>
+        <div className="list card" style={{ boxShadow: "none" }}>{ready.map((e) => { const c = T.client(e.clientId); return <label className="li" style={{ cursor: "pointer" }} key={e.id}><input type="checkbox" checked={pick.has(e.id)} onChange={() => toggle(e.id)} /><Avatar first={c.first} last={c.last} small /><span className="grow"><b>{cname(c)}</b><span className="small muted"> · {plural(T.itemsOf(e.id).length, "document")} · {EM ? (c.email && c.emailOk !== false && !c.emailOff ? "a letter by email" : "no working email address") : c.textConsent === "given" ? "texts" : c.email ? "email invitation" : "no way to reach them"}</span></span></label>; })}</div></>
         : <p className="muted">No client is ready. Confirm their checklists first.</p>}
       {unconf.length ? <div className="note"><Icon name="alert" small /><span>{unconf.length === 1 ? "1 client is" : unconf.length + " clients are"} left out because the checklist is not confirmed: {unconf.slice(0, 12).map((e) => cname(T.client(e.clientId))).join(", ")}{unconf.length > 12 ? " and " + (unconf.length - 12) + " more" : ""}.</span></div> : null}
     </> : null}
-    {step === 2 && fc && first ? <div className="grid g2" style={{ alignItems: "start" }}>
+    {step === 2 && fc && first && EM ? <div className="col">
+      <p>The first message {fc.first} gets is a letter by email listing every document, with their private upload link.</p>
+      {letter ? <><dl className="letterhead"><dt>From</dt><dd>{letter.fromName}{letter.from ? " <" + letter.from + ">" : ""}</dd><dt>Subject</dt><dd>{letter.subject}</dd></dl><div className="bub out letter" style={{ maxWidth: "100%", alignSelf: "stretch" }}>{letter.body}</div></> : <div className="note"><Icon name="alert" small /><span>{fc.first} has nothing to ask for yet.</span></div>}
+      <p className="small muted">Each client gets their own name, documents and link.{s.firm.hound.mode === "copilot" ? " You approve each letter before it goes." : ""}</p></div> : null}
+    {step === 2 && fc && first && !EM ? <div className="grid g2" style={{ alignItems: "start" }}>
       <div className="col"><p>The first message {fc.first} gets{byText ? " by text:" : " is an email invitation to switch on texting:"}</p><p className="small muted">Each client gets their own name, preparer and first document.{s.firm.hound.mode === "copilot" ? " You approve each message before it goes." : ""}</p></div>
       <div className="minip"><div className="screen"><div className="pb them">{byText ? T.fill("M3", fc, first, { item: T.itemsOf(first.id)[0] }) : T.fill("M1", fc, first, {})}</div></div></div>
     </div> : null}
-    {step === 3 ? <><p>Tallyhound will contact <b>{plural(pick.size, "client")}</b>. {T.allowed(s.now) ? "It is inside sending hours, so the first messages go out now." : "It is outside sending hours, so the first messages go out " + dt(T.nextAllowed(s.now)) + "."}</p><p className="small muted">Reminders then run on their own. You can pause anyone at any time.</p></> : null}
+    {step === 3 && EM ? <><p>Tallyhound will write to <b>{plural(pick.size, "client")}</b>. {T.isWorkDay(s.now) ? "Today is a working day, so the first letters go out now." : "The first letters go out " + dt(T.nextMorning(s.now)) + ", the next working morning."}</p><p className="small muted">Follow-ups then go on working mornings, one a day at most for each client, and stop when a document arrives. A large start is spread over days so no mailbox sends too many at once. You can pause anyone at any time.</p></> : null}
+    {step === 3 && !EM ? <><p>Tallyhound will contact <b>{plural(pick.size, "client")}</b>. {T.allowed(s.now) ? "It is inside sending hours, so the first messages go out now." : "It is outside sending hours, so the first messages go out " + dt(T.nextAllowed(s.now)) + "."}</p><p className="small muted">Reminders then run on their own. You can pause anyone at any time.</p></> : null}
   </Modal>;
 }
 
@@ -144,7 +149,7 @@ export function Clients() {
   const actions: ReactNode = can() ? <><Link className="btn hide-s" to="/add-clients"><Icon name="upload" small />Import your client list</Link><button className="btn" onClick={() => setDialog({ kind: "add" })}><Icon name="plus" small /><span className="hide-s">Add client</span></button>{ready ? <button className="btn pri" onClick={() => setDialog({ kind: "start" })}><Icon name="send" small />Go fetch ({ready})</button> : null}</> : null;
 
   return <Page title="Clients" actions={actions}>
-    <div className="row"><div className="pills">{PILLS.map((p) => <button key={p[0]} className={pill === p[0] ? "on" : ""} aria-pressed={pill === p[0]} onClick={() => setPill(p[0])}>{p[1]}<span>{s.engs.filter((e: Row) => inPill(T, e, p[0], open)).length}</span></button>)}</div><span className="sp" />
+    <div className="row"><div className="pills">{PILLS.filter((p) => !emailFirst(T) || p[0] !== "awaiting_consent").map((p) => <button key={p[0]} className={pill === p[0] ? "on" : ""} aria-pressed={pill === p[0]} onClick={() => setPill(p[0])}>{p[1]}<span>{s.engs.filter((e: Row) => inPill(T, e, p[0], open)).length}</span></button>)}</div><span className="sp" />
       <input type="search" placeholder="Filter this list" aria-label="Filter clients" style={{ width: 180 }} value={q} onChange={(e) => { setQ(e.target.value); setLimit(PAGE); }} />
       <select aria-label="Preparer" value={prep} onChange={(e) => setPrep(e.target.value)}><option value="">All preparers</option>{s.users.filter((u: Row) => u.role !== "read_only").map((u: Row) => <option key={u.id} value={u.id}>{u.first}</option>)}</select>
       <select aria-label="Voice" value={voi} onChange={(e) => setVoi(e.target.value)}><option value="">Any voice</option>{Object.keys(T.VOICES).map((k) => <option key={k} value={k}>{T.VOICES[k].label}</option>)}</select>

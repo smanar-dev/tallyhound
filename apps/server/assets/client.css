@@ -49,3 +49,4 @@ form.js .nojs{display:none}
 @media (pointer:fine){.camonly{display:none}}
 details summary{cursor:pointer;color:#4F5F57;font-size:14px;margin-top:6px}form.tiny{margin:8px 0 0}form.tiny label{font-size:14px}
 .res{list-style:none;margin:0;padding:0}.res li{padding:6px 0;font-weight:600}.res .good{color:#17694A}.res .fix{color:#B23F14}
+.acts label.btn.sm{display:block;margin:0 0 8px;text-align:center}.owed li details{margin-top:2px}

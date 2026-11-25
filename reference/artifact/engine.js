@@ -1712,7 +1712,7 @@
     m.understood = KLABEL[k] + (target ? ": " + FORMS[target.form].plain : "");
     if (k === "other_update") k = "thanks";
     e.lastIn = new Date(S.now);
-    hlog(e, "read", c.first + " texted: \u201c" + text.slice(0, 70) + (text.length > 70 ? "..." : "") + "\u201d", "Understood as " + m.understood.toLowerCase() + (scope !== "documents" ? "; topic: " + SCOPE[scope].toLowerCase() : "") + (senti !== "calm" ? "; tone: " + senti : ""), model);
+    hlog(e, "read", c.first + (EM ? " replied: \u201c" : " texted: \u201c") + text.slice(0, 70) + (text.length > 70 ? "..." : "") + "\u201d", "Understood as " + m.understood.toLowerCase() + (scope !== "documents" ? "; topic: " + SCOPE[scope].toLowerCase() : "") + (senti !== "calm" ? "; tone: " + senti : ""), model);
     if (e.takeover && !["stop", "start", "help"].includes(k)) { alertx(e, "medium", "takeover_msg", c.first + " " + c.last + " sent a message while " + e.takeover.by + " has the conversation.", "tm" + m.id); return k; }
     if (senti === "frustrated" || senti === "upset") {
       e.quietUntil = new Date(S.now.getTime() + S.firm.hound.pauseDays * DAY); remember(e, "Frustrated by reminders (" + (S.now.getMonth() + 1) + "/" + S.now.getDate() + ")", "Rules");
@@ -1881,7 +1881,11 @@
   }
   function takeover(eid, reason) { const e = eng(eid), c = client(e.clientId); e.takeover = { by: S.user.name, at: new Date(S.now), reason: reason || "" }; timeline(e, "Conversation taken over by " + S.user.name, S.user.name); audit("hound.takeover", c.last); hlog(e, "handoff", S.user.name + " took over the conversation", reason || "Staff control: the Hound keeps reading and tracking but sends nothing", "Rules"); }
   function handback(eid, note) { const e = eng(eid), c = client(e.clientId); e.takeover = null; if (note) remember(e, note, S.user.name); S.tasks.filter((t) => t.engId === e.id && t.kind === "question" && t.status === "open").forEach((t) => { t.status = "decided"; t.decision = "handled"; t.by = S.user.name; t.decidedAt = new Date(S.now); }); if (e.stuck === "question_waiting") unstick(e); e.step = 0; if (["in_progress"].includes(e.status)) e.next = nextAllowed(new Date(S.now.getTime() + HOUR)); timeline(e, "Handed back to the Hound", S.user.name); hlog(e, "decide", "Back on the Hound: resumes in about an hour", note ? "Staff note: " + note : "Staff handed the conversation back", "Rules"); }
-  function approveMsg(mid, body) { const m = S.msgs.find((x) => x.id === mid), e = eng(m.engId); const errs = outputCheck(body || m.body, m.channel, { year: e.year }).filter((x) => !(x.startsWith("digit run") && (m.base || "").includes(x.split(" ").pop()))); if (errs.length) return errs.join(", "); const c = client(e.clientId);
+  function approveMsg(mid, body) { const m = S.msgs.find((x) => x.id === mid), e = eng(m.engId);
+    // A browser never holds a client's link: it sees "(private link)" in its place. An edited draft comes back with those words,
+    // and the real link is put back here. A draft that carried a link may not be approved without it.
+    if (body && /\S+\/[cu]\/\S+/.test(m.base || "")) { const real = (/\S+\/[cu]\/\S+/.exec(m.base) || [""])[0].replace(/[.,;!?)]+$/, ""), key = real.split("/").pop().split("-").pop(); body = String(body).split("(private link)").join(key); if (!body.includes(real)) return "Keep the client's link in the message. It was not sent"; }
+    const errs = outputCheck(body || m.body, m.channel, { year: e.year }).filter((x) => !(x.startsWith("digit run") && (m.base || "").includes(x.split(" ").pop()))); if (errs.length) return errs.join(", "); const c = client(e.clientId);
     if (m.status !== "approval") return "This draft is no longer waiting";
     if (LETTERS() && !letterCheck(m.id)) return "The list changed while this was waiting, so it was not sent. A new letter replaces it";
     if (LETTERS() && sentToday(m.sender || "firm") >= (senderFor(c).cap || Infinity)) { if (body) m.body = body; m.approvedBy = S.user.name; m.status = "approved"; m.sendAt = nextMorning(dayAfter(S.now)); return null; }

@@ -164,3 +164,9 @@ test("TH-EML-2: the next letter can be read before it goes, word for word, witho
   assert.equal(p1.code, "L2"); assert.equal(md(new Date(p1.when)), "1/27"); assert.equal(p1.from, "docs@mapleandpine.example"); T.inboundDoc(c.id, { form: "W2", year: 2026, payer: "Acme Logistics" }, "portal"); assert.ok(!/W-2/.test(T.letterPreview(e.id).body));
   T.setUser("u1"); assert.equal(T.setWorkDays([1, 2, 3, 4]), null); assert.equal(T.isWorkDay(new Date(2027, 0, 29)), false, "Friday is no longer a working day"); assert.equal(T.setWorkDays([]), "Choose at least one working day"); assert.equal(T.setMailCap(5), "Choose a number from 10 to 5,000");
 });
+test("approving a letter someone edited in the browser sends the client's real link, never the words that stand in for it, and never a letter with the link cut out", () => {
+  const { T, c, e } = lfirm({ mode: "copilot" }); T.setUser("u1"); e.confirmed = true; T.start(e.id); T.advance(5 * T.MIN); const d = letters(T, e)[0], real = "https://send.tallyhound.example/u/maple-" + e.link.key;
+  const shown = d.body.split(e.link.key).join("(private link)"); assert.ok(!shown.includes(e.link.key));   // what the browser is given
+  assert.match(T.approveMsg(d.id, shown.replace("Hi Maria,", "Dear Maria,").replace(/https:\S+/, "")), /Keep the client's link/); assert.equal(d.status, "approval");
+  assert.equal(T.approveMsg(d.id, shown.replace("Hi Maria,", "Dear Maria,")), null); assert.equal(d.status, "delivered"); assert.ok(d.body.startsWith("Dear Maria,")); assert.ok(d.body.includes(real)); assert.ok(!d.body.includes("(private link)"));
+});

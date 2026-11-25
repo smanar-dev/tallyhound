@@ -25,6 +25,13 @@ export const colorOf = (first: string, last: string) => COLORS[hash(first + last
 export const STAT: Record<string, [string, string]> = { not_started: ["Ready to fetch", ""], awaiting_consent: ["Waiting for OK to text", "info"], in_progress: ["Fetching", "info"], stuck: ["Needs you", "warn"], paused: ["Paused", ""], opted_out: ["Opted out", "bad"], complete: ["All fetched", "good"], closed: ["Closed", ""] };
 export const DSTATE: Record<string, [string, string]> = { accepted: ["Passed the sniff test", "good"], rejected: ["Asked again", "bad"], in_review: ["Needs you", "warn"], duplicate: ["Duplicate", ""], discarded: ["Discarded", ""], tray: ["Unknown senders", "warn"], incomplete: ["Incomplete", "warn"], purged: ["Deleted", ""], classified: ["Sniffing", "info"], stored: ["Sniffing", "info"] };
 export const ISTATE: Record<string, string> = { expected: "Not requested yet", requested: "Requested", partial: "Part received, chasing the rest", in_review: "Received, waiting for you", says_none: "Client says they don't have it", received: "Received", waived: "Not needed" };
+/** v2 (docs/V2.md): an email-first firm. Letters by email, documents through the upload link, no texting on any screen. */
+export const emailFirst = (T: Engine): boolean => !!(T && T.S && T.S.firm && T.S.firm.letters === true);
+/** What to send when a draft is approved: the edited words, or nothing when it was left as written, so the engine sends its own
+ *  copy. That matters for a letter: the copy in the browser has "(private link)" where the client's real link is. */
+export const changed = (edit: string | undefined, body: string): string => (edit !== undefined && edit.trim() !== String(body || "").trim() ? edit.trim() : "");
+/** The engine's log lines were first written for texting. For an email-first firm the few words that differ are said the email way. */
+export const emWords = (t: string): string => String(t || "").replace(/\btexted\b/g, "wrote").replace(/\b(sending|quiet) hours\b/gi, "working days").replace(/\bby portal\b/g, "through the upload link").replace(/\ba text\b/g, "a message").replace(/\bby text\b/g, "by email").replace(/\btexts\b/g, "messages");
 /** Where a firm's text number really stands. "With the carriers" is only true once the firm's legal details have been entered:
  *  choosing a plan marks a number as wanted, and that alone has filed nothing. */
 export const senderState = (f: { senderStatus?: string; reg?: unknown }): "approved" | "filed" | "todo" => (f.senderStatus === "approved" ? "approved" : f.senderStatus === "submitted" && f.reg ? "filed" : "todo");
