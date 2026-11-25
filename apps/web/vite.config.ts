@@ -23,6 +23,9 @@ export default defineConfig({
   root: here,
   plugins: [react(), engine()],
   // assetsInlineLimit 0: nothing is embedded as a data: address. The Content-Security-Policy only allows files from our own host.
-  build: { outDir: "dist", emptyOutDir: true, sourcemap: false, chunkSizeWarningLimit: 900, assetsInlineLimit: 0 },
+  // The engine gets a file of its own so it is cached apart from the screens. The PDF reader (pdfjs, about 1.6 MB) is its own chunk and
+  // loads only when a staff member reads a last-year PDF in the browser; it is the one chunk the size warning names.
+  build: { outDir: "dist", emptyOutDir: true, sourcemap: false, chunkSizeWarningLimit: 900, assetsInlineLimit: 0,
+    rollupOptions: { output: { manualChunks: (id) => id === "\0virtual:engine" ? "engine" : undefined } } },
   server: { port: 5173, proxy: { "/api": "http://localhost:3000", "/auth": "http://localhost:3000", "/hooks": "http://localhost:3000" } }
 });

@@ -9,6 +9,7 @@ import { Page } from "./Shell";
 import { Modal } from "../components/Modal";
 import { Avatar, Chip, DocChip, Empty, Icon, Ring, StatusChip } from "../components/ui";
 import { Viewer } from "../components/Doc";
+import { FetchList, HouseholdCard, NotesCard, RecordsCard } from "../components/FetchList";
 import { PlanTab } from "./PlanTab";
 import { channelState } from "../../../server/src/plan";
 import { openTasks, type Row } from "../lib/select";
@@ -82,7 +83,7 @@ function NextCard({ T, e, c, onHandOff }: Ctx & { onHandOff: () => void }) {
   if (EM && e.status === "in_progress") body = <div className="small muted">{s.firm.stopped ? "Held: letters are stopped" : e.next ? "The next letter goes " + dt(e.next) + ". Its wording is below." : "Nothing is planned right now."}</div>;
   else if (e.status === "in_progress" && e.next) { const code = !it ? null : it.state === "expected" ? "M4" : e.step >= 4 ? "M6" : "M5"; body = <><div className="small muted">{s.firm.stopped ? "Held: messages are stopped" : "Sends " + dt(e.next) + " by " + (T.channelFor(c, e) || "email")}</div>{code ? <div className="bub out" style={{ maxWidth: "100%", alignSelf: "stretch" }}>{T.fill(code, c, e, { item: it })}</div> : null}</>; }
   else if (e.status === "awaiting_consent") body = <p className="small muted">Tallyhound emailed {c.first} an invitation to text documents. A reminder goes 3 days after the invitation, then the file is flagged at 7 days.</p>;
-  else if (e.status === "not_started") body = <><p className="small muted">{e.confirmed ? (EM ? "Ready. Go fetch sends " + c.first + " one letter by email listing every document, with their private upload link." : "Ready. Starting sends the first message inside sending hours.") : "Confirm the checklist before collecting can start."}</p>{can() ? e.confirmed ? <button className="btn pri" onClick={start}><Icon name="send" small />Go fetch</button> : <button className="btn pri" onClick={() => void act("confirmChecklist", e.id).catch(() => {})}>Confirm checklist</button> : null}</>;
+  else if (e.status === "not_started") body = <><p className="small muted">{e.confirmed ? (EM ? "Ready. Go fetch sends " + c.first + " one letter by email listing every document, with their private upload link." : "Ready. Starting sends the first message inside sending hours.") : EM ? "Approve the fetch list before any letter goes. Approving sends the first letter." : "Confirm the checklist before collecting can start."}</p>{can() ? e.confirmed ? <button className="btn pri" onClick={start}><Icon name="send" small />Go fetch</button> : EM ? <button className="btn pri" onClick={() => void act("approveList", e.id).then((r) => { if (r) toast(String(r) + "."); }, () => {})}>Approve list</button> : <button className="btn pri" onClick={() => void act("confirmChecklist", e.id).catch(() => {})}>Confirm checklist</button> : null}</>;
   else if (e.status === "complete") body = <><p className="small muted">Every document is in or waived.{e.delivered ? " Files handed off " + rel(T, e.delivered) + "." : ""}</p>{can() ? <button className={"btn" + (e.delivered ? "" : " pri")} onClick={onHandOff}><Icon name="deliver" small />{e.delivered ? "Hand off files again" : "Hand off files"}</button> : null}</>;
   else if (e.status === "paused") body = <><p className="small muted">{EM ? "Paused. No letters until someone resumes." : "Paused. No automated messages until someone resumes."}</p>{can() ? <button className="btn" onClick={() => void act("resume", e.id).then(() => toast("Resumed."), () => {})}><Icon name="play" small />Resume</button> : null}</>;
   else if (e.status === "opted_out") body = <p className="small muted">{c.first} replied STOP{c.email && c.emailOk !== false ? "" : " and has no email on file"}. Call {c.first} to collect the rest.</p>;
@@ -148,6 +149,8 @@ function Checklist({ T, e, c, openDoc }: Ctx & { openDoc: (id: string) => void }
   const checkin = async () => { try { const r = await act("sendCheckin", e.id); toast(r ? "Not sent: " + r + "." : "Check-in sent. The answers come back here as a proposed checklist."); } catch { /* said */ } };
   const icon = (st: string): IconName | null => st === "received" ? "check" : st === "requested" ? "send" : ["in_review", "says_none", "partial"].includes(st) ? "alert" : st === "waived" ? "minus" : null;
   const proposal = !!(e.checkin && e.checkin.doneAt && !e.checkin.reviewedAt);
+  // docs/FETCH.md: an email-first firm works from the fetch list, with last year's records and the preparer's notes beside it.
+  if (emailFirst(T)) return <div className="col" style={{ gap: 16 }}><MentionCard T={T} e={e} c={c} /><FetchList e={e} c={c} openDoc={openDoc} /><RecordsCard e={e} c={c} /><NotesCard e={e} /></div>;
   return <>
     <CheckinCard key={"ck" + (e.checkin?.doneAt ? +e.checkin.doneAt : 0)} T={T} e={e} c={c} /><MentionCard T={T} e={e} c={c} /><RemovedLastSeason T={T} e={e} c={c} />
     {e.confirmed || proposal ? null : <div className="note" style={{ marginBottom: 12 }}><Icon name="alert" small /><span className="grow">This checklist has not been confirmed. Go through it, then confirm so collecting can start.</span>{can() ? <button className="btn sm pri" onClick={() => void act("confirmChecklist", e.id).then(() => toast("Checklist confirmed."), () => {})}>Confirm checklist</button> : null}</div>}
@@ -356,7 +359,7 @@ export function ClientPage() {
   const [handOff, setHandOff] = useState<{ folder: string; files: string[]; missing: string[] } | null>(null), [purge, setPurge] = useState(false), [typed, setTyped] = useState(""), [asClient, setAsClient] = useState(false);
   if (!e || !c) return <Page title="Client"><div className="card"><Empty><b>That client is not on your list.</b><br />They may have been removed, or the address is wrong.<br /><Link className="btn" style={{ marginTop: 12 }} to="/clients">Back to Clients</Link></Empty></div></Page>;
   const s = T.S, EM = emailFirst(T), u = s.users.find((x: Row) => x.id === c.preparer), docs = s.docs.filter((d: Row) => d.engId === e.id).length, msgs = s.msgs.filter((m: Row) => m.engId === e.id && m.status !== "discarded").length, rc = T.recommend(e.id).add.length;
-  const TABS: [string, string, (string | number | null)?][] = [["checklist", "Checklist", T.verified(e.id).n + " of " + T.verified(e.id).m], ["suggested", "Suggested", rc ? rc + " to add" : null], ["documents", "Documents", docs], ["conversation", "Conversation", msgs], ["plan", "Plan"], ["activity", "Activity"], ["details", "Details"]];
+  const TABS: [string, string, (string | number | null)?][] = [["checklist", EM ? "Fetch list" : "Checklist", T.verified(e.id).n + " of " + T.verified(e.id).m], ["suggested", "Suggested", rc ? rc + " to add" : null], ["documents", "Documents", docs], ["conversation", "Conversation", msgs], ["plan", "Plan"], ["activity", "Activity"], ["details", "Details"]];
   // v2: the week-by-week plan was drawn for one request per message. An email-first firm reads the next letter on the right instead.
   const tab = TABS.some((t) => t[0] === params.get("tab")) ? params.get("tab")! : "checklist", ctx = { T, e, c };
   // The viewer opens over the page and its address says which document, so a link to it can be shared with a colleague at the firm.
@@ -385,7 +388,7 @@ export function ClientPage() {
     <div className="split">
       <div style={{ minWidth: 0 }}>
         <div className="tabs" role="tablist">{TABS.map((t) => <button key={t[0]} role="tab" aria-selected={tab === t[0]} className={tab === t[0] ? "on" : ""} onClick={() => setParams(t[0] === "checklist" ? {} : { tab: t[0] })}>{t[1]}{t[2] != null ? <span className="n">{t[2]}</span> : null}</button>)}</div>
-        {tab === "checklist" ? <Checklist {...ctx} openDoc={openDoc} /> : tab === "suggested" ? <Suggested {...ctx} /> : tab === "documents" ? <Documents {...ctx} openDoc={openDoc} /> : tab === "conversation" ? <Conversation {...ctx} openDoc={openDoc} /> : tab === "plan" ? <PlanTab {...ctx} /> : tab === "activity" ? <Activity {...ctx} /> : <Details key={c.id + ":" + (c.mobile || "") + (c.email || "")} {...ctx} />}
+        {tab === "checklist" ? <Checklist {...ctx} openDoc={openDoc} /> : tab === "suggested" ? <Suggested {...ctx} /> : tab === "documents" ? <Documents {...ctx} openDoc={openDoc} /> : tab === "conversation" ? <Conversation {...ctx} openDoc={openDoc} /> : tab === "plan" ? <PlanTab {...ctx} /> : tab === "activity" ? <Activity {...ctx} /> : <><Details key={c.id + ":" + (c.mobile || "") + (c.email || "")} {...ctx} />{EM ? <div style={{ marginTop: 16 }}><HouseholdCard c={c} /></div> : null}</>}
       </div>
       <div className="col" style={{ gap: 16 }}>
         <HoundCard {...ctx} />

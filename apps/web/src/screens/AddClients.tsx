@@ -1,14 +1,16 @@
 // Add clients: bring in a spreadsheet in four steps (T-24), or go and add one. Ported from the demo's importView().
 // "Check rows" is a dry run of the real import on a copy of the firm's state in the browser, so what it says will happen is what happens.
 import { Hound } from "../components/brand";
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { createEngine } from "virtual:engine";
 import { useFirm } from "../lib/firm";
 import { Page } from "./Shell";
 import { Icon } from "../components/ui";
-import { fname, plural } from "../lib/fmt";
+import { emailFirst, fname, plural } from "../lib/fmt";
 import type { Row } from "../lib/select";
+// The import screen and the reader load only when someone opens it.
+const ImportWizard = lazy(() => import("./Import").then(m => ({ default: m.ImportWizard })));
 
 const FIELDS: [string, string][] = [["", "Ignore"], ["first", "First name"], ["last", "Last name"], ["email", "Email"], ["mobile", "Mobile"], ["preparer", "Preparer"], ["name", "Full name"], ["tz", "State or time zone"], ["ref", "Client ID"], ["docs", "Documents needed"], ["entity", "Business or trust name"], ["rtype", "Kind of return"]];
 // How to get the list out of the tax programs small firms use (docs/INTEGRATIONS.md). Menu names vary a little by version.
@@ -24,7 +26,9 @@ const SOURCES: [string, string, string[]][] = [
 const STEPS = ["Upload", "Match columns", "Check rows", "Done"];
 const MAX_BYTES = 5 * 1024 * 1024;
 
-export function AddClients() {
+/** An email-first firm brings clients in with their fetch lists (docs/FETCH.md); a texting firm keeps the four steps below. */
+export function AddClients() { const { T } = useFirm(); return emailFirst(T) ? <Suspense fallback={<Page title="Add clients"><p className="muted">Loading…</p></Page>}><ImportWizard /></Suspense> : <LegacyAddClients />; }
+function LegacyAddClients() {
   const { T, can, act, actMany, toast } = useFirm(), [step, setStep] = useState(1), [src, setSrc] = useState(""), [paste, setPaste] = useState(false), [text, setText] = useState(""), [parsed, setParsed] = useState<Row | null>(null), [result, setResult] = useState<Row | null>(null), [busy, setBusy] = useState(false);
   const read = (t: string) => { if (!t.trim()) return toast("That file is empty. Choose a CSV with a header row and one client per row."); const p = T.parseCSV(t); if (!p.rows.length) return toast("Tallyhound found a header row and no clients under it."); setText(t); setParsed(p); setStep(2); };
   const pickFile = (f?: File) => { if (!f) return; if (f.size > MAX_BYTES) return toast("That file is over 5 MB. Export just the client list, as CSV."); if (/\.(xlsx?|numbers)$/i.test(f.name)) return toast("That is a spreadsheet file. Save it as CSV first: File, Save As, CSV."); const r = new FileReader(); r.onload = () => read(String(r.result || "")); r.onerror = () => toast("We couldn't read that file. Save it as CSV and try again, or send it to hello@tallyhound.com."); r.readAsText(f); };

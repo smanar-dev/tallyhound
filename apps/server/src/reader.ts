@@ -108,7 +108,7 @@ export async function readPdf(bytes: Uint8Array, maxPages = 60): Promise<ReadRes
 }
 /** Guesses whose file this is from its name: a client ID, or a last name, among the import's rows. */
 export function matchFile(name: string, rows: { key: string; ref?: string; last?: string; first?: string }[], recipient?: string | null): string | null {
-  const n = " " + String(name || "").toLowerCase().replace(/[_.\-]+/g, " ") + " ";
+  const n = " " + String(name || "").toLowerCase().replace(/[_.-]+/g, " ") + " ";
   const byRef = rows.filter((r) => r.ref && n.includes(" " + r.ref.toLowerCase() + " ")); if (byRef.length === 1) return byRef[0]!.key;
   if (recipient) { const w = recipient.toLowerCase(); const byName = rows.filter((r) => r.last && w.includes(r.last.toLowerCase()) && (!r.first || w.includes(r.first.toLowerCase()))); if (byName.length === 1) return byName[0]!.key; }
   const byLast = rows.filter((r) => r.last && r.last.length > 2 && n.includes(" " + r.last.toLowerCase() + " ") && (!r.first || n.includes(r.first.toLowerCase()))); return byLast.length === 1 ? byLast[0]!.key : null;

@@ -32,6 +32,9 @@ export function knows(T: Engine, t: Row): string[] {
   if (it) out.push("About: " + name(it) + (asked(it) ? ", asked " + times(asked(it)) : ""));
   if (d) out.push("Read as: " + T.FORMS[d.form].plain + (d.year ? ", " + d.year : "") + (d.payer ? ", from " + d.payer : ""));
   if (t.kind === "change_noted" && t.change) out.push("The client said: " + T.CHANGE_WORDS[t.change.reason]);
+  // docs/FETCH.md: what the client ticked under "Anything new" on the upload page, and the documents it suggests. None is on the list yet.
+  if (t.kind === "news") for (const x of t.suggest || []) out.push("Suggested: " + T.itemTitle({ form: x.form, payer: x.payer || null }, "en") + (x.why ? " (" + String(x.why).toLowerCase() + ")" : ""));
+  if (t.kind === "document" && t.reason === "Not on the checklist") out.push("Not on " + c.first + "'s fetch list. Accepting it adds it to the list as received");
   if (e.lastOut) out.push("Last asked: " + new Date(e.lastOut).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }));
   const last = s.msgs.filter((m: Row) => m.engId === e.id && m.dir === "in" && m.kind === "client").slice(-1)[0];
   if (last) { out.push(c.first + "'s last message: \u201c" + String(last.body || "").slice(0, 140) + (String(last.body || "").length > 140 ? "..." : "") + "\u201d"); if (last.line || last.understood) out.push(last.line || "Understood: " + String(last.understood).toLowerCase()); }
@@ -50,7 +53,9 @@ export function nextStep(T: Engine, t: Row): [string, string] {
   const e = T.eng(t.engId), c = e ? T.client(e.clientId) : null, first = c ? c.first : "the client";
   if (t.kind === "step") return ["Do it if it is right: " + stepWords(T, t) + ". Nothing changes until you say so.", "apply_step"];
   if (t.kind === "document" && t.confirm) return ["Look at it and agree, or overrule the sniff test.", "agree"];
+  if (t.kind === "document" && t.reason === "Not on the checklist") return ["Look at it. Accept it to add it to " + first + "'s list, or discard it if it is not needed.", "accept"];
   if (t.kind === "document") return ["Look at it. Accept it if it is the right document, or ask " + first + " again.", "accept"];
+  if (t.kind === "news") return ["Add the documents that apply to " + first + "'s list, or dismiss. Nothing is added by itself.", "add_news"];
   if (t.kind === "question" && t.urgent) return ["Check the number and the email address with " + first + " by phone. Nothing automatic is sent until you resume.", "handled"];
   if (t.kind === "question") return ["Reply to " + first + ", or mark it handled if you dealt with it another way.", "reply"];
   if (t.kind === "says_none") return ["Confirm it is not needed this year, or ask again if it should exist.", "waive"];

@@ -412,3 +412,15 @@ tr.click:focus-visible,[role=button]:focus-visible{outline:2px solid var(--ink);
 em.turn{font-style:italic;font-weight:500;color:var(--fox-deep)}
 .tally{font:600 15px/1 var(--display);font-variant-numeric:tabular-nums}
 @media(prefers-reduced-motion:reduce){.btn,.toast,.th-pop{transition:none!important;animation:none!important}.btn.pri:hover{transform:none}}
+
+/* Fetch lists and the import (docs/FETCH.md) */
+ol.steps{list-style:none;margin:0;padding:0}
+ol.steps li.on{color:var(--ink)}
+ol.steps li+li:before{content:"\203A";margin-right:6px;color:var(--faint)}
+.progress{height:8px;border-radius:99px;background:var(--line2);overflow:hidden}
+.progress i{display:block;height:100%;background:var(--good-fill);transition:width .2s}
+.filelist li{padding:3px 0}
+.fetchlist .fl{align-items:flex-start}
+.fetchlist .fl input[type=checkbox]{width:18px;height:18px;margin-top:2px;flex:none}
+.addrow select,.addrow input{max-width:100%;min-width:0}
+.rulestbl td,.rulestbl th{white-space:normal}

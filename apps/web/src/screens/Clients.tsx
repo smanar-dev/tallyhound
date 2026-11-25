@@ -7,7 +7,7 @@ import type { Engine } from "virtual:engine";
 import { useFirm } from "../lib/firm";
 import { Page } from "./Shell";
 import { Modal } from "../components/Modal";
-import { Avatar, Empty, Icon, StatusChip, UserAvatar } from "../components/ui";
+import { Avatar, Chip, Empty, Icon, StatusChip, UserAvatar } from "../components/ui";
 import { inPill, openTasks, PILLS, readyToStart, type Row } from "../lib/select";
 import { cname, dt, emailFirst, iname, ISTATE, phone, plural, rel } from "../lib/fmt";
 
@@ -115,6 +115,12 @@ function StartCollecting({ onClose }: { onClose: () => void }) {
 
 type Dialog = null | { kind: "add" } | { kind: "start" } | { kind: "assign"; ids: string[] };
 
+/** docs/FETCH.md: where a client's fetch list stands, for a client not started yet. The engine sorts it; this only names it. */
+function ListChip({ T, e }: { T: Row; e: Row }) {
+  if (e.status !== "not_started") return null; const L = T.listOf(e.id); if (!L) return null;
+  return <> <Chip tone={L.status === "approved" ? "good plain" : L.group === "ready" ? "good plain" : "warn plain"}>{L.status === "approved" ? "Approved" : L.group === "ready" ? "Ready" : "Needs a look"}</Chip></>;
+}
+
 export function Clients() {
   const { T, can, act, actMany, toast } = useFirm(), s = T.S, nav = useNavigate(), [params, setParams] = useSearchParams();
   const pill = PILLS.some((p) => p[0] === params.get("show")) ? params.get("show")! : "all";
@@ -149,7 +155,7 @@ export function Clients() {
   const actions: ReactNode = can() ? <><Link className="btn hide-s" to="/add-clients"><Icon name="upload" small />Import your client list</Link><button className="btn" onClick={() => setDialog({ kind: "add" })}><Icon name="plus" small /><span className="hide-s">Add client</span></button>{ready ? <button className="btn pri" onClick={() => setDialog({ kind: "start" })}><Icon name="send" small />Go fetch ({ready})</button> : null}</> : null;
 
   return <Page title="Clients" actions={actions}>
-    <div className="row"><div className="pills">{PILLS.filter((p) => !emailFirst(T) || p[0] !== "awaiting_consent").map((p) => <button key={p[0]} className={pill === p[0] ? "on" : ""} aria-pressed={pill === p[0]} onClick={() => setPill(p[0])}>{p[1]}<span>{s.engs.filter((e: Row) => inPill(T, e, p[0], open)).length}</span></button>)}</div><span className="sp" />
+    <div className="row"><div className="pills">{PILLS.filter((p) => (emailFirst(T) ? p[0] !== "awaiting_consent" : p[0] !== "off_season")).map((p) => <button key={p[0]} className={pill === p[0] ? "on" : ""} aria-pressed={pill === p[0]} onClick={() => setPill(p[0])}>{p[1]}<span>{s.engs.filter((e: Row) => inPill(T, e, p[0], open)).length}</span></button>)}</div><span className="sp" />
       <input type="search" placeholder="Filter this list" aria-label="Filter clients" style={{ width: 180 }} value={q} onChange={(e) => { setQ(e.target.value); setLimit(PAGE); }} />
       <select aria-label="Preparer" value={prep} onChange={(e) => setPrep(e.target.value)}><option value="">All preparers</option>{s.users.filter((u: Row) => u.role !== "read_only").map((u: Row) => <option key={u.id} value={u.id}>{u.first}</option>)}</select>
       <select aria-label="Voice" value={voi} onChange={(e) => setVoi(e.target.value)}><option value="">Any voice</option>{Object.keys(T.VOICES).map((k) => <option key={k} value={k}>{T.VOICES[k].label}</option>)}</select>
@@ -162,7 +168,7 @@ export function Clients() {
             <td onClick={(ev) => ev.stopPropagation()}>{can() ? <input type="checkbox" aria-label={"Select " + cname(c)} checked={sel.has(e.id)} onChange={() => toggle(e.id)} /> : null}</td>
             <td><div className="row" style={{ gap: 10, flexWrap: "nowrap" }}><Avatar first={c.first} last={c.last} /><div><b>{cname(c)}</b><div className="small faint">{c.email || phone(c.mobile)}</div></div></div></td>
             <td>{u ? <span className="row" style={{ gap: 6, flexWrap: "nowrap" }}><UserAvatar user={u} small />{u.first}</span> : null}</td>
-            <td><StatusChip status={e.status} /></td>
+            <td><StatusChip status={e.status} />{emailFirst(T) ? <ListChip T={T} e={e} /> : null}</td>
             <td><div className="row" style={{ gap: 8, flexWrap: "nowrap" }}><span className="dots">{T.itemsOf(e.id).map((i: Row) => <i key={i.id} className={i.state} title={iname(T, i) + ": " + ISTATE[i.state]} />)}</span><span className="mono faint" title={"In and verified " + p.n + " of " + p.m}>{p.n} of {p.m}</span></div></td>
             <td className="muted small" style={{ whiteSpace: "nowrap" }}>{rel(T, e.lastIn)}</td>
             <td className="small"><NextStep T={T} e={e} open={open} /></td></tr>; })}</tbody></table></div>
@@ -170,7 +176,7 @@ export function Clients() {
     </div>
     {ids.length && can() ? <div className="card pad row bulkbar" role="region" aria-label="Selected clients"><b>{ids.length} selected</b><span className="sp" />
       <button className="btn sm" onClick={() => bulk("checkin")}>Send check-in</button><button className="btn sm" onClick={() => setDialog({ kind: "assign", ids })}>Choose a checklist</button><button className="btn sm" onClick={() => bulk("recommend")}>Add suggested documents</button>
-      <button className="btn sm" onClick={() => bulk("confirm")}>Confirm checklists</button><button className="btn sm" onClick={() => bulk("start")}>Go fetch</button><button className="btn sm" onClick={() => bulk("pause")}>Pause</button><button className="btn sm" onClick={() => bulk("resume")}>Resume</button>
+      <button className="btn sm" onClick={() => bulk("confirm")}>{emailFirst(T) ? "Approve lists" : "Confirm checklists"}</button><button className="btn sm" onClick={() => bulk("start")}>Go fetch</button><button className="btn sm" onClick={() => bulk("pause")}>Pause</button><button className="btn sm" onClick={() => bulk("resume")}>Resume</button>
       <button className="btn sm ghost" style={{ color: "#fff" }} onClick={clear}>Clear</button></div> : null}
     {dialog?.kind === "add" ? <AddClient onClose={() => setDialog(null)} /> : null}
     {dialog?.kind === "start" ? <StartCollecting onClose={() => setDialog(null)} /> : null}

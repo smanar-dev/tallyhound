@@ -1,7 +1,6 @@
 // The synthetic test set (docs/FETCH.md, "Test set"): 60 made-up clients with made-up payers. Returning and new clients, joint
 // returns, Schedules A to E, the Schedule 1-A lines, organizers, returns with W-2 copies attached, source documents, and scanned
 // files with no text. Each file carries the truth: what a perfect reader would find. No real client data, anywhere.
-/* eslint-disable @typescript-eslint/no-explicit-any */
 export interface TFile { name: string; kind: "organizer" | "return" | "source_doc" | "unknown"; pages: string[]; truth: { payers: [string, string][]; schedules: string[]; lines: string[]; scanned?: boolean } }
 export interface TClient { ref: string; first: string; last: string; spouse: string | null; email: string; phone: string; returning: boolean; files: TFile[] }
 const FIRST = ["Maria", "Luis", "Ken", "Ana", "Daniel", "Erin", "Sofia", "Arjun", "Grace", "Omar", "Priya", "Tom", "Leah", "Noah", "Hana", "Ivan", "June", "Ravi", "Zoe", "Eli"];

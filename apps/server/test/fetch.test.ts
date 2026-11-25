@@ -40,7 +40,10 @@ for (const kind of KINDS) test("fetch lists (" + kind + "): a spreadsheet import
   const plain = (await H.store.readState(firmId))!; for (const s of [plain, raw]) { assert.ok(!s.includes("123-45-6789") && !s.includes("234-56-7890"), "an SSN was stored"); assert.ok(!s.includes("52,310") && !s.includes("12,004"), "a figure from the organizer was stored"); }
   // No letter before approval, enforced by the engine whatever the browser asks.
   let T = await state(); const garcia = T.S.engs.find((e: any) => T.client(e.clientId).last === "Garcia"); assert.equal(await act("start", garcia.id), "Checklist not confirmed"); await H.worker.pass(); assert.equal(H.email.sent.length, 0);
-  assert.equal(await act("approveList", garcia.id), null); await H.worker.pass(); assert.equal(H.email.sent.length, 1); const L = H.email.sent[0] as any;
+  // The old confirm step is approval too in an email-first firm: unticked items go and the approver is recorded.
+  const anOff = T.S.items.find((i: any) => i.engId === garcia.id && i.state === "off");
+  assert.equal(await act("confirmChecklist", garcia.id), null); await H.worker.pass(); assert.equal(H.email.sent.length, 1); const L = H.email.sent[0] as any;
+  T = await state(); assert.equal(T.eng(garcia.id).list.status, "approved"); assert.equal(T.eng(garcia.id).list.approvedBy, "Pat Owner"); if (anOff) assert.equal(T.S.items.find((i: any) => i.id === anOff.id).state, "removed");
   assert.match(L.body, /These usually arrive later\. Send them when they come:\n {2}- 1099-B from Schwab \(usually arrives by mid-February\)/); assert.match(L.body, /Anything new this year/);
   // The upload page: still owed, then coming later, and the news card.
   T = await state(); const u = "/u/" + T.S.firm.slug + "-" + T.engOf(garcia.clientId).link.key, page = words((await H.server.inject({ method: "GET", url: u })).body);

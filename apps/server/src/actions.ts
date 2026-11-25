@@ -65,7 +65,8 @@ export const ACTIONS: Record<string, Rule> = {
     const tz = String(f.tz ?? ""); if ((c.tz || "") !== tz && (tz === "" || Object.hasOwn(T.ZNAME, tz))) T.setZone(c.id, tz);
     T.audit("client.edit", c.last); return null; } },
   // Confirming a checklist is the firm saying "this list is right". The demo sets the same flag and writes the same two records.
-  confirmChecklist: { role: "staff", n: 1, run: (T, [eid]) => { const e = T.eng(eid); if (!e) return "No such client"; if (e.confirmed) return "Already confirmed"; e.confirmed = true; T.timeline(e, "Checklist confirmed", T.S.user.name); T.audit("checklist.confirm", T.client(e.clientId).last); return null; } },
+  // In an email-first firm a return is confirmed only by approving its fetch list (docs/FETCH.md), so the old step goes through it.
+  confirmChecklist: { role: "staff", n: 1, run: (T, [eid]) => { const e = T.eng(eid); if (!e) return "No such client"; if (e.confirmed) return "Already confirmed"; if (T.S.firm.letters) return T.approveList(e.id); e.confirmed = true; T.timeline(e, "Checklist confirmed", T.S.user.name); T.audit("checklist.confirm", T.client(e.clientId).last); return null; } },
   // Start collecting for many clients in one turn, then let the first messages go, as the demo's wizard does.
   // Many at once are paced by the engine (T-123): the first 50 now, each further 50 half an hour later.
   startMany: { role: "staff", n: 1, run: (T, [ids]) => { const r = T.startMany((Array.isArray(ids) ? ids : []).slice(0, 5000).map(String)); T.tick(); return { started: r.started, capped: r.capped, refused: r.refused, paced: r.paced, lastAt: r.lastAt }; } },

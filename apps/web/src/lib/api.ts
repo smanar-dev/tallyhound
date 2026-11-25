@@ -50,6 +50,20 @@ export const api = {
     catch { throw new ApiError(0, "offline", "Tallyhound could not be reached. Check your connection and try again."); }
     const j = (await res.json().catch(() => ({}))) as { message?: string; error?: string }; if (!res.ok) throw new ApiError(res.status, j.error || "error", j.message || "The return could not be read."); return j as never;
   },
+  /** docs/FETCH.md: a spreadsheet client list becomes CSV text on the server. Nothing of the file is kept. */
+  async xlsxToCsv(file: File): Promise<string> {
+    let res: Response;
+    try { res = await fetch("/api/imports/xlsx", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "x-tallyhound": "1" }, body: file }); }
+    catch { throw new ApiError(0, "offline", "Tallyhound could not be reached. Check your connection and try again."); }
+    const j = (await res.json().catch(() => ({}))) as { message?: string; error?: string; csv?: string }; if (!res.ok) throw new ApiError(res.status, j.error || "error", j.message || "That spreadsheet could not be read."); return String(j.csv || "");
+  },
+  /** Last year's file read on the server, when the firm chooses that or the browser could not. Held for the request only. */
+  async readOnServer(path: string, file: File): Promise<{ row?: number; tray?: string; record?: string; kind: string; status: string; found: number }> {
+    let res: Response;
+    try { res = await fetch(path, { method: "POST", credentials: "same-origin", headers: { "content-type": "application/pdf", "x-tallyhound": "1" }, body: file }); }
+    catch { throw new ApiError(0, "offline", "Tallyhound could not be reached. Check your connection and try again."); }
+    const j = (await res.json().catch(() => ({}))) as { message?: string; error?: string }; if (!res.ok) throw new ApiError(res.status, j.error || "error", j.message || "That file could not be read."); return j as never;
+  },
   site: () => call<{ signup: boolean }>("GET", "/api/site"),
   /** A question for the hound, with the conversation so far. It only reads. */
   ask: (messages: { role: "user" | "assistant"; text: string }[]) => call<{ text: string }>("POST", "/api/hound/ask", { messages }),
