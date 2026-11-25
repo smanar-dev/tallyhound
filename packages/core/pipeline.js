@@ -220,10 +220,12 @@ function createApp({ store, sms, email, ai, clock, log, files, voice, cut, layer
       // A recorded reminder call (T-50). Claimed and saved before the call is placed, like every send, and never placed twice.
       if (m.channel === "voice") { jobs.push({ id: m.id, channel: "voice", from: S.firm.smsNumber, to: c.mobile, body: m.body }); continue; }
       // Every email carries a way to stop them: a line at the foot, and the address the mail provider puts in the one-click header.
-      const un = T.unsubscribeLink ? T.unsubscribeLink(c) : "", foot = un ? "\n\nYou're getting this because " + S.firm.name + " prepares your taxes. To stop these emails: https://" + un : "";
+      const pc = m.contactId ? (c.contacts || []).find((x) => x.id === m.contactId) : null; if (m.contactId && (!pc || pc.emailOff)) { m.status = "discarded"; m.note = "That person no longer gets letters"; delete m.claimedAt; continue; }
+      const un = T.unsubscribeLink ? T.unsubscribeLink(c, pc || undefined) : "", foot = un ? "\n\nYou're getting this because " + S.firm.name + " prepares your taxes. To stop these emails: https://" + un : "";
       const subject = m.subject || S.firm.sender + ": your " + e.year + " tax documents";
-      if (viaLayer) { jobs.push({ id: m.id, channel: "email", layer: true, owner: m.sender && m.sender !== "firm" ? m.sender : (e.mirror && e.mirror.owner) || c.preparer, engId: e.id, projectId: (e.mirror && e.mirror.id) || null, to: c.email, subject, body: m.body + foot, thread: e.thread || null, unsubscribe: un ? "https://" + un : undefined }); continue; }
-      jobs.push({ id: m.id, channel: "email", from: S.firm.domain && S.firm.domain.verified && S.firm.domain.from ? S.firm.domain.from : S.firm.email, replyTo: S.firm.email, fromName: S.firm.sender, to: c.email, subject, body: m.body + foot, unsubscribe: un ? "https://" + un : undefined });
+      const to = pc ? pc.email : c.email;
+      if (viaLayer) { jobs.push({ id: m.id, channel: "email", layer: true, owner: m.sender && m.sender !== "firm" ? m.sender : (e.mirror && e.mirror.owner) || c.preparer, engId: e.id, projectId: (e.mirror && e.mirror.id) || null, to, subject, body: m.body + foot, thread: pc ? null : e.thread || null, unsubscribe: un ? "https://" + un : undefined }); continue; }
+      jobs.push({ id: m.id, channel: "email", from: S.firm.domain && S.firm.domain.verified && S.firm.domain.from ? S.firm.domain.from : S.firm.email, replyTo: S.firm.email, fromName: S.firm.sender, to, subject, body: m.body + foot, unsubscribe: un ? "https://" + un : undefined });
     }
     return jobs;
   }

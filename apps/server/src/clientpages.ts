@@ -56,9 +56,10 @@ export function uploadPage(firm: FirmView, o: { action: string; ask: string | nu
    one" or "I'll send it later". After an upload the page says what the sniff test found, in one sentence, and nothing else.
    It works with no script: the result then arrives by the page reloading itself for a minute. */
 export interface UploadItem { id: string; title: string; note?: string }
-export interface UploadView { action: string; first: string; items: UploadItem[]; done?: boolean; idle?: boolean; error?: string; said?: string; results?: { ok: boolean; text: string }[]; checking?: boolean; minDay?: string }
+export interface UploadView { action: string; first: string; items: UploadItem[]; later?: UploadItem[]; done?: boolean; idle?: boolean; error?: string; said?: string; results?: { ok: boolean; text: string }[]; checking?: boolean; minDay?: string; forClient?: string; news?: { year: number; choices: [string, string][] } | null }
 export function uploadPageV2(firm: FirmView, o: UploadView) {
   const body: ReactNode[] = [h("h1", { key: "h" }, o.done ? "Thank you, " + o.first + "." : "Hi " + o.first)];
+  if (o.forClient && !o.done) body.push(h("p", { key: "fc", className: "muted" }, firm.name + " asked you for these, for " + o.forClient + "'s tax return."));
   if (o.results && o.results.length) body.push(h("div", { key: "r", className: "card", role: "status" }, h("p", { className: "muted small" }, "What you just sent"), h("ul", { className: "res" }, o.results.map((r, i) => h("li", { key: i, className: r.ok ? "good" : "fix" }, r.text)))));
   if (o.checking) body.push(h("p", { key: "c", className: "ok", role: "status" }, "Got it. Checking what you sent. This page will say what we found in a moment."));
   if (o.said) body.push(h("p", { key: "s", className: "ok", role: "status" }, o.said));
@@ -73,11 +74,20 @@ export function uploadPageV2(firm: FirmView, o: UploadView) {
         h("details", null, h("summary", null, "I don't have this one, or I'll send it later"),
           h("form", { method: "post", action: o.action, className: "tiny" }, h("input", { type: "hidden", name: "form", value: "none" }), h("input", { type: "hidden", name: "item", value: it.id }), h("button", { className: "btn sm" }, "I don't have this one")),
           h("form", { method: "post", action: o.action, className: "tiny" }, h("input", { type: "hidden", name: "form", value: "later" }), h("input", { type: "hidden", name: "item", value: it.id }), h("label", null, "I'll send it by ", h("input", { type: "date", name: "day", min: o.minDay })), " ", h("button", { className: "btn sm" }, "I'll send this later"))))))));
-    else body.push(h("p", { key: "i" }, o.idle ? "Nothing more is needed from you right now. If you have something else for " + firm.name + ", you can send it here." : "Send your documents here."));
+    // docs/FETCH.md, "Coming later": still listed, with when it usually comes, and nothing to do until then.
+    if (o.later && o.later.length) body.push(h("div", { key: "lt", className: "card" }, h("p", { className: "muted small" }, o.items.length ? "These usually arrive later" : "Nothing is needed yet. These usually arrive later"),
+      h("ul", { className: "owed" }, o.later.map((it) => h("li", { key: it.id }, h("p", { className: "ask" }, it.title), it.note ? h("p", { className: "muted small" }, it.note) : null, h("p", { className: "acts" }, h("label", { htmlFor: "photo", className: "btn sm" }, "Send it now"), " ", h("label", { htmlFor: "cam", className: "btn sm camonly" }, "Take photo")))))));
+    if (!o.items.length && !(o.later && o.later.length)) body.push(h("p", { key: "i" }, o.idle ? "Nothing more is needed from you right now. If you have something else for " + firm.name + ", you can send it here." : "Send your documents here."));
+    // "Anything new in 2026?": fourteen choices and one optional name. What it means is decided by Tallyhound and the firm, never by the page.
+    if (o.news) body.push(h("details", { key: "nw", className: "card news" }, h("summary", null, h("b", null, "Anything new in " + o.news.year + "?"), " Tell " + firm.name + " so they ask for the right documents."),
+      h("form", { method: "post", action: o.action, className: "tiny" }, h("input", { type: "hidden", name: "form", value: "news" }),
+        h("fieldset", { className: "newsgrid" }, h("legend", { className: "muted small" }, "Tick anything that happened in " + o.news.year), o.news.choices.map(([k, label]) => h("label", { key: k, className: "tick" }, h("input", { type: "checkbox", name: "n_" + k, value: "1" }), " ", label))),
+        h("label", { className: "f" }, "A name, if it helps (an employer, lender or school)", h("input", { type: "text", name: "named", maxLength: 60, autoComplete: "off" })),
+        h("button", { className: "btn pri" }, "Send"))));
     body.push(h("form", { key: "f", id: "send", method: "post", action: o.action, encType: "multipart/form-data" },
       h("div", { className: "pick cam" }, h("label", { htmlFor: "cam" }, "Take a photo"), h("input", { id: "cam", name: "file", type: "file", accept: "image/*", capture: "environment" })),
       h("div", { className: "pick" }, h("label", { htmlFor: "photo" }, "Choose files"), h("input", { id: "photo", name: "file", type: "file", accept: "image/*,application/pdf", multiple: true })),
-      h("p", { className: "muted small" }, "A phone photo or a PDF both work. " + UPLOAD_TYPES), h("ul", { id: "rows", "aria-live": "polite" }), h("button", { className: "btn pri nojs" }, "Send")));
+      h("p", { className: "muted small" }, "A phone photo or a PDF both work. " + UPLOAD_TYPES + " You can also send something that isn't on the list, if you think " + firm.name + " needs it."), h("ul", { id: "rows", "aria-live": "polite" }), h("button", { className: "btn pri nojs" }, "Send")));
     body.push(h("p", { key: "n", className: "muted small" }, "No account or password is needed. We never show documents here."));
   }
   return frame("Send your documents", firm, body, !o.done, o.checking ? 4 : 0);

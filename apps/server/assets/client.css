@@ -50,3 +50,5 @@ form.js .nojs{display:none}
 details summary{cursor:pointer;color:#4F5F57;font-size:14px;margin-top:6px}form.tiny{margin:8px 0 0}form.tiny label{font-size:14px}
 .res{list-style:none;margin:0;padding:0}.res li{padding:6px 0;font-weight:600}.res .good{color:#17694A}.res .fix{color:#B23F14}
 .acts label.btn.sm{display:block;margin:0 0 8px;text-align:center}.owed li details{margin-top:2px}
+details.news summary{cursor:pointer;font-size:16px;color:#13261F}details.news .newsgrid{border:0;padding:0;margin:10px 0;display:grid;grid-template-columns:1fr;gap:6px}@media (min-width:520px){details.news .newsgrid{grid-template-columns:1fr 1fr}}
+label.tick{display:flex;gap:8px;align-items:flex-start;font-size:15px;line-height:1.35}label.tick input{width:20px;height:20px;margin-top:1px}

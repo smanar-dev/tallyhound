@@ -34,6 +34,16 @@
     ASSET_LIST: { plain: "list of equipment and vehicles bought or sold", es: "lista de equipos y vehículos comprados o vendidos", issuer: "you", issuerEs: "usted", hint: "Date, what it was and the price for each. Invoices work too.", hintEs: "Fecha, qué fue y el precio de cada uno. También sirven las facturas.", order: 120 },
     LOAN_STATEMENT: { plain: "year-end loan statements", es: "estados de préstamos de fin de año", issuer: "your lender", issuerEs: "su prestamista", hint: "Showing the balance and the interest paid for the year.", hintEs: "Con el saldo y los intereses pagados en el año.", order: 122 },
     FORMS_ISSUED: { plain: "copies of the 1099s and W-2s the business issued", es: "copias de los 1099 y W-2 que emitió el negocio", issuer: "your payroll provider or bookkeeper", issuerEs: "su proveedor de nómina o contador", hint: "The filed copies, or the summary page.", hintEs: "Las copias presentadas o la página de resumen.", order: 124 },
+    // Added for the fetch-list catalog (docs/FETCH.md). Spanish wording for these has had no review either (T-31).
+    "1099B": { plain: "brokerage statement (1099-B)", es: "formulario 1099-B de su corredor", issuer: "your brokerage", issuerEs: "su corredor", hint: "Brokers send these by mid-February.", hintEs: "Los corredores los envían a mediados de febrero.", order: 30 },
+    "1099DA": { plain: "crypto statement (1099-DA)", es: "formulario 1099-DA de criptomonedas", issuer: "your crypto exchange", issuerEs: "su plataforma de criptomonedas", hint: "Exchanges send these by mid-February.", hintEs: "Las plataformas los envían a mediados de febrero.", order: 31 },
+    "1099S": { plain: "home sale statement (1099-S)", es: "formulario 1099-S de la venta", issuer: "the closing agent", issuerEs: "el agente de cierre", hint: "The closing agent sends it by mid-February. Send the closing statement too.", hintEs: "El agente de cierre lo envía a mediados de febrero.", order: 60 },
+    W2G: { plain: "gambling winnings statement (W-2G)", es: "formulario W-2G de premios", issuer: "the casino or lottery", issuerEs: "el casino o la lotería", hint: "These are sent by the end of January.", hintEs: "Se envían antes de fines de enero.", order: 36 },
+    "1098VLI": { plain: "car loan interest statement (1098-VLI)", es: "formulario 1098-VLI de intereses de auto", issuer: "your auto lender", issuerEs: "su prestamista de auto", hint: "New for 2026. Your lender's statement shows the interest and the car's VIN.", hintEs: "Nuevo para 2026.", order: 51 },
+    UNREPORTED: { plain: "records of client payments that didn't come with a 1099", es: "registros de pagos sin formulario 1099", issuer: "you", issuerEs: "usted", hint: "Bank deposits or your invoicing tool's year-end report work.", hintEs: "", order: 81 },
+    TIPS: { plain: "tip records", es: "registros de propinas", issuer: "you", issuerEs: "usted", hint: "Tip logs or point-of-sale reports work.", hintEs: "", order: 82 },
+    PHOTOID: { plain: "photo ID", es: "identificación con foto", issuer: "you", issuerEs: "usted", hint: "A driver's license or passport for each person on the return.", hintEs: "", order: 95 },
+    NOTICE: { plain: "letter from the IRS or your state", es: "carta del IRS o de su estado", issuer: "the IRS or your state", issuerEs: "el IRS o su estado", hint: "", hintEs: "", order: 96 },
     OTHER: { plain: "document", es: "documento", issuer: "", issuerEs: "", hint: "", hintEs: "", order: 99 }
   };
   const PR = [["payer", "Payer name and TIN"], ["recipient", "Recipient name"]];
@@ -59,7 +69,7 @@
     box5: ["box 5 is cut off", "a photo of the whole form", "la casilla 5 quedó cortada", "una foto del formulario completo"],
     noGoods: ["the receipt doesn't say whether you got anything in return", "the receipt with that statement on it", "el recibo no indica si recibió algo a cambio", "el recibo con esa declaración"]
   };
-  const RELEASE = { "1099CONS": [1, 15], K1: [2, 15] };
+  const RELEASE = { "1099CONS": [1, 15], "1099B": [1, 15], "1099DA": [1, 15], "1099S": [1, 15], K1: [2, 15] };
   const FACTS = [["w2", "Has a W-2 job"], ["newJob", "Started a new job"], ["selfEmp", "Freelance or contract work"], ["gig", "Sells through payment apps"], ["interest", "Has bank interest"], ["investments", "Gets dividends"], ["brokerage", "Sold investments"], ["retire", "Took retirement distributions"], ["ss", "Gets Social Security"], ["homeowner", "Owns a home with a mortgage"], ["rental", "Owns a rental property"], ["k1", "Owns part of a partnership or S corp"], ["student", "Paid college tuition"], ["studentLoan", "Pays student loan interest"], ["market", "Marketplace health insurance"], ["hsa", "Used an HSA"], ["childcare", "Pays for childcare"], ["charity", "Gives to charity"], ["estPay", "Made estimated tax payments"], ["newClient", "New to the firm"]];
   ["PNL", "BALANCE_SHEET", "TRIAL_BALANCE", "BANK_STATEMENT", "PAYROLL_REPORT", "ASSET_LIST", "LOAN_STATEMENT", "FORMS_ISSUED"].forEach((k) => { ELEMENTS[k] = [["entity", "The business or account name"], ["period", "The dates it covers"]]; });
   // Every kind of return a firm prepares. Each starts from its own list of documents; the firm edits from there.
@@ -77,7 +87,7 @@
     if (/1041|trust|estate|fiduciar/.test(t)) return "1041"; if (/\b990|non-?profit|exempt/.test(t)) return "990"; if (/1040|individual|personal/.test(t)) return "1040"; return ""; }
   const RULES = { w2: ["W2"], newJob: ["W2"], selfEmp: ["1099NEC"], gig: ["1099K"], interest: ["1099INT"], investments: ["1099DIV"], brokerage: ["1099CONS"], retire: ["1099R"], ss: ["SSA1099"], homeowner: ["1098", "PTAX"], rental: ["RENTAL"], k1: ["K1"], student: ["1098T"], studentLoan: ["1098E"], market: ["1095A"], hsa: ["1099SA"], childcare: ["CHILDCARE"], charity: ["CHARITY"], estPay: ["ESTPAY"], newClient: ["PRIOR"] };
   const PORTALQ = [["newJob", "Did you start a new job in {year}?", "¿Empezó un trabajo nuevo en {year}?"], ["homeowner", "Do you own a home with a mortgage?", "¿Tiene una casa con hipoteca?"], ["selfEmp", "Did you do any freelance or contract work?", "¿Hizo trabajo independiente o por contrato?"], ["gig", "Did you get business payments through apps like PayPal or Venmo?", "¿Recibió pagos de negocio por aplicaciones como PayPal o Venmo?"], ["brokerage", "Did you sell any stocks or funds?", "¿Vendió acciones o fondos?"], ["student", "Did you pay college tuition?", "¿Pagó matrícula universitaria?"], ["childcare", "Did you pay for childcare so you could work?", "¿Pagó guardería para poder trabajar?"], ["charity", "Did you give to charity?", "¿Hizo donaciones a organizaciones benéficas?"], ["hsa", "Did you use a health savings account (HSA)?", "¿Usó una cuenta de ahorros para la salud (HSA)?"], ["market", "Did you buy health insurance through the marketplace?", "¿Compró seguro médico en el mercado de seguros?"], ["rental", "Do you own a rental property?", "¿Tiene una propiedad en alquiler?"], ["estPay", "Did you make estimated tax payments?", "¿Hizo pagos de impuestos estimados?"]];
-  const FORMWORDS = [["W2", /\bw-?2s?\b/i], ["1098", /\b1098\b(?!-?[te])|mortgage/i], ["1099INT", /1099-?int|interest statement|bank interest/i], ["1099DIV", /1099-?div|dividend/i], ["1099CONS", /brokerage|consolidated|1099-?b\b|schwab|fidelity|vanguard|etrade/i], ["K1", /\bk-?1\b/i], ["1095A", /1095|marketplace/i], ["1098E", /student loan/i], ["1098T", /1098-?t|tuition/i], ["SSA1099", /social security|ssa/i], ["1099R", /1099-?r\b|retirement|ira|401/i], ["1099NEC", /1099-?nec|contract work|freelance/i], ["PTAX", /property tax/i], ["CHILDCARE", /daycare|childcare|child care/i], ["CHARITY", /donation|charit/i], ["ESTPAY", /estimated/i], ["PNL", /p\s*&\s*l\b|profit (and|&) loss|income statement/i], ["BALANCE_SHEET", /balance sheet/i], ["TRIAL_BALANCE", /trial balance|general ledger/i], ["BANK_STATEMENT", /bank statements?|credit card statements?/i], ["PAYROLL_REPORT", /payroll|\b941s?\b|\bw-?3\b/i], ["ASSET_LIST", /fixed assets?|equipment|depreciation/i], ["LOAN_STATEMENT", /loan statements?/i], ["FORMS_ISSUED", /1099s? (we |the business )?issued|issued 1099/i]];
+  const FORMWORDS = [["1098VLI", /1098-?vli\b|vehicle loan interest|car loan interest/i], ["1099B", /1099-?b\b|proceeds from broker/i], ["1099DA", /1099-?da\b|digital asset/i], ["1099S", /1099-?s\b|real estate transactions/i], ["W2G", /\bw-?2g\b|gambling winnings/i], ["TIPS", /\btip (logs?|records?)\b/i], ["PHOTOID", /\bphoto id\b|driver'?s licen[cs]e|passport/i], ["NOTICE", /\b(irs|state) (letter|notice)\b|\bnotice from the irs\b/i], ["UNREPORTED", /payments? (without|with no|that didn'?t come with) a 1099/i], ["W2", /\bw-?2s?\b/i], ["1098", /\b1098\b(?!-?[te])|mortgage/i], ["1099INT", /1099-?int|interest statement|bank interest/i], ["1099DIV", /1099-?div|dividend/i], ["1099CONS", /brokerage|consolidated|1099-?b\b|schwab|fidelity|vanguard|etrade/i], ["K1", /\bk-?1\b/i], ["1095A", /1095|marketplace/i], ["1098E", /student loan/i], ["1098T", /1098-?t|tuition/i], ["SSA1099", /social security|ssa/i], ["1099R", /1099-?r\b|retirement|ira|401/i], ["1099NEC", /1099-?nec|contract work|freelance/i], ["PTAX", /property tax/i], ["CHILDCARE", /daycare|childcare|child care/i], ["CHARITY", /donation|charit/i], ["ESTPAY", /estimated/i], ["PNL", /p\s*&\s*l\b|profit (and|&) loss|income statement/i], ["BALANCE_SHEET", /balance sheet/i], ["TRIAL_BALANCE", /trial balance|general ledger/i], ["BANK_STATEMENT", /bank statements?|credit card statements?/i], ["PAYROLL_REPORT", /payroll|\b941s?\b|\bw-?3\b/i], ["ASSET_LIST", /fixed assets?|equipment|depreciation/i], ["LOAN_STATEMENT", /loan statements?/i], ["FORMS_ISSUED", /1099s? (we |the business )?issued|issued 1099/i]];
 
   const TPL = {
     en: {
@@ -187,7 +197,7 @@
   const LETTER = {
     professional: {
       en: {
-        L1: "Hi {first},¶¶To prepare your {year} return{for_entity} we still need:¶¶{items}¶¶Upload them here. No account or password needed:¶{link}¶¶A phone photo or a PDF both work.¶¶Thank you,¶{sign_name}¶{firm}",
+        L1: "Hi {first},¶¶To prepare your {year} return{for_entity} we still need:¶¶{items}¶¶Upload them here. No account or password needed:¶{link}¶¶A phone photo or a PDF both work.{news}¶¶Thank you,¶{sign_name}¶{firm}",
         L2: "Hi {first},¶¶A reminder for your {year} return{for_entity}. We still need:¶¶{items}¶¶Upload them here. No account or password needed:¶{link}¶¶If you don't have one of these, the same page lets you say so.¶¶Thank you,¶{sign_name}¶{firm}",
         L3: "Hi {first},¶¶This is our last reminder for your {year} return{for_entity}. We are still missing:¶¶{items}¶¶Upload them here:¶{link}¶¶If something is in the way, reply to this email and we will help.¶¶Thank you,¶{sign_name}¶{firm}",
         M35R: "Thanks, {first}. We don't have your {plain_name}{from_payer} yet. Could you upload it here? {link}",
@@ -225,7 +235,7 @@
     },
     warm: {
       en: {
-        L1: "Hi {first},¶¶I hope you're well. To get started on your {year} return{for_entity}, here is what we still need from you:¶¶{items}¶¶You can upload them here whenever you have them. There is no account or password:¶{link}¶¶A phone photo or a PDF both work.¶¶Thank you so much,¶{sign_name}¶{firm}",
+        L1: "Hi {first},¶¶I hope you're well. To get started on your {year} return{for_entity}, here is what we still need from you:¶¶{items}¶¶You can upload them here whenever you have them. There is no account or password:¶{link}¶¶A phone photo or a PDF both work.{news}¶¶Thank you so much,¶{sign_name}¶{firm}",
         L2: "Hi {first},¶¶Just a friendly reminder for your {year} return{for_entity}. We are still waiting on:¶¶{items}¶¶You can upload them here, with no account or password:¶{link}¶¶If you don't have one of these, the same page lets you tell us.¶¶Thank you so much,¶{sign_name}¶{firm}",
         L3: "Hi {first},¶¶This is our last reminder for your {year} return{for_entity}, and we would hate for it to hold you up. We are still missing:¶¶{items}¶¶You can upload them here:¶{link}¶¶If something is in the way, just reply to this email and we will help.¶¶Thank you so much,¶{sign_name}¶{firm}",
         M35R: "Thank you, {first}. Sorry, we don't have your {plain_name}{from_payer} yet. Could you upload it once more here? {link}",
@@ -235,7 +245,7 @@
     },
     brief: {
       en: {
-        L1: "Hi {first},¶¶For your {year} return{for_entity} we need:¶¶{items}¶¶Upload here, no account needed:¶{link}¶¶{sign_name}¶{firm}",
+        L1: "Hi {first},¶¶For your {year} return{for_entity} we need:¶¶{items}¶¶Upload here, no account needed:¶{link}{news}¶¶{sign_name}¶{firm}",
         L2: "Hi {first},¶¶Still needed for your {year} return{for_entity}:¶¶{items}¶¶Upload here:¶{link}¶¶{sign_name}¶{firm}",
         L3: "Hi {first},¶¶Last reminder. Still missing for your {year} return{for_entity}:¶¶{items}¶¶Upload here:¶{link}¶¶{sign_name}¶{firm}",
         M35R: "We don't have your {plain_name}{from_payer} yet. Please upload it here: {link}",
@@ -501,7 +511,8 @@
   const SCRUB_WORD = { ssn: "a Social Security number", card: "a card number", bank: "a bank account number" };
   function scrubIn(text, e) { const r = scrub(text); if (r.hit.length && e) { hlog(e, "guardrail", "Removed " + r.hit.map((k) => SCRUB_WORD[k]).join(" and ") + " from a message before storing it", "Tallyhound never keeps these. The rest of the message is unchanged.", "Rules"); audit("privacy.scrub", client(e.clientId).last + ": " + r.hit.join(", "), "Tallyhound"); } return r.text; }
   function remember(e, text, source) { if (!text) return; text = scrub(text).text; e.memory = e.memory || []; if (e.memory.some((m) => m.text === text)) return; e.memory.unshift({ at: new Date(S.now), text, source }); hlog(e, "memory", "Remembered: " + text, "Used to word and time future messages", source === "Claude" ? "Claude" : "Rules"); }
-  function releaseOf(it, e) { const r = RELEASE[it.form]; if (!r || it.holdOff) return null; const d = new Date((e ? e.year : 2026) + 1, r[0], r[1]); d.setHours(S.firm.newDayHour, 0, 0, 0); return d; }
+  // The day a late form may be chased. The date the payer must send it, moved off a weekend or a federal holiday: February 15, 2027 is Presidents' Day, so 1099-Bs are chased from February 16.
+  function releaseOf(it, e) { const r = RELEASE[it.form]; if (!r || it.holdOff) return null; const d = new Date((e ? e.year : 2026) + 1, r[0], r[1]); for (let i = 0; i < 5 && (d.getDay() === 0 || d.getDay() === 6 || isHoliday(d)); i++) d.setDate(d.getDate() + 1); d.setHours(S.firm.newDayHour, 0, 0, 0); return d; }
   const expectYear = (form, e) => (form === "PRIOR" ? e.year - 1 : e.year);
   function missText(keys, lang, form) {
     const es = lang === "es", parts = keys.map((k) => MISSTXT[k] || [null, null, null, null]);
@@ -554,10 +565,13 @@
   /** Whose link is this key? { c, e, state } with state live, revoked or expired; null for a key nobody has. An old key that staff replaced reads as revoked. */
   function linkFind(key) {
     if (!key) return null;
-    for (const e of S.engs) { if (e.link && e.link.key === key) return { c: client(e.clientId), e, state: linkState(e) }; if (e.link && (e.link.old || []).includes(key)) return { c: client(e.clientId), e, state: "revoked" }; }
+    for (const e of S.engs) { if (e.link && e.link.key === key) return { c: client(e.clientId), e, state: linkState(e) }; if (e.link && (e.link.old || []).includes(key)) return { c: client(e.clientId), e, state: "revoked" };
+      const pc = e.link && e.link.contacts ? Object.keys(e.link.contacts).find((k) => e.link.contacts[k] === key) : null; if (pc) { const c = client(e.clientId), p = (c.contacts || []).find((x) => x.id === pc); return { c, e, contact: p || null, state: p && !p.emailOff ? linkState(e) : "revoked" }; } }
     const c = S.clients.find((x) => x.key === key); return c ? { c, e: engOf(c.id), state: linkLive(c) ? "live" : "expired" } : null;
   }
-  function rotateLink(eid) { const e = eng(eid); if (!e) return "No such client"; if (!may()) return "Not allowed"; const L = seasonLink(e); L.old = (L.old || []).concat([L.key]).slice(-5); L.key = linkKey(); L.at = new Date(S.now); delete L.revokedAt; timeline(e, "A new upload link was made. The old one no longer works", S.user.name); audit("link.rotated", client(e.clientId).first + " " + client(e.clientId).last); return null; }
+  /** A contact's own link: shows only what that person was asked for. Replaced with the client's link when that is replaced. */
+  function contactLink(e, pid) { const L = seasonLink(e); L.contacts = L.contacts || {}; if (!L.contacts[pid]) L.contacts[pid] = linkKey(); return S.firm.linkBase ? (/^https?:/.test(S.firm.linkBase) ? "" : "https://") + S.firm.linkBase + "/u/" + (S.firm.slug ? S.firm.slug + "-" : "") + L.contacts[pid] : LINK_SAMPLE + "/u/k3x9"; }
+  function rotateLink(eid) { const e = eng(eid); if (!e) return "No such client"; if (!may()) return "Not allowed"; const L = seasonLink(e); L.old = (L.old || []).concat([L.key], Object.values(L.contacts || {})).slice(-12); L.key = linkKey(); L.contacts = {}; L.at = new Date(S.now); delete L.revokedAt; timeline(e, "A new upload link was made. The old one no longer works", S.user.name); audit("link.rotated", client(e.clientId).first + " " + client(e.clientId).last); return null; }
   function revokeLink(eid) { const e = eng(eid); if (!e) return "No such client"; if (!may()) return "Not allowed"; const L = seasonLink(e); if (L.revokedAt) return null; L.revokedAt = new Date(S.now); timeline(e, "The upload link was switched off", S.user.name); audit("link.revoked", client(e.clientId).first + " " + client(e.clientId).last); return null; }
   function linkFor(c, kind, e) { if (LETTERS() && kind === "u" && S.firm.linkBase) { const en = e || (c && engOf(c.id)); if (en) return (/^https?:/.test(S.firm.linkBase) ? "" : "https://") + S.firm.linkBase + "/u/" + (S.firm.slug ? S.firm.slug + "-" : "") + seasonLink(en).key; } return S.firm.linkBase ? S.firm.linkBase + "/" + kind + "/" + (S.firm.slug ? S.firm.slug + "-" : "") + ((c && c.key) || "") : LINK_SAMPLE + "/" + kind + "/k3x9"; }
   function voiceFor(c) { const k = (c && c.voice) || (S.firm.hound && S.firm.hound.voice) || "professional"; return VOICES[k] ? k : "professional"; }
@@ -594,6 +608,7 @@
       // The firm's sign-off (up to 30 characters). With none set, Warm signs with the preparer's first name and Professional does not sign.
       sign_off: S.firm.signOff || (voice === "warm" && prep && prep !== S.firm.sender ? prep : ""),
       // A letter is signed by the preparer and the firm (TH-WLB-2). The firm's own sign-off, when it has one, takes the preparer's line.
+      news: "",
       sign_name: S.firm.signOff || (c ? (S.users.find((u) => u.id === c.preparer) || {}).name : "") || S.firm.sender
     }, extra || {});
     let tt = t; if (it && LONGDOC.includes(it.form)) tt = tt.replace(LONGHOW[lang][0], LONGHOW[lang][1]);
@@ -817,6 +832,351 @@
   function waitingRelease(e) { const w = itemsOf(e.id).filter((i) => ["expected", "requested"].includes(i.state)).map((i) => heldUntil(i, e)).filter(Boolean); return w.length ? new Date(Math.min.apply(null, w)) : null; }
 
 
+
+  /* ---------- fetch lists (docs/FETCH.md) ----------
+     The catalog: the 31 kinds of document a fetch list can ask for, in six groups. For each: who issues it (the label of the
+     issuer field), how it is asked for when nobody knows the issuer, when it usually arrives, whether it is held until then, and
+     two flags. A firm can hide a kind and change how it is asked for; adding a kind is a Tallyhound content change, reviewed each
+     season by a CPA adviser, with no code change. Tallyhound suggests documents. It never judges eligibility for anything. */
+  const CATALOG_SEASON = 2026, RULES_VERSION = "2026.1";
+  const CATALOG_GROUPS = [["income", "Income"], ["deductions", "Deductions and credits"], ["health", "Health"], ["business", "Business and rental"], ["identity", "Identity"], ["other", "Other"]];
+  const CATALOG = [
+    // code, group, issuer label, asked as when the issuer isn't known, usually arrives, flags
+    ["W2", "income", "Employer", "W-2 from each employer", "By January 31", {}],
+    ["1099INT", "income", "Bank", "1099-INT from each bank that paid interest", "By January 31", {}],
+    ["1099DIV", "income", "Fund or brokerage", "1099-DIV from each fund or brokerage", "By January 31", {}],
+    ["1099B", "income", "Brokerage", "1099-B from your brokerage", "By mid-February", {}],
+    ["1099DA", "income", "Exchange", "1099-DA from your crypto exchange", "By mid-February", {}],
+    ["1099R", "income", "Plan or custodian", "1099-R from your retirement plan or IRA", "By January 31", {}],
+    ["SSA1099", "income", "", "SSA-1099 from Social Security", "By January 31", {}],
+    ["1099G", "income", "State agency", "1099-G from your state", "By January 31", { oneTime: true }],
+    ["1099NEC", "income", "Payer", "1099-NEC from each client who paid you", "By January 31", {}],
+    ["1099MISC", "income", "Payer", "1099-MISC from each payer", "By January 31, some by mid-February", {}],
+    ["1099K", "income", "Payment platform", "1099-K from your payment processor", "By January 31", {}],
+    ["K1", "income", "Entity", "K-1 from each partnership, S corporation or trust", "In March, later if the entity extends", {}],
+    ["1099S", "income", "Closing agent", "1099-S and the closing statement from your sale", "By mid-February", { oneTime: true }],
+    ["W2G", "income", "Payer", "W-2G from the casino or lottery", "By January 31", { oneTime: true }],
+    ["1098", "deductions", "Lender", "1098 from your mortgage lender", "By January 31", {}],
+    ["1098VLI", "deductions", "Auto lender", "1098-VLI from your auto lender", "By January 31 (to confirm)", { newForYear: true }],
+    ["1098T", "deductions", "School", "1098-T from the school", "By January 31", {}],
+    ["1098E", "deductions", "Servicer", "1098-E from your loan servicer", "By January 31", {}],
+    ["PTAX", "deductions", "County", "Property tax statement from your county", "When you have it", {}],
+    ["CHILDCARE", "deductions", "Provider", "Your childcare provider's name, address and tax ID, and what you paid them", "When you have it", {}],
+    ["CHARITY", "deductions", "", "Receipts for charitable donations", "When you have it", {}],
+    ["ESTPAY", "deductions", "", "Records of the estimated tax payments you made", "When you have it", {}],
+    ["1099SA", "health", "HSA custodian", "1099-SA from your HSA", "By January 31", {}],
+    ["1095A", "health", "Marketplace", "1095-A from the health insurance marketplace", "By January 31", {}],
+    ["PNL", "business", "", "A summary of your business income and expenses", "When you have it", {}],
+    ["UNREPORTED", "business", "", "Records of client payments that didn't come with a 1099", "When you have it", {}],
+    ["RENTAL", "business", "", "Rental income and expenses for each property", "When you have it", {}],
+    ["TIPS", "business", "", "Tip records, such as tip logs or point-of-sale reports", "When you have it", {}],
+    ["PHOTOID", "identity", "", "Photo ID for each person on the return", "When you have it", {}],
+    ["PRIOR", "identity", "", "Your last year's tax return", "When you have it", {}],
+    ["NOTICE", "other", "", "Any letter you got from the IRS or your state", "When you have it", {}]
+  ];
+  const CAT = Object.fromEntries(CATALOG.map((r) => [r[0], r]));
+  function catalog() {
+    const o = S.firm.catalog || {}, y = S.firm.taxYear || 2026;
+    return CATALOG.map(([code, group, issuerLabel, ask, arrives, fl]) => ({ code, display: formDisplay(code), name: FORMS[code].plain, group, issuerLabel, ask: askPhrase(code), askStd: ask.replace("last year's", y + ""), arrives, holdUntil: RELEASE[code] ? releaseOf({ form: code }, { year: y }) : null, oneTime: !!fl.oneTime, newForYear: !!fl.newForYear, hidden: !!(o[code] && o[code].hidden), changed: !!(o[code] && o[code].ask) }));
+  }
+  /** How a kind of document is asked for when nobody knows who issues it: the firm's wording if it changed it, else the catalog's. */
+  function askPhrase(code) { const r = CAT[code]; if (!r) return null; const o = (S.firm.catalog || {})[code]; return (o && o.ask) || r[3].replace("last year's", String(S.firm.taxYear || 2026)); }
+  function setCatalog(code, p) {
+    if (!may("owner")) return "Only an owner can change this"; if (!CAT[code]) return "Not in the catalog"; const c = (S.firm.catalog = S.firm.catalog || {}), o = (c[code] = c[code] || {});
+    if (p && p.hidden !== undefined) o.hidden = p.hidden === true;
+    if (p && p.ask !== undefined) { const v = String(p.ask || "").replace(/[<>{}]/g, "").replace(/\s+/g, " ").trim(); if (v) { if (v.length < 5 || v.length > 140) return "Write between 5 and 140 characters"; const errs = outputCheck(v, "email", {}).filter((x) => !x.startsWith("digit run")); if (errs.length) return "That wording cannot be used: " + errs.join(", "); o.ask = v; } else delete o.ask; }
+    audit("settings.catalog", formDisplay(code) + (o.hidden ? " hidden" : " shown") + (o.ask ? ", asked as “" + o.ask + "”" : "")); return null;
+  }
+  /* The four firm rules (Settings). On unless the firm switches one off. Switching one off mid-season changes no open list. */
+  const FIRM_RULES = { new_id: "Ask new clients for a photo ID", new_return: "Ask new clients for last year's return if we don't have it", ask_news: "Ask every client what's new this year in the first letter", flag_one_time: "Leave one-time documents off unless they repeat (1099-S, W-2G, 1099-G)" };
+  const firmRule = (k) => !(S.firm.rules && S.firm.rules[k] === false);
+  function setFirmRule(k, on) { if (!may("owner")) return "Only an owner can change this"; if (!FIRM_RULES[k]) return "No such rule"; S.firm.rules = Object.assign({}, S.firm.rules, { [k]: on === true }); audit("settings.firm_rule", FIRM_RULES[k] + ": " + (on === true ? "on" : "off")); return null; }
+  /* Payer display names: "JPMORGAN CHASE BANK NA" shown as "Chase" in letters and on the upload page. The firm's to edit. */
+  const aliasKey = (raw) => String(raw || "").toUpperCase().replace(/[.,']/g, "").replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+  function payerShown(raw) { if (!raw) return raw; const a = (S.firm.aliases || {})[aliasKey(raw)]; return a || raw; }
+  function setAlias(raw, shown) { if (!may()) return "Not allowed"; const k = aliasKey(raw); if (!k) return "Give the name as it appears"; const v = String(shown || "").replace(/[<>{}]/g, "").replace(/\s+/g, " ").trim().slice(0, 60); S.firm.aliases = Object.assign({}, S.firm.aliases); if (v && v.toUpperCase() !== k) S.firm.aliases[k] = v; else delete S.firm.aliases[k]; audit("settings.alias", k + (v ? " shown as " + v : " shown as it is")); return null; }
+
+
+
+  /* What was read from last year's records (docs/FETCH.md, "Reading prior-year data"). Only findings are kept: schedule names, form
+     codes, payer and recipient names, a page number and the few words matched. Every token next to a $ sign and every number
+     longer than four digits is dropped before anything is stored, here as well as in the reader. No file, and no full text. */
+  const FIND_KINDS = ["payer", "schedule", "line", "recipient", "year"];
+  function cleanText(t) { return String(t || "").replace(/\$\s*[\d,.]+|[\d,.]*\d\s*\$/g, " ").split(/\s+/).filter((w) => !(w.replace(/\D/g, "").length > 4)).join(" ").replace(/[<>{}]/g, "").trim(); }
+  function cleanFinding(f) {
+    if (!f || !FIND_KINDS.includes(f.kind)) return null; const o = { kind: f.kind, src: ["organizer", "doc", "return"].includes(f.src) ? f.src : "doc" };
+    if (f.form && FORMS[f.form]) o.form = f.form; if (f.payer) o.payer = cleanText(f.payer).slice(0, 60) || null; if (f.value) o.value = cleanText(f.value).slice(0, 40); if (f.recipient) o.recipient = cleanText(f.recipient).slice(0, 60);
+    if (Number.isInteger(+f.page) && +f.page > 0 && +f.page < 1000) o.page = +f.page; if (f.text) o.text = cleanText(f.text).slice(0, 80);
+    return o.kind === "payer" && !o.form ? null : o;
+  }
+  const RECORD_KINDS = ["organizer", "return", "source_doc", "unknown"], RECORD_STATUS = ["read", "unreadable", "nothing_found", "needs_person", "confirmed"];
+  function attachRecord(eid, r) {
+    const e = eng(eid); if (!e) return null; const rec = { id: id("r"), file: cleanText(String((r && r.file) || "file").split(/[\\/]/).pop()).slice(0, 100), kind: RECORD_KINDS.includes(r.kind) ? r.kind : "unknown", where: r.where === "server" ? "server" : "browser", status: RECORD_STATUS.includes(r.status) ? r.status : "read", by: ["rules", "ocr", "model", "person"].includes(r.by) ? r.by : "rules", at: new Date(S.now), findings: (Array.isArray(r.findings) ? r.findings : []).slice(0, 200).map(cleanFinding).filter(Boolean) };
+    if (rec.status === "read" && !rec.findings.some((f) => f.kind !== "recipient" && f.kind !== "year")) rec.status = "nothing_found";
+    if (rec.by === "model" || rec.by === "ocr") rec.status = "needs_person";   // in the pilot a person confirms every reading the rules did not make
+    (e.records = e.records || []).push(rec); if (e.records.length > 40) e.records.shift(); return rec;
+  }
+  function confirmRecord(eid, rid, findings) { const e = eng(eid), r = e && (e.records || []).find((x) => x.id === rid); if (!r) return "No such file"; if (!may()) return "Not allowed"; if (Array.isArray(findings)) r.findings = findings.slice(0, 200).map(cleanFinding).filter(Boolean); r.status = "confirmed"; r.confirmedBy = S.user.name; r.confirmedAt = new Date(S.now); if (listOf(eid).status !== "approved") { buildList(eid); } else sortList(e); return null; }
+  function dropRecord(eid, rid) { const e = eng(eid); if (!e) return "No such client"; if (!may()) return "Not allowed"; e.records = (e.records || []).filter((x) => x.id !== rid); if (listOf(eid).status !== "approved") buildList(eid); return null; }
+
+
+  /* ---------- import batches (docs/FETCH.md, "Import flow") ----------
+     Three screens: bring in clients, add last year's records, review the fetch lists. A batch keeps its state for 30 days and can be
+     left and resumed. Clients are matched on the firm's client ID, then email, so importing the same file again changes nothing
+     and loses no edit. Rows become clients as soon as the columns are confirmed, with no list approved: nothing can be sent to
+     any of them until the firm approves their list. */
+  const IMPORT_DAYS = 30, IMPORT_MAX_ROWS = 2000, IMPORT_FIELDS = ["", "first", "last", "name", "email", "mobile", "spouse", "ref", "returning", "preparer", "lang", "tz", "entity", "rtype", "docs"];
+  const sigOf = (head) => head.map((h) => String(h).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()).join("|");
+  const batchOf = (bid) => (S.imports || []).find((b) => b.id === bid && !b.gone);
+  function importBegin(fileName, text) {
+    if (!may()) return { error: "Not allowed" }; const p = parseCSV(String(text || "")); if (!p.head.length) return { error: "That file has no header row" };
+    if (p.rows.length > IMPORT_MAX_ROWS) return { error: "Up to " + IMPORT_MAX_ROWS.toLocaleString() + " rows a file. Split it into smaller files" };
+    const saved = (S.firm.importMaps || {})[sigOf(p.head)], map = saved && saved.length === p.head.length ? saved.map((m, i) => (p.sensitive[i] ? "" : m)) : p.map;
+    const b = { id: id("b"), file: String(fileName || "clients.csv").replace(/[<>]/g, "").slice(0, 100), at: new Date(S.now), expiresAt: new Date(S.now.getTime() + IMPORT_DAYS * DAY), by: S.user ? S.user.name : "", head: p.head, map, sensitive: p.sensitive, status: "mapping", savedMap: !!saved, raw: p.rows.map((r) => r.map((v, i) => (p.sensitive[i] ? "" : v))), rows: [], tray: [] };
+    (S.imports = S.imports || []).push(b); return importView(b.id);
+  }
+  /** Confirms the columns, saves them for the firm's next import, and normalises, matches and validates every row. */
+  function importMap(bid, map) {
+    const b = batchOf(bid); if (!b) return { error: "That import has expired. Start again" }; if (!may()) return { error: "Not allowed" };
+    if (Array.isArray(map) && map.length === b.head.length) b.map = map.map((m, i) => (b.sensitive[i] || !IMPORT_FIELDS.includes(m) ? "" : m));
+    if (!b.map.includes("email") && !b.map.includes("first") && !b.map.includes("name") && !b.map.includes("last")) return { error: "Choose which column holds the names" };
+    S.firm.importMaps = Object.assign({}, S.firm.importMaps, { [sigOf(b.head)]: b.map.slice() });
+    const idx = (f) => b.map.indexOf(f), g = (r, f) => (idx(f) >= 0 ? String(r[idx(f)] || "") : ""), seenEmail = new Set(), out = [];
+    const clean = (v) => String(v || "").replace(/[<>]/g, "").replace(/^[=+\-@\t]+/, "").replace(/\s+/g, " ").trim().slice(0, 60), nice = (v) => (v && v === v.toUpperCase() && /[A-Z]{2}/.test(v) ? v.toLowerCase().replace(/(^|[\s'-])([a-z])/g, (m, a, b2) => a + b2.toUpperCase()) : v);
+    b.raw.forEach((r, k) => {
+      const nm = nice(clean(g(r, "name"))), sp = nice(clean(g(r, "spouse"))), parts = nm.includes(",") ? nm.split(",").map((x) => x.trim()).reverse() : nm.replace(/\s*(&| and ).*$/i, "").split(" ");
+      const first = nice(clean(g(r, "first"))) || (nm ? (parts.length > 1 ? parts.slice(0, -1).join(" ") : parts[0]) : ""), last = nice(clean(g(r, "last"))) || (nm && parts.length > 1 ? parts[parts.length - 1] : "");
+      const email = g(r, "email").trim().toLowerCase(), okEmail = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email), ref = clean(g(r, "ref")).slice(0, 40), rv = g(r, "returning").trim().toLowerCase();
+      let phone = g(r, "mobile").replace(/\D/g, ""); if (phone.length === 11 && phone[0] === "1") phone = phone.slice(1); if (phone.length !== 10) phone = "";
+      const spFirst = sp ? sp.split(/[ ,]/)[0] : "", household = sp ? first + " and " + (sp.includes(" ") && !sp.endsWith(" " + last) ? sp : spFirst + " " + last) : first + " " + last;
+      const row = { n: k + 2, first, last, spouse: sp || null, household, email: okEmail ? email : "", phone, phoneE164: phone ? "+1" + phone : "", ref, returning: /^(y|yes|true|1|returning|existing|r|ret)$/.test(rv) ? true : /^(n|no|false|0|new)$/.test(rv) ? false : null, status: "ok", why: "", clientId: null, engId: null };
+      if (!first || !last) { row.status = "rejected"; row.why = "Name missing"; out.push(row); return; }
+      const byRef = ref ? S.clients.find((c) => c.ref === ref) : null, byEmail = okEmail ? S.clients.find((c) => c.email === email) : null;
+      if (byRef) { // the same client: fill what is new, change no firm edit, touch no approved list
+        let ch = 0; if (okEmail && byRef.email !== email && !S.clients.some((c) => c !== byRef && c.email === email)) { byRef.email = email; byRef.emailOk = true; ch++; } if (phone && byRef.mobile !== phone) { byRef.mobile = phone; ch++; } if (sp && byRef.spouseName !== sp) { byRef.spouseName = sp; byRef.household = household; ch++; } if (row.returning !== null && byRef.returning !== row.returning) { byRef.returning = row.returning; ch++; }
+        row.status = ch ? "updated" : "same"; row.clientId = byRef.id; row.engId = (engOf(byRef.id) || {}).id || null; out.push(row); return;
+      }
+      if (okEmail && (byEmail || seenEmail.has(email))) {
+        const other = byEmail || null, family = other && other.last.toLowerCase() === last.toLowerCase() && other.first.toLowerCase() !== first.toLowerCase();
+        if (family) { row.status = "possible_duplicate"; row.why = "Shares an email with " + other.first + " " + other.last + ". A second return in the same household?"; row.like = other.id; out.push(row); return; }
+        row.status = "duplicate"; row.why = "Already a client"; row.clientId = other ? other.id : null; out.push(row); return;
+      }
+      const sameNamePhone = phone ? S.clients.find((c) => c.mobile === phone && c.first.toLowerCase() === first.toLowerCase() && c.last.toLowerCase() === last.toLowerCase()) : null;
+      if (sameNamePhone) { row.status = "possible_duplicate"; row.why = "Same name and phone as " + sameNamePhone.first + " " + sameNamePhone.last + ", with a different email"; row.like = sameNamePhone.id; out.push(row); return; }
+      if (okEmail) seenEmail.add(email); if (!okEmail) { row.status = "no_email"; row.why = email ? "Email is not valid: no letter goes until it is fixed" : "No email: no letter goes until one is added"; }
+      importCreate(b, row, r, g); out.push(row);
+    });
+    b.rows = out; b.status = "records"; b.dropped = b.head.filter((h, i) => b.sensitive[i]); delete b.raw;
+    audit("import", b.file + ": " + out.filter((r) => ["ok", "no_email"].includes(r.status) || r.created).length + " new, " + out.filter((r) => r.status === "updated").length + " updated, " + out.filter((r) => r.status === "duplicate").length + " already clients, " + out.filter((r) => r.status === "possible_duplicate").length + " to decide" + (b.dropped.length ? ". Never imported: " + b.dropped.join(", ") : ""));
+    return importView(bid);
+  }
+  function importCreate(b, row, r, g, like) {
+    const c = { id: id("c"), ref: row.ref || "", first: row.first, last: row.last, email: row.email, mobile: row.phone, emailOk: !!row.email, lang: /es|span/i.test(g ? g(r, "lang") : "") ? "es" : "en", preparer: ((g && S.users.find((u) => u.first.toLowerCase() === g(r, "preparer").toLowerCase())) || S.users.find((u) => u.role !== "read_only" && u.role !== "owner") || S.users[0]).id, textConsent: "none", consentLog: [], notes: "", tz: g ? zoneOf(g(r, "tz")) : null };
+    if (row.spouse) c.spouseName = row.spouse; c.household = row.household; if (row.returning !== null) c.returning = row.returning;
+    if (like) { const o = client(like); if (o) { c.householdId = o.householdId || o.id; o.householdId = o.householdId || o.id; } }
+    S.clients.push(c); const e = newEng(c.id); e.importBatch = b.id; listOf(e.id); row.clientId = c.id; row.engId = e.id; row.created = true; return c;
+  }
+  /** A row the firm has to decide: a new client (in the same household when it shares an email), or skip it. */
+  function importDecide(bid, n, choice) {
+    const b = batchOf(bid), row = b && b.rows.find((x) => x.n === n); if (!row || row.status !== "possible_duplicate") return "Nothing to decide for that row"; if (!may()) return "Not allowed";
+    if (choice === "skip") { row.status = "skipped"; row.why = "Skipped by " + S.user.name; return null; }
+    if (choice !== "new") return "Choose: a new client, or skip"; const shares = /Shares an email/.test(row.why);
+    importCreate(b, Object.assign(row, shares ? { email: "" } : {}), null, null, row.like); row.status = shares ? "no_email" : "ok"; row.why = shares ? "A second return in the household. Its contact details are offered on the client's page, not assumed" : ""; return null;
+  }
+  /** One file read in the browser (or on the server): its findings go to the row it belongs to, or to the tray. */
+  function importRecord(bid, rec, n) {
+    const b = batchOf(bid); if (!b) return { error: "That import has expired. Start again" }; if (!may()) return { error: "Not allowed" };
+    const rows = b.rows.filter((r) => r.engId), recip = ((rec && rec.findings) || []).find((f) => f.kind === "recipient"), name = " " + String((rec && rec.file) || "").toLowerCase().replace(/[_.\-]+/g, " ") + " ";
+    let row = n ? rows.find((r) => r.n === n) : null;
+    // A client ID in the file name. A name like "2001 Garcia 2025 organizer" can hold two numbers that are both IDs: the last name decides.
+    if (!row) { const byRef = rows.filter((r) => r.ref && name.includes(" " + r.ref.toLowerCase() + " ")), named = byRef.filter((r) => name.includes(" " + r.last.toLowerCase() + " ")); if (byRef.length === 1) row = byRef[0]; else if (named.length === 1) row = named[0]; }
+    if (!row && recip) { const w = String(recip.recipient || "").toLowerCase(), hit = rows.filter((r) => w.includes(r.last.toLowerCase()) && w.includes(r.first.toLowerCase())); if (hit.length === 1) row = hit[0]; }
+    // Last, by the name in the file name: first and last name together, or a last name only one client in the batch has.
+    if (!row) { const lastIn = rows.filter((r) => r.last.length > 2 && name.includes(" " + r.last.toLowerCase() + " ")), both = lastIn.filter((r) => name.includes(r.first.toLowerCase())); if (both.length === 1) row = both[0]; else if (lastIn.length === 1) row = lastIn[0]; }
+    if (!row) { const t = { id: id("y"), at: new Date(S.now), rec: Object.assign({}, rec, { findings: ((rec && rec.findings) || []).slice(0, 200).map(cleanFinding).filter(Boolean), file: cleanText(String((rec && rec.file) || "")).slice(0, 100) }) }; b.tray.push(t); return { tray: t.id }; }
+    const r = attachRecord(row.engId, rec); return { row: row.n, record: r && r.id };
+  }
+  function importPlace(bid, trayId, n) { const b = batchOf(bid), t = b && b.tray.find((x) => x.id === trayId), row = b && b.rows.find((x) => x.n === n && x.engId); if (!t || !row) return "Choose a client for this file"; if (!may()) return "Not allowed"; attachRecord(row.engId, t.rec); b.tray = b.tray.filter((x) => x !== t); return null; }
+  /** Reads nothing: builds a proposed list for every client in the batch from what was read, and sorts each into ready or needs a look. */
+  function importBuild(bid) {
+    const b = batchOf(bid); if (!b) return { error: "That import has expired. Start again" }; if (!may()) return { error: "Not allowed" };
+    for (const row of b.rows) { if (!row.engId) continue; const e = eng(row.engId), c = e && client(e.clientId); if (!e || !c || listOf(e.id).status === "approved") continue; if (c.returning === undefined || c.returning === null) { if ((e.records || []).length) c.returning = true; } buildList(e.id); }
+    b.status = "review"; b.builtAt = new Date(S.now); return importView(bid);
+  }
+  /** The ready lists, or every open list in the batch, approved together. Rows that are already clients are skipped. */
+  function importApprove(bid, which) { const b = batchOf(bid); if (!b) return { error: "That import has expired. Start again" }; if (!may()) return { error: "Not allowed" }; const eids = b.rows.filter((r) => r.engId && ["ok", "no_email", "updated", "same"].includes(r.status) && r.created).map((r) => r.engId).filter((x) => { const e = eng(x); return e && e.status === "not_started" && listOf(x).status === "proposed" && (which === "all" || listOf(x).group === "ready"); }); return approveMany(eids); }
+  function importView(bid) {
+    const b = batchOf(bid); if (!b) return null; const L = b.rows.filter((r) => r.engId).map((r) => ({ r, e: eng(r.engId) })).filter((x) => x.e && x.e.importBatch === b.id);
+    const lists = L.map(({ r, e }) => ({ n: r.n, engId: e.id, clientId: e.clientId, name: r.household, status: e.status, list: listOf(e.id).status, group: listOf(e.id).group, reasons: listOf(e.id).reasons, items: S.items.filter((i) => i.engId === e.id && i.state !== "removed").length, records: (e.records || []).length }));
+    return { id: b.id, file: b.file, status: b.status, at: b.at, expiresAt: b.expiresAt, head: b.head, map: b.map, sensitive: b.sensitive, savedMap: b.savedMap, dropped: b.dropped || b.head.filter((h, i) => b.sensitive[i]), sample: (b.raw || []).slice(0, 5), rows: b.rows.map((r) => ({ n: r.n, name: r.household, email: r.email, phone: r.phoneE164, ref: r.ref, returning: r.returning, status: r.status, why: r.why, clientId: r.clientId })), tray: b.tray.map((t) => ({ id: t.id, file: t.rec.file, kind: t.rec.kind, at: t.at })),
+      counts: { read: lists.filter((x) => x.records).length, look: lists.filter((x) => x.list === "proposed" && x.group === "look" && x.status !== "off_season").length, ready: lists.filter((x) => x.list === "proposed" && x.group === "ready" && x.status !== "off_season").length, approved: lists.filter((x) => x.list === "approved").length, offSeason: lists.filter((x) => x.status === "off_season").length }, lists };
+  }
+  function importsOpen() { return (S.imports || []).filter((b) => !b.gone && b.expiresAt > S.now).map((b) => ({ id: b.id, file: b.file, at: b.at, status: b.status, rows: b.rows.length })); }
+  function importSweep() { (S.imports || []).forEach((b) => { if (!b.gone && b.expiresAt <= S.now) { b.gone = true; b.rows = []; b.tray = []; b.raw = null; } }); S.imports = (S.imports || []).filter((b) => !b.gone || S.now - new Date(b.expiresAt) < 7 * DAY); }
+
+  /* The fetch list (docs/FETCH.md): one per return per season, and the record of what a client is asked for. Until the firm approves
+     it, it is a proposal: items can be ticked or unticked (an unticked item has state "off" and is never asked for), given an issuer,
+     added or removed, and nothing is sent. Approving it is what lets the first letter go; every change after that is a new version,
+     and the next letter reads the current one. Each item says where it came from (source), which rule proposed it (rule), why, and
+     the evidence (file, page, the words matched). A list is "ready" when every kept item came from last year's own documents with a
+     named issuer and nothing about the client needs a look; otherwise it "needs a look", with tags saying why. */
+  const ONE_TIME = CATALOG.filter((r) => r[5].oneTime).map((r) => r[0]);
+  const SOURCES = { organizer: "Last year's organizer", doc: "Last year's documents", return: "Last year's return", last_season: "Last season in Tallyhound", rule: "A firm rule", added: "Added by the firm", client: "The client said so", import: "The client list", template: "The firm's template" };
+  function listOf(eid) { const e = eng(eid); if (!e) return null; const L = (e.list = e.list || { version: 0, status: e.confirmed ? "approved" : "proposed", reasons: [], group: null, log: [] }); if (e.confirmed && L.status !== "approved") L.status = "approved"; return L; }
+  function listLog(e, what) { const L = listOf(e.id); if (L.status === "approved") L.version++; L.log = (L.log || []).concat([{ at: new Date(S.now), by: S.user ? S.user.name : "Tallyhound", version: L.version, what }]).slice(-100); }
+  const sameItem = (a, form, payer) => a.form === form && a.state !== "removed" && (!payer || !a.payer || payerMatch(a.payer, payer));
+  function proposeItem(e, x) {
+    // One item per form and issuer. Two W-2s from the same employer last year are one item; a second copy is accepted against it.
+    const its = S.items.filter((i) => i.engId === e.id && i.state !== "removed"), have = its.find((i) => (x.custom ? i.custom === x.custom : !i.custom && sameItem(i, x.form, x.payer)));
+    if (have) { if (!have.payer && x.payer) have.payer = x.payer; if (x.evidence) have.evidence = (have.evidence || []).concat(x.evidence).slice(0, 6); return have; }
+    const it = Object.assign({ id: id("i"), engId: e.id, form: x.form, payer: x.payer || null, custom: x.custom || null, state: x.off ? "off" : "expected", source: x.source || "added", rule: x.rule || null, why: x.why || "", evidence: (x.evidence || []).slice(0, 6), rulesVersion: RULES_VERSION }, x.recipient ? { recipient: x.recipient } : {});
+    S.items.push(it); return it;
+  }
+  const hasForm = (e, forms) => S.items.some((i) => i.engId === e.id && i.state !== "removed" && forms.includes(i.form) && !i.custom);
+  /* The rules table (docs/FETCH.md, "Rules"), one rule per row, each with its own id. Payer lines and documents come first, so the
+     schedule rules can see what is already on the list. A finding is { kind: "payer" | "schedule" | "line", form, payer, value,
+     src: organizer | doc | return, file, page, text }. Numbers never reach here (cleanFinding). */
+  const RULE_TEXT = {
+    "R-ORG": "Listed in last year's organizer", "R-DOC": "Last year's documents included it", "R-LAST": "It came in last season", "R-WAGES": "Last year's return shows wages, but no W-2 copies were attached",
+    "R-SCHA": "Schedule A on last year's return shows itemized deductions", "R-SCHB": "Schedule B on last year's return shows interest or dividends", "R-SCHC": "Schedule C on last year's return shows a business",
+    "R-SCHD": "Schedule D or Form 8949 on last year's return shows sales", "R-SCHE": "Schedule E on last year's return shows a rental", "R-8863": "Form 8863 on last year's return claimed an education credit",
+    "R-2441": "Form 2441 on last year's return claimed childcare", "R-8962": "Form 8962 on last year's return shows marketplace insurance", "R-8889": "Form 8889 on last year's return shows an HSA",
+    "R-EST": "Last year's return shows estimated tax payments", "R-1A-CAR": "Schedule 1-A on last year's return claimed car loan interest", "R-1A-TIPS": "Schedule 1-A on last year's return claimed tips",
+    "R-NEW-ID": "A firm rule: new clients are asked for a photo ID", "R-NEW-RET": "A firm rule: new clients are asked for last year's return"
+  };
+  function buildList(eid, o) {
+    const e = eng(eid), c = e && client(e.clientId); if (!e || !c) return "No such client"; if (listOf(eid).status === "approved") return "This list is approved. Change it from the client's page";
+    o = o || {}; const F = (e.records || []).flatMap((r) => (r.status === "read" || r.status === "confirmed" ? r.findings.map((f) => Object.assign({ file: r.file }, f)) : [])), ev = (f) => (f ? [{ file: f.file || "", page: f.page || null, text: String(f.text || "").slice(0, 80) }] : []);
+    // Rebuilding a proposal replaces what the rules proposed; what the firm added or typed stays.
+    S.items = S.items.filter((i) => !(i.engId === eid && !i.custom && ["organizer", "doc", "return", "rule", "template", "import"].includes(i.source) && !i.firmTouched && i.state !== "received"));
+    const P = (x) => proposeItem(e, x), sch = (name) => F.find((f) => f.kind === "schedule" && f.value === name), line = (name) => F.find((f) => f.kind === "line" && f.value === name), notes = [];
+    // Payer lines from the organizer, then last year's source documents. One-time forms are proposed unticked when the firm rule says so.
+    for (const f of F.filter((x) => x.kind === "payer" && FORMS[x.form])) { const one = ONE_TIME.includes(f.form) && f.src === "doc" && firmRule("flag_one_time"); P({ form: f.form, payer: f.payer || null, source: f.src === "organizer" ? "organizer" : f.src === "return" ? "return" : "doc", rule: f.src === "organizer" ? "R-ORG" : f.src === "return" ? "R-SCHB" : "R-DOC", why: f.src === "organizer" ? RULE_TEXT["R-ORG"] : f.src === "return" ? "Schedule B on last year's return lists it" : one ? "A one-time document last year. Tick it if it will come again" : RULE_TEXT["R-DOC"], evidence: ev(f), off: one, recipient: f.recipient || null }); }
+    // The return: schedules and lines.
+    const R = (rule, form, extra) => P(Object.assign({ form, source: "return", rule, why: RULE_TEXT[rule] }, extra || {}));
+    if (line("wages") && !hasForm(e, ["W2"])) R("R-WAGES", "W2", { evidence: ev(line("wages")) });
+    if (sch("Schedule A")) { const x = { evidence: ev(sch("Schedule A")) }; if (!hasForm(e, ["1098"])) R("R-SCHA", "1098", x); R("R-SCHA", "PTAX", x); R("R-SCHA", "CHARITY", x); }
+    if (sch("Schedule B") && !hasForm(e, ["1099INT", "1099DIV"])) R("R-SCHB", "1099INT", { evidence: ev(sch("Schedule B")) });
+    if (sch("Schedule C")) { R("R-SCHC", "PNL", { evidence: ev(sch("Schedule C")) }); R("R-SCHC", "UNREPORTED", { evidence: ev(sch("Schedule C")) }); }
+    if ((sch("Schedule D") || sch("Form 8949")) && !hasForm(e, ["1099B", "1099DA", "1099CONS"])) R("R-SCHD", "1099B", { evidence: ev(sch("Schedule D") || sch("Form 8949")) });
+    if (sch("Schedule E")) { const sold = !!sch("Form 4797"), x = { evidence: ev(sch("Schedule E")), off: sold, why: sold ? RULE_TEXT["R-SCHE"] + ". Form 4797 is there too: the rental may have been sold" : RULE_TEXT["R-SCHE"] };
+      R("R-SCHE", "RENTAL", x); R("R-SCHE", "1098", Object.assign({ custom: "1098 from the lender on your rental" }, x)); R("R-SCHE", "PTAX", Object.assign({ custom: "Property tax statement for your rental" }, x)); }
+    if (sch("Form 8863") && !hasForm(e, ["1098T"])) R("R-8863", "1098T", { evidence: ev(sch("Form 8863")) });
+    if (sch("Form 2441")) R("R-2441", "CHILDCARE", { evidence: ev(sch("Form 2441")) });
+    if (sch("Form 8962") && !hasForm(e, ["1095A"])) R("R-8962", "1095A", { evidence: ev(sch("Form 8962")) });
+    if (sch("Form 8889") && !hasForm(e, ["1099SA"])) R("R-8889", "1099SA", { evidence: ev(sch("Form 8889")) });
+    if (line("estimated payments")) R("R-EST", "ESTPAY", { evidence: ev(line("estimated payments")) });
+    if (line("car loan interest") && !hasForm(e, ["1098VLI"])) R("R-1A-CAR", "1098VLI", { evidence: ev(line("car loan interest")) });
+    if (line("tips")) R("R-1A-TIPS", "TIPS", { evidence: ev(line("tips")) });
+    if (line("overtime")) notes.push("Last year's return claimed overtime. The 2026 W-2 shows qualified overtime in box 12, code TT");
+    if (line("senior deduction")) notes.push("Last year's return took the senior deduction");
+    if (sch("Schedule SE")) notes.push("Last year's return had self-employment tax (Schedule SE)");
+    // New clients, by the firm's rules.
+    const returning = !!(c.returning || e.returning);
+    if (!returning && firmRule("new_id")) P({ form: "PHOTOID", source: "rule", rule: "R-NEW-ID", why: RULE_TEXT["R-NEW-ID"] });
+    if (!returning && firmRule("new_return") && !(e.records || []).some((r) => r.kind === "return")) P({ form: "PRIOR", source: "rule", rule: "R-NEW-RET", why: RULE_TEXT["R-NEW-RET"] });
+    for (const n of notes) addNote(e, n, "rule");
+    const L = listOf(eid); L.rulesVersion = RULES_VERSION; L.builtAt = new Date(S.now); sortList(e); return null;
+  }
+  /** Ready as it is, or Needs a look, with the reasons. Called after every change to a proposal. */
+  function sortList(e) {
+    const c = client(e.clientId), L = listOf(e.id), its = S.items.filter((i) => i.engId === e.id && i.state !== "removed"), kept = its.filter((i) => i.state !== "off"), tags = [];
+    if (!(c.returning || e.returning)) tags.push("New client");
+    if (!c.email || c.emailOk === false || c.emailOff) tags.push("No email");
+    const noIssuer = kept.filter((i) => !i.payer && !i.custom && !["PTAX", "CHARITY", "ESTPAY", "PNL", "UNREPORTED", "RENTAL", "TIPS", "PHOTOID", "PRIOR", "NOTICE", "CHILDCARE", "SSA1099"].includes(i.form)).length; if (noIssuer) tags.push(noIssuer + " without an issuer");
+    const fromReturn = kept.filter((i) => i.source === "return").length; if (fromReturn) tags.push(fromReturn + " from the return");
+    if (its.some((i) => i.state === "off" && ONE_TIME.includes(i.form))) tags.push("One-time document last year");
+    if ((e.records || []).some((r) => ["unreadable", "needs_person", "nothing_found"].includes(r.status))) tags.push("A file couldn't be read");
+    if (!(e.records || []).length && !kept.some((i) => i.source === "last_season")) tags.push("No records yet");
+    const okSources = kept.length && kept.every((i) => ["organizer", "doc", "last_season"].includes(i.source) && (i.payer || i.custom));
+    L.reasons = tags; L.group = !tags.length && okSources ? "ready" : "look"; return L;
+  }
+  /** Before approval: tick or untick one proposed item. The firm's choice is remembered for each rule (how precise each rule is). */
+  function tickItem(iid, on) {
+    const it = S.items.find((x) => x.id === iid), e = it && eng(it.engId); if (!it || !e) return "No such item"; if (!may()) return "Not allowed"; if (listOf(e.id).status === "approved") return "This list is approved. Mark it not needed instead";
+    if (!["off", "expected"].includes(it.state)) return "That item cannot be changed here"; if (on === true && it.state === "off") it.wasOff = true; it.state = on === true ? "expected" : "off"; it.firmTouched = true; sortList(e); return null;
+  }
+  /** Type the issuer where it was unknown, or correct it. Left blank, the client is asked in general terms. */
+  function setIssuer(iid, payer) { const it = S.items.find((x) => x.id === iid), e = it && eng(it.engId); if (!it || !e) return "No such item"; if (!may()) return "Not allowed"; const v = String(payer || "").replace(/[<>{}]/g, "").replace(/\s+/g, " ").trim().slice(0, 60); if (/\d{5,}|\$/.test(v)) return "A name only, with no numbers"; it.payer = v || null; it.firmTouched = true; listLog(e, "Issuer " + (v ? "set: " + v : "cleared") + " for " + formDisplay(it.form)); sortList(e); return null; }
+  /** Add any catalog type, with or without an issuer. After approval it is asked for in the next letter. */
+  function addCatalogItem(eid, code, payer) {
+    const e = eng(eid); if (!e) return "No such client"; if (!may()) return "Not allowed"; if (!CAT[code]) return "Choose a document from the catalog";
+    const v = String(payer || "").replace(/[<>{}]/g, "").replace(/\s+/g, " ").trim().slice(0, 60); if (/\d{5,}|\$/.test(v)) return "A name only, with no numbers";
+    if (S.items.some((i) => i.engId === eid && !i.custom && ["expected", "requested", "partial"].includes(i.state) && sameItem(i, code, v) && (!v || i.payer))) return "That is already on the list";
+    const it = proposeItem(e, { form: code, payer: v || null, source: "added", why: "Added by " + (S.user ? S.user.name : "the firm") }); it.firmTouched = true; it.state = "expected";
+    listLog(e, "Added " + itemTitle(it, "en")); timeline(e, "Added to the list: " + itemTitle(it, "en"), S.user.name);
+    if (e.status === "complete") { e.status = "in_progress"; e.completedAt = null; } if (e.status === "in_progress" && LETTERS()) letterSoon(e); sortList(e); return null;
+  }
+  /** After approval: not needed this year, or ask for it again. */
+  function itemNeeded(iid, needed, reason) {
+    const it = S.items.find((x) => x.id === iid), e = it && eng(it.engId); if (!it || !e) return "No such item"; if (!may()) return "Not allowed";
+    if (needed) { if (it.state !== "waived" && it.state !== "removed") return null; it.state = "expected"; delete it.waiveReason; listLog(e, "Asked for again: " + itemTitle(it, "en")); timeline(e, "Asked for again: " + itemTitle(it, "en"), S.user.name); if (e.status === "complete") { e.status = "in_progress"; e.completedAt = null; } if (e.status === "in_progress" && LETTERS()) letterSoon(e); }
+    else { if (!OPEN.includes(it.state)) return "Only an item still owed can be marked not needed"; it.state = "waived"; it.waiveReason = WAIVE_REASONS[reason] ? reason : "not_this_year"; ruleNote(it, "removedLater"); listLog(e, "Not needed: " + itemTitle(it, "en")); timeline(e, "Not needed this year: " + itemTitle(it, "en"), S.user.name); if (checkComplete(e)) finished(e); }
+    sortList(e); return null;
+  }
+  /* How precise each rule is, from what the firm does with what it proposed: kept at approval, unticked at approval, or marked not
+     needed later. Ticked by the firm when the rule proposed it unticked counts as "ticked". */
+  function ruleNote(it, k) { if (!it.rule) return; const R = (S.firm.ruleStats = S.firm.ruleStats || {}), r = (R[it.rule] = R[it.rule] || { kept: 0, unticked: 0, ticked: 0, removedLater: 0 }); r[k] = (r[k] || 0) + 1; }
+  function rulePrecision() { const R = S.firm.ruleStats || {}; return Object.keys(R).sort().map((k) => { const r = R[k], n = r.kept + r.unticked; return { rule: k, what: RULE_TEXT[k] || k, kept: r.kept, unticked: r.unticked, ticked: r.ticked || 0, removedLater: r.removedLater || 0, precision: n ? (r.kept - (r.removedLater || 0)) / n : null }; }); }
+  /** Approve one list. Unticked items are dropped, the list becomes version 1, and the season starts for that return: the first letter is drafted for approval, or sent if the firm sends on its own. */
+  function approveList(eid) {
+    const e = eng(eid), c = e && client(e.clientId); if (!e || !c) return "No such client"; if (!may()) return "Not allowed"; if (e.status === "off_season") return "This client is set aside for this season. Bring them back first";
+    const L = listOf(eid); if (L.status === "approved") return null; const its = S.items.filter((i) => i.engId === eid && i.state !== "removed");
+    if (!its.some((i) => i.state !== "off")) return "Nothing is ticked. Add a document, or set this client aside for the season";
+    // For each rule: kept (it went live), unticked (dropped at approval, by the firm or as proposed), ticked (proposed unticked, and the firm ticked it).
+    for (const i of its) { if (i.state === "off") { i.state = "removed"; i.removedAt = new Date(S.now); ruleNote(i, "unticked"); } else ruleNote(i, i.wasOff ? "ticked" : "kept"); }
+    e.confirmed = true; L.status = "approved"; L.version = 1; L.approvedBy = S.user ? S.user.name : "Tallyhound"; L.approvedAt = new Date(S.now); L.log = (L.log || []).concat([{ at: new Date(S.now), by: L.approvedBy, version: 1, what: "Approved" }]);
+    timeline(e, "Fetch list approved (" + its.filter((i) => i.state !== "removed").length + " documents)", L.approvedBy); audit("fetchlist.approved", c.first + " " + c.last + ", rules " + (L.rulesVersion || RULES_VERSION));
+    if (e.status === "not_started") { const r = start(eid); if (r) return "Approved. Not started: " + r; }
+    return null;
+  }
+  /** Approve several lists at once: the ready ones, or every open one in a batch. Returns how many, and why any were not. */
+  function approveMany(eids) { const out = { approved: 0, notStarted: [] }; for (const id0 of eids || []) { const e = eng(id0); if (!e || listOf(id0).status === "approved" || e.status === "off_season") continue; const r = approveList(id0); if (!r || /^Approved/.test(r)) out.approved++; if (r) out.notStarted.push({ engId: id0, why: r.replace(/^Approved\. Not started: /, "") }); } return out; }
+  function approveReady() { return approveMany(S.engs.filter((e) => listOf(e.id).status === "proposed" && listOf(e.id).group === "ready" && e.status === "not_started").map((e) => e.id)); }
+  /** Not this season: no letters, no charge, still on the client list. Brought back in one click. */
+  function setSeason(eid, on) {
+    const e = eng(eid), c = e && client(e.clientId); if (!e) return "No such client"; if (!may()) return "Not allowed";
+    if (on === false) { if (e.status !== "off_season") return null; e.status = e.seasonWas && e.seasonWas !== "off_season" ? e.seasonWas : "not_started"; if (e.status === "in_progress") e.next = LETTERS() ? nextMorning(S.now) : nextAllowed(S.now); timeline(e, "Brought back for this season", S.user.name); return null; }
+    if (e.status === "off_season") return null; if (["complete", "closed"].includes(e.status)) return "This file is already finished";
+    e.seasonWas = e.status === "paused" ? e.prior || "in_progress" : e.status; e.status = "off_season"; e.next = null; settleQuiet(e);
+    S.msgs.forEach((m) => { if (m.engId === e.id && ["approval", "approved", "writing"].includes(m.status)) { m.status = "discarded"; m.note = "Not this season"; } });
+    timeline(e, "Not this season: no letters", S.user.name); audit("client.not_this_season", c.first + " " + c.last); return null;
+  }
+  /** Notes for the preparer, on the client's page: from the client's news, a rule, or the firm. Never shown to the client. */
+  function addNote(e, text, source) { const t = String(text || "").replace(/[<>]/g, "").replace(/\s+/g, " ").trim().slice(0, 300); if (!t) return null; e.notes = (e.notes || []); if (e.notes.some((n) => n.text === t)) return null; const n = { id: id("n"), at: new Date(S.now), text: scrub(t).text, source: source || "firm", by: source === "firm" && S.user ? S.user.name : source === "client" ? (client(e.clientId) || {}).first : "Tallyhound" }; e.notes.push(n); return n; }
+  function noteForPreparer(eid, text) { const e = eng(eid); if (!e) return "No such client"; if (!may()) return "Not allowed"; return addNote(e, text, "firm") ? null : "Write a note first"; }
+  /* Other people who hold a client's documents ("Arjun has the 1099-B"). Assigning an item sends it in its own letter to that
+     person, with their own link that shows only what they were asked for. Contacts are offered across a household, never assumed. */
+  function addContact2(cid, name, email) { const c = client(cid); if (!c) return "No such client"; if (!may()) return "Not allowed"; const nm = String(name || "").replace(/[<>{}]/g, "").replace(/\s+/g, " ").trim().slice(0, 60), em = String(email || "").trim().toLowerCase(); if (!nm) return "Give the person's name"; if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) return "Give a working email address"; if (em === c.email) return "That is the client's own address"; c.contacts = c.contacts || []; if (c.contacts.some((x) => x.email === em)) return "That person is already a contact"; c.contacts.push({ id: id("p"), name: nm, email: em, emailOk: true }); audit("client.contact_added", c.first + " " + c.last); return null; }
+  function assignItem(iid, contactId) {
+    const it = S.items.find((x) => x.id === iid), e = it && eng(it.engId), c = e && client(e.clientId); if (!it || !c) return "No such item"; if (!may()) return "Not allowed";
+    if (contactId && !(c.contacts || []).some((x) => x.id === contactId && !x.emailOff)) return "Choose one of this client's contacts"; if (!OPEN.includes(it.state) && it.state !== "off") return "Only an item still owed can be assigned";
+    if (contactId) it.assignee = contactId; else delete it.assignee; const who = contactId ? c.contacts.find((x) => x.id === contactId).name : c.first;
+    listLog(e, itemTitle(it, "en") + " now asked of " + who); timeline(e, itemTitle(it, "en") + " will be asked of " + who, S.user.name); if (e.status === "in_progress" && LETTERS()) letterSoon(e); return null;
+  }
+  /* "Anything new in 2026?" on the upload page (docs/FETCH.md). Fourteen choices and one optional name. Notes go straight to the
+     client's page; suggested documents wait in the review queue for the firm to add with one click. A suggestion already on the
+     list is not repeated, except a W-2 for a new job, which is always a new issuer. The name is used as the issuer of the first
+     suggested document only. */
+  const NEWS = [
+    ["new_job", "New job or a second job", ["W2"], null], ["bought_home", "Bought a home", ["1098", "PTAX"], null], ["sold_home", "Sold a home", ["1099S"], null],
+    ["new_car", "Bought a new car with a loan", ["1098VLI"], null], ["side_business", "Started freelancing or a side business", ["1099NEC", "1099K", "PNL"], null],
+    ["college", "Someone started college", ["1098T"], null], ["childcare", "Paid for childcare", ["CHILDCARE"], null], ["retirement", "Took money from a retirement account", ["1099R"], null],
+    ["social_security", "Started Social Security", ["SSA1099"], null], ["marketplace", "Health insurance from the marketplace", ["1095A"], null], ["sold_stocks", "Sold stocks or crypto", ["1099B", "1099DA"], null],
+    ["irs_letter", "Got a letter from the IRS or state", ["NOTICE"], null], ["moved_state", "Moved to another state", [], "Moved to another state during {year}"], ["new_dependent", "New baby or new dependent", [], "New baby or new dependent in {year}"]
+  ];
+  function clientNews(eid, choices, named) {
+    const e = eng(eid), c = e && client(e.clientId); if (!e || !c) return null; const pick = NEWS.filter((n) => (choices || []).includes(n[0])); if (!pick.length) return null;
+    const nm = String(named || "").replace(/[<>{}]/g, "").replace(/\s+/g, " ").trim().slice(0, 60).replace(/\d{5,}/g, "").trim();
+    (e.answers = e.answers || []).push({ at: new Date(S.now), choices: pick.map((n) => n[0]), named: nm || null });
+    for (const n of pick) if (n[3]) addNote(e, n[3].replace("{year}", e.year), "client");
+    const sug = []; let usedName = false;
+    for (const n of pick) for (const f of n[2]) { if (f !== "W2" && (hasForm(e, [f]) || sug.some((x) => x.form === f))) continue; const payer = !usedName && nm ? nm : null; if (payer) usedName = true; sug.push({ form: f, payer, why: n[1] }); }
+    const m = { id: id("m"), engId: e.id, dir: "in", kind: "client", body: "(Upload page) New this year: " + pick.map((n) => n[1].toLowerCase()).join("; ") + (nm ? " (named: " + nm + ")" : ""), channel: "portal", at: new Date(S.now), intent: "news" }; S.msgs.push(m); e.lastIn = new Date(S.now);
+    timeline(e, "Said what's new this year: " + pick.map((n) => n[1].toLowerCase()).join("; "), c.first);
+    return sug.length ? addTask({ kind: "news", reason: "New this year", engId: e.id, msgId: m.id, suggest: sug, summary: c.first + " says: " + pick.map((n) => n[1].toLowerCase()).join("; ") }) : null;
+  }
+
   /* ---------- v2: the email chase (TH-EML, docs/V2.md) ---------- */
   function LETTERS() { return !!(S && S.firm && S.firm.letters === true); }
   const workDays = () => (Array.isArray(S.firm.workDays) && S.firm.workDays.length ? S.firm.workDays : WORKDAYS_DEFAULT);
@@ -829,10 +1189,16 @@
   function addWorkDays(d, n) { let x = new Date(d.getFullYear(), d.getMonth(), d.getDate()), k = 0; for (let i = 0; k < n && i < 400; i++) { x = dayAfter(x); if (isWorkDay(x)) k++; } return n > 0 ? morningOf(x) : nextMorning(d); }
   function setWorkDays(list) { if (!may("owner")) return "Only an owner can change this"; const L = [...new Set((Array.isArray(list) ? list : []).map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n <= 6))].sort(); if (!L.length) return "Choose at least one working day"; S.firm.workDays = L; audit("settings.workdays", L.map((n) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][n]).join(", ")); S.engs.forEach((e) => { if (e.next && e.status === "in_progress") e.next = nextMorning(e.next); }); return null; }
   // What a letter may name: asked for or about to be, not held, not waiting on a person, not already in (TH-EML-1).
-  const letterItems = (e) => itemsOf(e.id).filter((i) => ["expected", "requested", "partial"].includes(i.state) && !heldUntil(i, e));
+  const letterItems = (e, who) => itemsOf(e.id).filter((i) => ["expected", "requested", "partial"].includes(i.state) && !heldUntil(i, e) && (who === undefined || (i.assignee || null) === (who || null)));
+  // Held until their usual arrival (docs/FETCH.md, "Coming later"): still listed, under "These usually arrive later", and never chased before the date.
+  const laterItems = (e, who) => itemsOf(e.id).filter((i) => ["expected", "requested", "partial"].includes(i.state) && heldUntil(i, e) && (holdOf(i, e) || {}).reason === "catalogue_date" && (who === undefined || (i.assignee || null) === (who || null)));
+  const laterWhen = (i, e, lang) => { const u = heldUntil(i, e); if (!u) return ""; const d = u.getDate(), mid = d >= 10 && d <= 20, m = MONTHS[u.getMonth()]; return lang === "es" ? "" : (mid ? "usually arrives by mid-" + m : "usually arrives in " + m); };
+  /** What the upload page shows for one return, or for one contact asked for some of it: still owed, then coming later. */
+  function uploadList(eid, contactId) { const e = eng(eid); if (!e) return { now: [], later: [] }; const c = client(e.clientId), lang = c.lang === "es" ? "es" : "en", who = contactId || null;
+    return { now: letterItems(e, who).map((i) => ({ id: i.id, title: itemTitle(i, lang), note: i.fixNote ? i.fixNote[lang === "es" ? 1 : 0] : null })), later: laterItems(e, who).map((i) => ({ id: i.id, title: itemTitle(i, lang), note: "Usually arrives " + laterWhen(i, e, lang).replace(/^usually arrives /, "") + ". Send it when it comes." })) }; }
   // Names only: the form and who issues it. Never a number that could be an identifier, never an amount (TH-NTR-6).
   const safeTitle = (t) => String(t || "").replace(/\$\s?[\d,.]+/g, "").replace(/\d{3}-\d{2}-\d{4}|\d{2}-\d{7}|\d{5,}/g, "").replace(/\s+/g, " ").trim();
-  function itemTitle(i, lang) { const F = FORMS[i.form] || FORMS.OTHER; return safeTitle(i.custom ? (lang === "es" && i.customEs ? i.customEs : i.custom) : (i.payer ? formDisplay(i.form) + (lang === "es" ? " de " : " from ") + i.payer : ((n) => (n.toLowerCase().includes(formDisplay(i.form).toLowerCase()) ? n.charAt(0).toUpperCase() + n.slice(1) : formDisplay(i.form) + " (" + n + ")"))(lang === "es" ? F.es : F.plain))); }   // "W-2 wage statement", never "W-2 (W-2 wage statement)"
+  function itemTitle(i, lang) { const F = FORMS[i.form] || FORMS.OTHER; if (!i.custom && i.payer) i = Object.assign({}, i, { payer: payerShown(i.payer) }); if (!i.custom && !i.payer && lang !== "es" && CAT[i.form]) return safeTitle(askPhrase(i.form)); return safeTitle(i.custom ? (lang === "es" && i.customEs ? i.customEs : i.custom) : (i.payer ? formDisplay(i.form) + (lang === "es" ? " de " : " from ") + i.payer : ((n) => (n.toLowerCase().includes(formDisplay(i.form).toLowerCase()) ? n.charAt(0).toUpperCase() + n.slice(1) : formDisplay(i.form) + " (" + n + ")"))(lang === "es" ? F.es : F.plain))); }   // "W-2 wage statement", never "W-2 (W-2 wage statement)"
   function letterLine(i, lang) { const part = i.state === "partial" && i.missing && i.missing.length ? missText(i.missing, lang, i.form).fix : "", note = part ? (lang === "es" ? "todavía falta " : "we still need ") + part : i.fixNote ? i.fixNote[lang === "es" ? 1 : 0] : ""; return "§- " + itemTitle(i, lang) + (note ? " (" + note + ")" : ""); }
   /* Who a client's letters come from. With the mail layer, the preparer's own connected mailbox (TH-WLB-2); a preparer with none
      sends nothing. Without it, Tallyhound's own mail service sends from the firm's Tallyhound address. */
@@ -862,8 +1228,10 @@
     const c = client(e.clientId), P = CADENCE_PRESETS[cadenceFor(e).key], days = P.days.concat([P.final]);
     if (halted() || e.status !== "in_progress" || e.takeover) return;
     if (e.quietUntil && e.quietUntil > S.now) { e.next = nextMorning(e.quietUntil); return; }
-    const list = letterItems(e);
-    if (!list.length) {
+    const groups = [null].concat((c.contacts || []).filter((p) => !p.emailOff).map((p) => p.id)).map((who) => ({ who, now: letterItems(e, who), later: laterItems(e, who) })).filter((g) => g.now.length || g.later.length);
+    const list = groups.flatMap((g) => g.now), first = !e.letters || e.runFresh || !e.run;
+    // A client whose only open items are held gets the first letter (listing them) and then no reminders until the first date passes.
+    if (!list.length && !(first && !e.letters && groups.length)) {
       const wr = waitingRelease(e); if (wr) { e.runFresh = true; e.next = nextMorning(wr); return; }
       e.next = null; if (checkComplete(e)) finished(e); else { const sn = openItems(e.id).find((i) => i.state === "says_none"); if (sn) setStuck(e, "client_says_none"); } return;
     }
@@ -875,11 +1243,21 @@
     if (e.run && e.next && S.now - e.next > 2 * DAY) e.runFresh = true;   // held up for days (a stop, a pause, no mailbox): start the reminders over, do not catch up one a day
     delete e.capped; if (e.runFresh || !e.run) { e.run = new Date(S.now); e.step = 0; delete e.runFresh; }
     const k = e.step || 0, last = k >= days.length, code = last ? "L3" : e.letters ? "L2" : "L1", lang = c.lang === "es" ? "es" : "en";
-    const m = send(e, code, { items: list.map((i) => letterLine(i, lang)).join("¶"), k: list.length, years: list.map((i) => i.fixYear).filter(Boolean), why: code === "L1" ? "Checklist confirmed; the first letter" : last ? "No reply to " + (days.length - 1) + " follow-ups (" + P.label + ")" : "Follow-up " + (k || 1) + " of " + (days.length - 1) + " (" + P.label + ")" });
+    const why = code === "L1" ? "Checklist confirmed; the first letter" : last ? "No reply to " + (days.length - 1) + " follow-ups (" + P.label + ")" : "Follow-up " + (k || 1) + " of " + (days.length - 1) + " (" + P.label + ")";
+    let m = null;
+    for (const g of groups) {
+      if (!g.now.length && code !== "L1") continue;   // held items alone are never chased
+      const later = g.later.length ? (g.now.length ? "¶¶These usually arrive later. Send them when they come:¶" : "") + g.later.map((i) => "§- " + itemTitle(i, lang) + " (" + laterWhen(i, e, lang) + ")").join("¶") : "";
+      const p = g.who ? c.contacts.find((x) => x.id === g.who) : null, all = g.now.concat(g.later);
+      const news = code === "L1" && !g.who && firmRule("ask_news") ? (lang === "es" ? "¶¶¿Algo nuevo este año, como un trabajo nuevo, una casa comprada o vendida, o un bebé? En la misma página puede contarnos." : "¶¶Anything new this year, such as a new job, a home bought or sold, or a new baby? The same page lets you tell us.") : "";
+      const mm = send(e, code, Object.assign({ news, items: g.now.map((i) => letterLine(i, lang)).join("¶") + later, k: all.length, years: g.now.map((i) => i.fixYear).filter(Boolean), why }, p ? { first: p.name.split(" ")[0], contact: p, link: contactLink(e, p.id) } : {}));
+      if (!mm) continue; mm.letterItems = all.map((i) => i.id); mm.stepIdx = k; mm.run = +(e.run || S.now); if (p) { mm.contactId = p.id; mm.why = why + "; to " + p.name; }
+      mm.subject = (LETTER_SUBJECT[lang] || LETTER_SUBJECT.en)[all.length === 1 ? 1 : 0].replace("{k}", all.length).replace("{year}", e.year) + (p ? " (" + c.first + " " + c.last + ")" : "");
+      g.now.forEach((i) => { if (i.state === "expected") i.state = "requested"; }); if (!m) m = mm;
+    }
     if (!m) { e.next = nextMorning(dayAfter(S.now)); return; }   // blocked by the output check: a review item is open, and nothing went
-    m.letterItems = list.map((i) => i.id); m.stepIdx = k; m.run = +e.run; m.subject = (LETTER_SUBJECT[lang] || LETTER_SUBJECT.en)[list.length === 1 ? 1 : 0].replace("{k}", list.length).replace("{year}", e.year);
-    list.forEach((i) => { if (i.state === "expected") i.state = "requested"; });
     e.letters = (e.letters || 0) + 1; e.letterDay = dayKey(S.now); e.step = k + 1;
+    if (!list.length) { e.letterDay = dayKey(S.now); const wr = waitingRelease(e); e.runFresh = true; e.next = wr ? nextMorning(wr) : null; return; }   // only held items: no reminders until the first date
     if (last) { setStuck(e, "no_reply"); alertx(e, "medium", "call", c.first + " " + c.last + " has not replied to " + (days.length - 1) + " follow-ups. It is in the review queue with what is still missing.", "call" + e.id); return; }
     e.next = addWorkDays(e.run, days[k]);
     hlog(e, "schedule", "Next letter for " + c.first + ": " + dlabel(e.next), "Working day " + days[k] + " of " + P.label, "Rules");
@@ -887,17 +1265,17 @@
   /** The exact wording of the next letter for one client, for staff to read before it goes (TH-EML-2). It changes nothing and can never be sent from here. The link is shown as words: a client's link is theirs. */
   function letterPreview(eid) {
     const e = eng(eid), c = e && client(e.clientId); if (!e || !c || !LETTERS() || !["in_progress", "not_started"].includes(e.status)) return null;
-    const list = e.status === "not_started" ? itemsOf(e.id).filter((i) => ["expected", "requested", "partial"].includes(i.state) && !heldUntil(i, e)) : letterItems(e), lang = c.lang === "es" ? "es" : "en"; if (!list.length) return null;
+    const list = letterItems(e, null), later = laterItems(e, null), lang = c.lang === "es" ? "es" : "en"; if (!list.length && !(later.length && !e.letters)) return null;
     const P = CADENCE_PRESETS[cadenceFor(e).key], days = P.days.concat([P.final]), k = e.runFresh || !e.run ? 0 : e.step || 0, code = k >= days.length ? "L3" : e.letters ? "L2" : "L1", who = senderFor(c), u = S.users.find((x) => x.id === c.preparer);
     return { code, use: TPL_USE[code], when: e.status === "in_progress" ? e.next || null : null, last: code === "L3", voice: voiceFor(c), from: who.ok ? (who.id === "firm" ? S.firm.email : (u && u.mailbox && u.mailbox.address) || "") : null, fromName: who.ok && who.id !== "firm" && u ? u.name : S.firm.sender,
-      subject: (LETTER_SUBJECT[lang] || LETTER_SUBJECT.en)[list.length === 1 ? 1 : 0].replace("{k}", list.length).replace("{year}", e.year), items: list.map((i) => i.id),
-      body: fill(code, c, e, { items: list.map((i) => letterLine(i, lang)).join("¶"), k: list.length, link: "(" + c.first + "'s private upload link)" }), approve: (c.sendMode === "approve" || (c.sendMode !== "auto" && S.firm.hound.mode === "copilot")) };
+      subject: (LETTER_SUBJECT[lang] || LETTER_SUBJECT.en)[list.length + later.length === 1 ? 1 : 0].replace("{k}", list.length + later.length).replace("{year}", e.year), items: list.concat(later).map((i) => i.id),
+      body: fill(code, c, e, { news: code === "L1" && firmRule("ask_news") ? "¶¶Anything new this year, such as a new job, a home bought or sold, or a new baby? The same page lets you tell us." : "", items: list.map((i) => letterLine(i, lang)).join("¶") + (later.length ? (list.length ? "¶¶These usually arrive later. Send them when they come:¶" : "") + later.map((i) => "§- " + itemTitle(i, lang) + " (" + laterWhen(i, e, lang) + ")").join("¶") : ""), k: list.length + later.length, link: "(" + c.first + "'s private upload link)" }), approve: (c.sendMode === "approve" || (c.sendMode !== "auto" && S.firm.hound.mode === "copilot")) };
   }
   /* TH-EML-5: checked when a letter is about to leave, not only when it was planned. A letter that names a document which has
      since arrived, been held or been waived, or whose file is no longer being fetched, is thrown away; a fresh one takes its place. */
   function letterCheck(mid) {
     const m = S.msgs.find((x) => x.id === mid); if (!m || !LETTER_CODES.includes(m.tpl) || !m.letterItems) return true;
-    const e = eng(m.engId), on = e && (e.status === "in_progress" || (e.status === "stuck" && m.tpl === "L3")) && !halted() && !e.takeover, live = on ? letterItems(e).map((i) => i.id) : [], stale = m.letterItems.some((x) => !live.includes(x));
+    const e = eng(m.engId), on = e && (e.status === "in_progress" || (e.status === "stuck" && m.tpl === "L3")) && !halted() && !e.takeover, live = on ? letterItems(e, m.contactId || null).concat(laterItems(e, m.contactId || null)).map((i) => i.id) : [], stale = m.letterItems.some((x) => !live.includes(x));
     if (on && !stale) return true;
     m.status = "discarded"; m.note = on ? "The list changed before it went" : "No longer needed";
     if (on && e.status === "in_progress" && m.run === +e.run && e.step === (m.stepIdx || 0) + 1) { e.letters = Math.max(0, (e.letters || 1) - 1); e.step = m.stepIdx || 0; if (e.letterDay === dayKey(m.at)) e.letterDay = null; e.next = nextMorning(S.now); }
@@ -907,6 +1285,7 @@
   /* ---------- outreach ---------- */
   function start(eid) {
     const e = eng(eid), c = client(e.clientId);
+    if (e.status === "off_season") return "This client is set aside for this season";
     if (!e.confirmed) return "Checklist not confirmed";
     if (!access().ok) return access().reason;
     if (S.firm.verified === false) return FIRMCHECK;
@@ -1033,6 +1412,7 @@
     alertx(e, "medium", "call", c.first + " " + c.last + " has not replied to " + (GAPS.length - 1) + " reminders. It is in the review queue with what is still missing" + (S.firm.hound.callTask ? " and a call script." : "."), "call" + e.id);
   }
   function tick() {
+    importSweep();
     // Deleting on schedule is a promise to the firm's clients. It runs whether or not the firm is paying, paused or stopped.
     if (!access().ok && !S.firm.stopped) { S.engs.forEach((e) => { if (e.status === "closed" && e.purgeAfter && e.purgeAfter <= S.now && !e.purged) purge(e.id, "Tallyhound"); }); retentionSweep(); return; }
     closingSweep();
@@ -1232,6 +1612,13 @@
       send(e, "M7", { item: it, doc_year: d.year }); timeline(e, "Wrong year (" + d.year + "): client re-asked"); return;
     }
     let it = items.find((i) => i.form === d.form && OPEN.includes(i.state) && payerMatch(i.payer, d.payer)) || items.find((i) => i.form === d.form && OPEN.includes(i.state) && !i.payer);
+    if (LETTERS() && !it) {
+      // docs/FETCH.md: a form that matches no open item by issuer is filed against the open item of the same form, and the firm is told the
+      // issuer differs (a bank bought or renamed). Anything else that is not on the list is a "Not on the checklist" item for a person.
+      const same = items.find((i) => i.form === d.form && OPEN.includes(i.state) && i.payer);
+      if (same && d.payer) { it = same; d.issuerDiffers = { was: same.payer, now: d.payer }; d.reasons.push("From " + d.payer + ", where the list said " + same.payer + ". Filed against that item; check the issuer."); alertx(e, "low", "issuer_differs", c.first + " " + c.last + " sent a " + formDisplay(d.form) + " from " + d.payer + ", where the list said " + same.payer + ". It was filed against that item.", "id" + d.id); }
+      else if (!items.some((i) => i.form === d.form && i.state === "received")) return review("Not on the checklist", "A " + formDisplay(d.form) + (d.payer ? " from " + d.payer : "") + " is not on " + c.first + "'s list. Accept it to add it, or discard it.");
+    }
     const gaps = S.firm.docCheck === false ? [] : (d.elements || []).filter((x) => x.status !== "present" && x.required);
     if (gaps.length) {
       if (!it) { it = { id: id("i"), engId: e.id, form: d.form, payer: d.payer, state: "expected", source: "arrived", isNew: true }; S.items.push(it); }
@@ -1325,7 +1712,10 @@
   }
   // A key for the unsubscribe link. It never changes, so a link in an old email keeps working.
   function emailKey(c) { if (!c.ekey) c.ekey = linkKey(); return c.ekey; }
-  function unsubscribeLink(c) { return S.firm.linkBase && c ? S.firm.linkBase + "/e/" + (S.firm.slug ? S.firm.slug + "-" : "") + emailKey(c) : ""; }
+  function unsubscribeLink(c, p) { return S.firm.linkBase && c ? S.firm.linkBase + "/e/" + (S.firm.slug ? S.firm.slug + "-" : "") + emailKey(p || c) : ""; }
+  /** A contact asked for some of a client's documents unsubscribed: nothing more goes to them, and what they were asked for goes back to the client. */
+  function stopContact(cid, pid) { const c = client(cid), p = c && (c.contacts || []).find((x) => x.id === pid), e = c && engOf(cid); if (!p) return { ok: false }; if (p.emailOff) return { ok: true, already: true }; p.emailOff = true; S.items.forEach((i) => { if (e && i.engId === e.id && i.assignee === pid) delete i.assignee; }); if (e) { timeline(e, p.name + " unsubscribed. What they were asked for is asked of " + c.first + " again"); if (e.status === "in_progress" && LETTERS()) letterSoon(e); } audit("email.unsubscribed", p.name + " (a contact of " + c.first + " " + c.last + ")", p.name); return { ok: true }; }
+  function contactByEmailKey(key) { for (const c of S.clients) { const p = (c.contacts || []).find((x) => x.ekey === key); if (p) return { c, p }; } return null; }
   /* Reply understanding, second version (TH-RPL, docs/REBRAND.md section 5). Five more things a reply can mean. The model (or, with
      no model, a few plain patterns) says which; code checks every field against what it was given and then acts only through
      templates and state changes. Anything it is not sure of goes to a person. A reply never changes a checklist: a life change
@@ -1333,7 +1723,7 @@
      firm.hound.replyV2: "on" acts; "shadow" (a new firm's default) records what it would have understood and acts the old way. */
   const V2 = ["someone_else_has_it", "already_sent", "life_change", "send_after_date", "not_mine"], PERSONS = ["spouse", "employer", "accountant", "other"];
   // TH-SNF-7: when each form is usually issued, for the wrong-year reply. For forms that are often later, the first date.
-  const USUAL = { W2: [0, 31], "1099NEC": [0, 31], "1099MISC": [0, 31], "1099K": [0, 31], "1099INT": [0, 31], "1099DIV": [0, 31], "1099R": [0, 31], SSA1099: [0, 31], "1099G": [0, 31], "1098": [0, 31], "1098T": [0, 31], "1098E": [0, 31], "1095A": [0, 31], "1099SA": [0, 31], "1099CONS": [1, 15], K1: [2, 15] };
+  const USUAL = { W2: [0, 31], "1099NEC": [0, 31], "1099MISC": [0, 31], "1099K": [0, 31], "1099INT": [0, 31], "1099DIV": [0, 31], "1099R": [0, 31], SSA1099: [0, 31], "1099G": [0, 31], "1098": [0, 31], "1098T": [0, 31], "1098E": [0, 31], "1095A": [0, 31], "1099SA": [0, 31], "1099CONS": [1, 15], "1099B": [1, 15], "1099DA": [1, 15], "1099S": [1, 15], W2G: [0, 31], "1098VLI": [0, 31], K1: [2, 15] };
   const usualIssue = (form, lang) => { const u = USUAL[form]; if (!u) return ""; return lang === "es" ? "Suele llegar antes del " + u[1] + " de " + ["enero", "febrero", "marzo"][u[0]] + "." : "It usually arrives by " + MONTHS[u[0]] + " " + u[1] + "."; };
   const LATER_MAX_DAYS = 30, ALREADY_SENT_LOOKBACK_DAYS = 21;
   const WAIVE_REASONS = { sold_home: "Sold the home", account_closed: "Account closed", no_longer_employed: "No longer employed there", not_this_year: "Not this year", combined_elsewhere: "Combined on another document", other: "Other" }, LASTING = ["sold_home", "account_closed", "no_longer_employed"];
@@ -1988,6 +2378,13 @@
     t.status = "decided"; t.decision = decision; t.by = S.user.name; t.decidedAt = new Date(S.now);
     audit("review." + decision, (c ? c.first + " " + c.last : "") + " " + (t.reason || ""));
     if (e && e.stuck === "review_waiting") unstick(e);
+    if (t.kind === "news" && e) {
+      if (decision === "add_news") { const all = t.suggest || [], pick = p && Array.isArray(p.pick) ? all.filter((x, i) => p.pick.includes(i)) : all; let n = 0;
+        for (const x of pick) { if (x.form !== "W2" && hasForm(e, [x.form]) && !x.payer) continue; const it = proposeItem(e, { form: x.form, payer: x.payer || null, source: "client", why: "The client said: " + String(x.why || "").toLowerCase() }); it.state = it.state === "off" ? "expected" : it.state; it.firmTouched = true; n++; }
+        listLog(e, n + " added from the client's news"); timeline(e, n + " documents added from what " + client(e.clientId).first + " said is new", S.user.name); if (e.status === "complete") { e.status = "in_progress"; e.completedAt = null; } if (e.status === "in_progress" && LETTERS()) letterSoon(e); sortList(e); }
+      else if (decision !== "dismiss_news") { t.status = "open"; t.decision = null; t.by = null; t.decidedAt = null; return "Choose: add them, or dismiss"; }
+      return null;
+    }
     if (t.kind === "step" && e) {
       if (decision === "apply_step") { const r = applyStep(t, e, c); if (r) { t.status = "open"; t.decision = null; t.by = null; t.decidedAt = null; return r; } }
       else if (decision !== "dismiss_step") { t.status = "open"; t.decision = null; t.by = null; t.decidedAt = null; return "Choose: do it, or dismiss it"; }
@@ -2094,7 +2491,7 @@
   }
   function pause(eid) { const e = eng(eid); if (["complete", "closed", "paused", "not_started"].includes(e.status)) return; e.prior = e.status; e.priorStuck = e.stuck; e.status = "paused"; e.next = null; settleQuiet(e); timeline(e, "Paused", S.user.name); audit("outreach.pause", client(e.clientId).last); }
   function resume(eid) { const e = eng(eid); if (e.status !== "paused") return; e.status = e.prior === "stuck" ? "in_progress" : e.prior || "in_progress"; e.stuck = null; e.step = 0; e.next = nextAllowed(new Date(S.now.getTime() + MIN)); timeline(e, "Resumed", S.user.name); }
-  const formDisplay = (form) => (form === "W2" ? "W-2" : form === "K1" ? "Schedule K-1" : form === "SSA1099" ? "SSA-1099" : form === "1099CONS" ? "Brokerage 1099" : /^\d{4}[A-Z]+$/.test(form) ? form.slice(0, 4) + "-" + form.slice(4) : /^\d{4}$/.test(form) ? form : (FORMS[form] || FORMS.OTHER).plain.replace(/^./, (x) => x.toUpperCase()));
+  const formDisplay = (form) => (form === "W2" ? "W-2" : form === "W2G" ? "W-2G" : form === "K1" ? "Schedule K-1" : form === "SSA1099" ? "SSA-1099" : form === "1099CONS" ? "Brokerage 1099" : /^\d{4}[A-Z]+$/.test(form) ? form.slice(0, 4) + "-" + form.slice(4) : /^\d{4}$/.test(form) ? form : (FORMS[form] || FORMS.OTHER).plain.replace(/^./, (x) => x.toUpperCase()));
   const PAYER_SHORT_MAX = 40;
   /** "2026 W-2 Acme Logistics.pdf", inside the client's own folder for the year. Characters a drive refuses are left out. */
   function filedName(c, e, d) { const safe = (x) => String(x || "").replace(/[\\/:*?"<>|#%\u0000-\u001f]+/g, " ").replace(/\s+/g, " ").trim(); return [e.year, safe(d.custom || formDisplay(d.form)), safe(d.payer).slice(0, PAYER_SHORT_MAX).trim(), d.corrected ? "CORRECTED" : ""].filter(Boolean).join(" ") + ".pdf"; }
@@ -2202,13 +2599,17 @@
     const SENS = /\b(ssn|ss#|social|itin|tin|ein|fein|dob|birth|routing|bank|acct|account|password|pin|agi|income|refund|balance|fee|invoice|wage|dependent)\b/i, ssnLike = /^\d{3}-?\d{2}-?\d{4}$/, dateLike = /^(0?[1-9]|1[0-2])[\/-](0?[1-9]|[12]\d|3[01])[\/-](19|20)\d\d$/;
     const sensitive = head.map((h, i) => { const hd = String(h).replace(/[_.]/g, " "); if (SENS.test(hd)) return true; const vals = rows.slice(0, 25).map((r) => r[i] || "").filter(Boolean); return vals.length >= 2 && vals.filter((v) => ssnLike.test(v.replace(/\s/g, ""))).length / vals.length > 0.6 && !/phone|mobile|cell|zip|postal|id|number|code|ref/i.test(hd) ? true : vals.length >= 2 && /birth|dob/i.test(hd) && vals.every((v) => dateLike.test(v)); });
     // Score each column for each field, then give every field its best column. A spouse's or preparer's details never win.
-    const score = (h, f) => { const x = " " + String(h).toLowerCase().replace(/[_.\-\/]+/g, " ") + " "; if (/spouse|\bsp\b|dependent|\bdep\b|joint|secondary|partner/.test(x)) return 0;
+    const score = (h, f) => { const x = " " + String(h).toLowerCase().replace(/[_.\-\/]+/g, " ") + " ";
+      if (f === "spouse") return /^ (spouse|spouse name|spouse full name|partner|partner name|spouse first name) $/.test(x) ? 6 : 0;
+      if (f === "returning") return /^ (returning|existing|status|client status|new or returning|returning client) $/.test(x) ? 6 : 0;
+      if (/spouse|\bsp\b|dependent|\bdep\b|joint|secondary|partner/.test(x)) return 0;
       const tp = /taxpayer|\btp\b|primary|client/.test(x) ? 1 : 0;
       if (f === "first") return /first|given|\bfname\b/.test(x) ? 5 + tp : 0;
       if (f === "last") return /last|surname|family name|\blname\b/.test(x) ? 5 + tp : 0;
       if (f === "name") return /first|last|file|user|firm|company|business|preparer|staff|employer/.test(x) ? 0 : /^ (client |full |taxpayer |primary )?name $|^ client $|^ taxpayer $/.test(x) ? 5 : / name /.test(x) ? 2 : 0;
       if (f === "email") return /preparer|staff|firm/.test(x) ? 0 : /mail/.test(x) ? 5 + tp : 0;
       if (f === "mobile") return /fax|work|office|business|preparer|firm/.test(x) ? 0 : /mobile|cell|\btext\b|sms/.test(x) ? 8 + tp : /home/.test(x) ? 2 : /phone|\btel\b/.test(x) ? 4 + tp : 0;
+      if (f === "first" && /given name/.test(x)) return 5;
       if (f === "preparer") return /prepar|staff|assigned|owner|partner in charge|\bpic\b/.test(x) && !/mail|phone|fee/.test(x) ? 5 : 0;
       if (f === "lang") return /lang/.test(x) ? 5 : 0;
       if (f === "tz") return /time zone|timezone/.test(x) ? 6 : /^ (res(ident)? |home |mailing )?state $|^ st $/.test(x) ? 5 : 0;
@@ -2218,7 +2619,7 @@
       if (f === "ref") return /client (id|no|number|code|#)|^ (id|client id|account id|cust(omer)? (id|no)|file (no|number)|client number) $/.test(x) ? 5 : 0;
       return 0; };
     const map = head.map(() => "");
-    ["first", "last", "email", "mobile", "ref", "preparer", "lang", "tz", "docs", "entity", "rtype", "name"].forEach((f) => { let best = -1, bs = 0; head.forEach((h, i) => { if (sensitive[i] || map[i]) return; const sc = score(h, f); if (sc > bs) { bs = sc; best = i; } }); if (best >= 0 && !(f === "name" && map.includes("first") && map.includes("last"))) map[best] = f; });
+    ["first", "last", "email", "mobile", "ref", "spouse", "returning", "preparer", "lang", "tz", "docs", "entity", "rtype", "name"].forEach((f) => { let best = -1, bs = 0; head.forEach((h, i) => { if (sensitive[i] || map[i]) return; const sc = score(h, f); if (sc > bs) { bs = sc; best = i; } }); if (best >= 0 && !(f === "name" && map.includes("first") && map.includes("last"))) map[best] = f; });
     return { head, map, rows, delim, sensitive };
   }
   function importRows(parsed) {
@@ -2314,7 +2715,7 @@
       loads it into a second engine and lets the real scheduler run ahead, so the plan can never differ from what is sent. */
   function dumpOne(eid) {
     const e = eng(eid); if (!e) return null; const mine = (x) => x.engId === eid, c = client(e.clientId), keep = S;
-    const one = Object.assign({}, S, { clients: [c], engs: [e], items: S.items.filter(mine), msgs: S.msgs.filter(mine), docs: S.docs.filter(mine), tasks: S.tasks.filter(mine), alerts: [], hlog: [], audit: [], tray: [], archive: [], barks: [], memory: [], held: [] });
+    const one = Object.assign({}, S, { clients: [c], engs: [e], items: S.items.filter(mine), msgs: S.msgs.filter(mine), docs: S.docs.filter(mine), tasks: S.tasks.filter(mine), alerts: [], hlog: [], audit: [], tray: [], archive: [], barks: [], memory: [], held: [], imports: [] });
     try { S = one; return dump(); } finally { S = keep; }
   }
   function dump() {
@@ -2327,7 +2728,7 @@
     const N = walk(o.state);
     ["clients", "engs", "items", "msgs", "docs", "tasks", "users"].forEach((k) => { if (!Array.isArray(N[k])) throw new Error("Not a Tallyhound workspace: " + k + " is missing"); });
     if (!N.firm || typeof N.firm !== "object" || !N.users.length) throw new Error("Not a Tallyhound workspace: firm is missing");
-    ["tray", "audit", "alerts", "hlog", "archive", "barks", "memory"].forEach((k) => { if (!Array.isArray(N[k])) N[k] = []; });
+    ["tray", "audit", "alerts", "hlog", "archive", "barks", "memory", "imports"].forEach((k) => { if (!Array.isArray(N[k])) N[k] = []; });
     if (!N.usage || typeof N.usage !== "object") N.usage = {};
     if (N.firm) N.firm.retain = Object.assign({}, RETAIN_DEFAULT, N.firm.retain);
     const HD = { mode: "copilot", aiLive: false, aiWrite: true, replyV2: "shadow", intensity: "steady", voice: "professional", tone: "warm", persona: "", emailAfter: 2, slaHours: 4, pauseDays: 3, callTask: true }; N.firm.hound = N.firm.hound || {}; Object.keys(HD).forEach((k) => { if (N.firm.hound[k] === undefined) N.firm.hound[k] = HD[k]; });
@@ -2338,7 +2739,7 @@
   }
   function blank(opt) {
     seed(); opt = opt || {};
-    ["clients", "engs", "items", "msgs", "docs", "tasks", "tray", "audit", "alerts", "hlog", "archive", "barks", "memory"].forEach((k) => { S[k] = []; }); S.usage = {};
+    ["clients", "engs", "items", "msgs", "docs", "tasks", "tray", "audit", "imports", "alerts", "hlog", "archive", "barks", "memory"].forEach((k) => { S[k] = []; }); S.usage = {};
     S.firm.delivery = { provider: "Download", folder: "Client Tax Docs", auto: "off" }; S.firm.verified = opt.verified === false ? false : true; S.firm.retain = Object.assign({}, RETAIN_DEFAULT);
     seq = 0; S.now = opt.now || new Date(); S.firm.createdAt = new Date(S.now); S.firm.taxYear = opt.taxYear || S.firm.taxYear || 2026;
     if (opt.plan && PLANS.some((p) => p[0] === opt.plan)) { S.firm.plan = opt.plan; S.firm.billing = { state: "active", plan: opt.plan, since: new Date(S.now) }; } else { S.firm.plan = "Trial"; S.firm.billing = { state: "trial", plan: null, trialEnds: new Date(S.now.getTime() + TRIAL_DAYS * DAY) }; }
@@ -2497,8 +2898,10 @@
       e.lastSeason.removed = mem.filter((r) => r.outcome !== "received").map((r) => ({ form: r.form, payer: r.payer || null, custom: r.custom || null, reason: r.outcome === "said_none" ? "said_none" : r.waiveReason || "other", lasting: LASTING.includes(r.waiveReason) }));
       e.lastSeason.fromMemory = true;
     } else
-    keep.forEach((i) => S.items.push({ id: id("i"), engId: e.id, form: i.form, payer: i.payer || null, custom: i.custom || null, customEs: i.customEs || null, state: "expected", source: "prior_year" }));
+    keep.forEach((i) => S.items.push({ id: id("i"), engId: e.id, form: i.form, payer: i.payer || null, custom: i.custom || null, customEs: i.customEs || null, state: "expected", source: "last_season", rule: "R-LAST", why: "It came in last season" }));
     timeline(e, "Started from " + old.year + ": " + keep.length + " documents expected again" + (none.length ? ", " + none.length + " not asked for because the client did not have them" : ""), "Tallyhound");
+    // docs/FETCH.md, year two: last season's filed documents are this season's proposal. It still needs the firm's approval.
+    S.items.forEach((i) => { if (i.engId === e.id && i.source === "last_season") { i.rule = i.rule || "R-LAST"; i.why = i.why || "It came in last season"; } }); listOf(e.id).status = "proposed"; sortList(e);
     return null;
   }
   function rollSeason(year) {
@@ -2613,7 +3016,7 @@
     if (e.status === "complete" && open) { e.status = "in_progress"; e.completedAt = null; e.step = 0; if (!e.next) e.next = nextAllowed(S.now); timeline(e, "Reopened: a document is outstanding again"); }
     else if (["in_progress", "stuck"].includes(e.status) && !open && any) { if (checkComplete(e)) finished(e); }
   }
-  window.TH = { pilotMeasures, PILOT, letterPreview, workDays, WORKDAYS_DEFAULT, LETTER_HOUR, attachmentWaiting, emailBounced, mirrorWant, MIRROR_STATUS, dayKey, sentToday, restartRun, letterSoon, inboundReply, portalLater, uploadResult, agreement, setConfirmAll, CONFIRM_MIN_DOCS, CONFIRM_MIN_AGREE, LETTERS, isWorkDay, nextMorning, addWorkDays, setWorkDays, letterItems, itemTitle, senderFor, setMailbox, setMailCap, setClientSendMode, letterCheck, linkFind, linkState, rotateLink, revokeLink, seasonLink, MAIL_CAP, LETTER, released, panelOf, PANEL, traceOf, TRACE_STEPS, keepTrace, activity, LIFE_SUGGEST, suggestFor, dumpOne, setDuty, cantReach, BARK_TARGETS, BARK_DEFAULT, CALL_OUTCOMES, setHold, askNow, holdOf, heldUntil, releaseOf, usualIssue, USUAL, formDisplay, filedName, SEND_HOUR_MIN_REPLIES, bestHour, SLOW_ITEM_ASKS, memoryWrite, memoryOf, clearMemory, setMemory, keepRemoved, confirmRemoved, addTask, BARK_KINDS, BARK_BATCH_MIN, BARK_SETTLE_MIN, REVIEW_OVERDUE_HOURS, barkRoute, barkDue, barkHeld, barkRead, barkWords, setMyBarks, setBarkRules, setStaffHours, staffHours, V2, WAIVE_REASONS, LASTING, CHANGE_WORDS, LATER_MAX_DAYS, ALREADY_SENT_LOOKBACK_DAYS, replyV2, setSpouse, VOICES, VOICE_TPL, VOICE_FIXED, voiceFor, setVoice, setClientVoice, setSignOff, previewVoice, verified, CADENCE_PRESETS, gapsOf, cadenceFor, setIntensity, setClientIntensity, undiscard, setClosedDays, startMany, deletionEvidence, setCallOk, plans, quoteFor, areaZone, zoneFor, addContact, removeContact, planEnded, setLine, isLandline, RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
+  window.TH = { importBegin, importMap, importDecide, importRecord, importPlace, importBuild, importApprove, importView, importsOpen, IMPORT_FIELDS, IMPORT_MAX_ROWS, stopContact, contactByEmailKey, cleanText, cleanFinding, attachRecord, confirmRecord, dropRecord, uploadList, laterItems, contactLink, listOf, buildList, sortList, tickItem, setIssuer, addCatalogItem, itemNeeded, rulePrecision, RULE_TEXT, approveList, approveMany, approveReady, setSeason, noteForPreparer, addNote, addContact2, assignItem, NEWS, clientNews, SOURCES, ONE_TIME, CATALOG, CATALOG_GROUPS, CATALOG_SEASON, RULES_VERSION, catalog, askPhrase, setCatalog, FIRM_RULES, firmRule, setFirmRule, payerShown, setAlias, aliasKey, pilotMeasures, PILOT, letterPreview, workDays, WORKDAYS_DEFAULT, LETTER_HOUR, attachmentWaiting, emailBounced, mirrorWant, MIRROR_STATUS, dayKey, sentToday, restartRun, letterSoon, inboundReply, portalLater, uploadResult, agreement, setConfirmAll, CONFIRM_MIN_DOCS, CONFIRM_MIN_AGREE, LETTERS, isWorkDay, nextMorning, addWorkDays, setWorkDays, letterItems, itemTitle, senderFor, setMailbox, setMailCap, setClientSendMode, letterCheck, linkFind, linkState, rotateLink, revokeLink, seasonLink, MAIL_CAP, LETTER, released, panelOf, PANEL, traceOf, TRACE_STEPS, keepTrace, activity, LIFE_SUGGEST, suggestFor, dumpOne, setDuty, cantReach, BARK_TARGETS, BARK_DEFAULT, CALL_OUTCOMES, setHold, askNow, holdOf, heldUntil, releaseOf, usualIssue, USUAL, formDisplay, filedName, SEND_HOUR_MIN_REPLIES, bestHour, SLOW_ITEM_ASKS, memoryWrite, memoryOf, clearMemory, setMemory, keepRemoved, confirmRemoved, addTask, BARK_KINDS, BARK_BATCH_MIN, BARK_SETTLE_MIN, REVIEW_OVERDUE_HOURS, barkRoute, barkDue, barkHeld, barkRead, barkWords, setMyBarks, setBarkRules, setStaffHours, staffHours, V2, WAIVE_REASONS, LASTING, CHANGE_WORDS, LATER_MAX_DAYS, ALREADY_SENT_LOOKBACK_DAYS, replyV2, setSpouse, VOICES, VOICE_TPL, VOICE_FIXED, voiceFor, setVoice, setClientVoice, setSignOff, previewVoice, verified, CADENCE_PRESETS, gapsOf, cadenceFor, setIntensity, setClientIntensity, undiscard, setClosedDays, startMany, deletionEvidence, setCallOk, plans, quoteFor, areaZone, zoneFor, addContact, removeContact, planEnded, setLine, isLandline, RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
     dump, load, blank, setNow, setUser, linkFor, linkLive, LINK_DAYS, consentFromPage, declineTexts, stopEmail, unsubscribeLink, CONSENT_WORDING,
     get S() { return S; }, FORMS, TPL, TPL_USE, QUESTIONS, STUCK, DAY, HOUR, MIN,
     client, eng, engOf, itemsOf, openItems, progress, fill, outputCheck, channelFor, allowed, nextAllowed, live, nextItem,

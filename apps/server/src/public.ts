@@ -14,14 +14,14 @@ import type { Inbox } from "./queue.ts";
 import * as pages from "./clientpages.ts";
 
 const CSS = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../assets/client.css")), JS = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../assets/client.js"));
-export const MAX_FILE = 25 * 1024 * 1024, MAX_FILES = 10, PER_LINK_A_MINUTE = 30, PER_ADDRESS_A_MINUTE = 60, UPLOADS_AN_HOUR = 20, RESULT_MINUTES = 30;
+export const MAX_FILE = 25 * 1024 * 1024, MAX_FILES = 10, MAX_FIELDS = 24, PER_LINK_A_MINUTE = 30, PER_ADDRESS_A_MINUTE = 60, UPLOADS_AN_HOUR = 20, RESULT_MINUTES = 30;
 export interface PublicDeps { secure?: boolean; lookup?: { lineType(mobile10: string): Promise<string> } | null; app: App; store: KitStore; auth: AuthStore; inbox: Inbox; clock: () => Date; log?: (event: string, ...ids: unknown[]) => void }
 /* eslint-disable @typescript-eslint/no-explicit-any */
-type Found = { firmId: string; firm: pages.FirmView; T: Engine; c: any | null; e: any | null; dead?: boolean };
+type Found = { firmId: string; firm: pages.FirmView; T: Engine; c: any | null; e: any | null; dead?: boolean; contact?: any };
 
 export async function registerPublic(f: FastifyInstance, d: PublicDeps): Promise<void> {
   const say = d.log || (() => {});
-  await f.register(multipart, { limits: { fileSize: MAX_FILE, files: MAX_FILES, fields: 5 } });
+  await f.register(multipart, { limits: { fileSize: MAX_FILE, files: MAX_FILES, fields: MAX_FIELDS } });
   if (!f.hasContentTypeParser("application/x-www-form-urlencoded")) f.addContentTypeParser("application/x-www-form-urlencoded", { parseAs: "string" }, (_req, body, done) => { done(null, Object.fromEntries(new URLSearchParams(body as string))); });
 
   // Whose link is this? The firm is found by its short name; the client by their key inside that firm's own sealed state.
@@ -32,7 +32,8 @@ export async function registerPublic(f: FastifyInstance, d: PublicDeps): Promise
     const firm = { name: T.S.firm.name, phone: T.S.firm.phone || "", page: "/f/" + m[1] };
     // v2: an email-first firm's upload link belongs to the season. One staff replaced or switched off, or one for a file closed
     // over a month ago, finds nobody and says to ask for a new one (TH-UPL-1, 7).
-    if (kind === "u" && T.LETTERS()) { const L = T.linkFind(m[2]); return L && L.state === "live" ? { firmId, firm, T, c: L.c, e: L.e } : { firmId, firm, T, c: null, e: null, dead: !!L }; }
+    if (kind === "u" && T.LETTERS()) { const L = T.linkFind(m[2]); return L && L.state === "live" ? { firmId, firm, T, c: L.c, e: L.e, contact: L.contact || null } : { firmId, firm, T, c: null, e: null, dead: !!L }; }
+    if (kind === "e") { const pc = T.contactByEmailKey(m[2]); if (pc) return { firmId, firm, T, c: pc.c, e: T.engOf(pc.c.id), contact: pc.p }; }
     const c = T.S.clients.find((x: any) => (kind === "e" ? x.ekey === m[2] : x.key === m[2] && T.linkLive(x))) || null;
     return { firmId, firm, T, c, e: c ? T.engOf(c.id) : null };
   }
@@ -99,9 +100,10 @@ export async function registerPublic(f: FastifyInstance, d: PublicDeps): Promise
   };
   const upsOf = (v: unknown) => String(v || "").split(".").filter((s) => /^[0-9a-f]{24}$/.test(s)).slice(0, MAX_FILES);
   const lettersView = (x: Found, t: string, o: { error?: string; said?: string; ups?: string[]; tries?: number } = {}) => {
-    const done = !x.e || ["complete", "closed"].includes(x.e.status), items = done ? [] : x.T.letterItems(x.e).map((i: any) => ({ id: i.id, title: x.T.itemTitle(i, lang(x)), note: i.fixNote ? i.fixNote[lang(x) === "es" ? 1 : 0] : undefined }));
+    const done = !x.e || ["complete", "closed"].includes(x.e.status), L = done ? { now: [], later: [] } : x.T.uploadList(x.e.id, x.contact ? x.contact.id : null), items = L.now.map((i: any) => ({ id: i.id, title: i.title, note: i.note || undefined }));
     const r = o.ups && o.ups.length ? resultsOf(x, o.ups) : null, tm = new Date(+new Date(x.T.S.now) + 86400000), minDay = tm.getFullYear() + "-" + String(tm.getMonth() + 1).padStart(2, "0") + "-" + String(tm.getDate()).padStart(2, "0");
-    return pages.uploadPageV2(x.firm, { action: "/u/" + t, first: x.c.first, items, done, idle: !done && !items.length, error: o.error, said: o.said, results: r ? r.lines : undefined, checking: !!(r && r.pending && (o.tries || 0) < 15), minDay });
+    const news = !done && !x.contact && x.T.firmRule("ask_news") ? { year: x.e.year, choices: x.T.NEWS.map((n: any) => [n[0], n[1]]) as [string, string][] } : null;
+    return pages.uploadPageV2(x.firm, { action: "/u/" + t, first: x.contact ? String(x.contact.name).split(" ")[0] : x.c.first, forClient: x.contact ? x.c.first : undefined, later: L.later, news, items, done, idle: !done && !items.length && !L.later.length, error: o.error, said: o.said, results: r ? r.lines : undefined, checking: !!(r && r.pending && (o.tries || 0) < 15), minDay });
   };
   f.get("/u/:t/result", { preHandler: brake }, async (req, reply) => {
     const x = await find(params(req).t, "u"); if (!x || !x.c || !x.T.LETTERS()) return reply.code(404).header("cache-control", "no-store").send({ error: "This link no longer works." });
@@ -111,7 +113,7 @@ export async function registerPublic(f: FastifyInstance, d: PublicDeps): Promise
     const x = await find(params(req).t, "u"); if (!x || !x.c) return gone(reply, x);
     if (x.T.LETTERS() && !checkinOpen(x)) { const q = req.query as { up?: string; said?: string; n?: string }, ups = upsOf(q.up), tries = Math.max(0, +q.n! || 0);
       // With no script the page reloads itself every few seconds until the result is in, counting its tries in the address so it stops.
-      const page = lettersView(x, params(req).t, { ups, tries, said: q.said === "none" ? "Thanks. We've let " + x.firm.name + " know you don't have that one." : q.said === "later" ? "Thanks. We've let " + x.firm.name + " know it's coming later." : undefined });
+      const page = lettersView(x, params(req).t, { ups, tries, said: q.said === "none" ? "Thanks. We've let " + x.firm.name + " know you don't have that one." : q.said === "later" ? "Thanks. We've let " + x.firm.name + " know it's coming later." : q.said === "news" ? "Thanks. " + x.firm.name + " will look at what's new and may ask for a document or two more." : undefined });
       return html(reply, ups.length ? page.replace('http-equiv="refresh" content="4"', 'http-equiv="refresh" content="4;url=/u/' + params(req).t + "?up=" + ups.join(".") + "&amp;n=" + (tries + 1) + '"') : page); }
     if (checkinOpen(x)) return html(reply, checkinView(x, params(req).t, !!(req.query as { changed?: string }).changed));
     const sent = Math.min(MAX_FILES, Math.max(0, +(req.query as { sent?: string }).sent! || 0)); return html(reply, uploadView(x, params(req).t, { sent: sent || undefined }));
@@ -129,8 +131,13 @@ export async function registerPublic(f: FastifyInstance, d: PublicDeps): Promise
     }
     const V2 = x.T.LETTERS(), view = (o: { error?: string }) => (V2 ? lettersView(x, t, o) : uploadView(x, t, o));
     // "I don't have this one" and "I'll send this later" do what the same replies by email do (docs/V2.md section 6).
+    // "Anything new" (docs/FETCH.md): only the ticks and a short name cross over. A contact's link has no such card.
+    if (V2 && !req.isMultipart() && fields(req).form === "news" && !x.contact) {
+      const b = fields(req), picks = (x.T.NEWS as any[]).map((n) => n[0]).filter((k: string) => b["n_" + k] === "1"); if (!picks.length) return html(reply, lettersView(x, t, { error: "Tick at least one, or close this box." }), 400);
+      await d.app.withFirm(x.firmId, (T: Engine) => T.clientNews(x.e.id, picks, String(b.named || "").slice(0, 60))); return reply.redirect("/u/" + t + "?said=news", 303);
+    }
     if (V2 && !req.isMultipart() && (fields(req).form === "none" || fields(req).form === "later")) {
-      const b = fields(req), iid = String(b.item || ""), ok = x.e && x.T.letterItems(x.e).some((i: any) => i.id === iid); if (!ok) return reply.redirect("/u/" + t, 303);
+      const b = fields(req), iid = String(b.item || ""), L0 = x.e ? x.T.uploadList(x.e.id, x.contact ? x.contact.id : null) : { now: [] }, ok = L0.now.some((i: any) => i.id === iid); if (!ok) return reply.redirect("/u/" + t, 303);
       await d.app.withFirm(x.firmId, (T: Engine) => (b.form === "none" ? T.portalNone(iid) : T.portalLater(iid, String(b.day || "").slice(0, 10)))); return reply.redirect("/u/" + t + "?said=" + b.form, 303);
     }
     if (!req.isMultipart()) return script ? no(400, "Choose a photo or a PDF first.") : html(reply, view({ error: "Choose a photo or a PDF first." }), 400);
@@ -151,11 +158,11 @@ export async function registerPublic(f: FastifyInstance, d: PublicDeps): Promise
   f.get("/e/:t", { preHandler: brake }, async (req, reply) => {
     const t = params(req).t, x = await find(t, "e"); if (!x || !x.c) return gone(reply, x);
     if ((req.query as { keep?: string }).keep) return html(reply, pages.keptPage(x.firm));
-    return html(reply, pages.unsubscribePage(x.firm, { action: "/e/" + t, keep: "/e/" + t + "?keep=1", done: !!x.c.emailOff }));
+    return html(reply, pages.unsubscribePage(x.firm, { action: "/e/" + t, keep: "/e/" + t + "?keep=1", done: x.contact ? !!x.contact.emailOff : !!x.c.emailOff }));
   });
   f.post("/e/:t", { preHandler: brake }, async (req, reply) => {
     const t = params(req).t, x = await find(t, "e"); if (!x || !x.c) return gone(reply, x);
-    await d.app.withFirm(x.firmId, (T: Engine) => T.stopEmail(x.c.id, fields(req)["List-Unsubscribe"] === "One-Click" ? "one click" : "link"));
+    await d.app.withFirm(x.firmId, (T: Engine) => (x.contact ? T.stopContact(x.c.id, x.contact.id) : T.stopEmail(x.c.id, fields(req)["List-Unsubscribe"] === "One-Click" ? "one click" : "link")));
     return html(reply, pages.unsubscribePage(x.firm, { action: "/e/" + t, keep: "", done: true }));
   });
 

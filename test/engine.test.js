@@ -665,9 +665,9 @@ test("TH-MEM-6, 8, 9: an owner can clear one client's memory or turn it off for 
   x = season2026(); x.T.setUser("u1"); x.T.closeEng(x.e.id); x.T.purge(x.e.id); assert.equal((x.T.S.memory || []).filter((r) => r.clientId === x.c.id).length, 0, "the purge left the memory behind");
   // Off from the start: nothing is written, and the roll forward works as it did before memory existed.
   x = started(); x.T.setUser("u1"); assert.equal(x.T.setMemory(false), null); x.T.setUser("u2"); x.T.inboundDoc(x.c.id, { form: "W2", year: 2026, payer: "Acme Logistics" }, "text"); x.T.setItem(item(x.T, x.e, "1098").id, "waived", "", "sold_home"); x.T.advance(x.T.HOUR);
-  assert.equal((x.T.S.memory || []).length, 0); x.T.setUser("u1"); x.T.rollSeason(2027); const e = x.T.engOf(x.c.id); assert.deepEqual(x.T.itemsOf(e.id).map((i) => i.source), ["prior_year"]); assert.ok(!e.lastSeason.removed);
+  assert.equal((x.T.S.memory || []).length, 0); x.T.setUser("u1"); x.T.rollSeason(2027); const e = x.T.engOf(x.c.id); assert.deepEqual(x.T.itemsOf(e.id).map((i) => i.source), ["last_season"]); assert.ok(!e.lastSeason.removed);
   // Turned off later: what exists is hidden and not used, and goes when the client is purged.
-  x = season2026(); x.T.setUser("u1"); x.T.setMemory(false); assert.equal(x.T.memoryOf(x.c.id).length, 0); x.T.rollSeason(2027); assert.deepEqual(x.T.itemsOf(x.T.engOf(x.c.id).id).map((i) => i.source).sort(), ["prior_year", "prior_year"]);
+  x = season2026(); x.T.setUser("u1"); x.T.setMemory(false); assert.equal(x.T.memoryOf(x.c.id).length, 0); x.T.rollSeason(2027); assert.deepEqual(x.T.itemsOf(x.T.engOf(x.c.id).id).map((i) => i.source).sort(), ["last_season", "last_season"]);
 });
 test("TH-MEM: a waive records its reason, and only the lasting reasons are lasting", () => {
   const { T, e } = started(); T.setUser("u2"); const it = item(T, e, "1098"); T.setItem(it.id, "waived", "", "nonsense"); assert.equal(it.waiveReason, "other"); T.setItem(it.id, "expected"); assert.ok(!it.waiveReason);

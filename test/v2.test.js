@@ -25,7 +25,7 @@ const md = (d) => (d.getMonth() + 1) + "/" + d.getDate();
 test("scenario 2: Go fetch sends one letter listing all three documents with the link; follow-ups go on working days 2, 5, 9 and the last on 14", () => {
   const { T, c, e } = go(); const L = letters(T, e); assert.equal(L.length, 1); const m = L[0];
   assert.equal(m.channel, "email"); assert.equal(m.tpl, "L1"); assert.equal(m.subject, "3 documents for your 2026 tax return");
-  assert.equal(m.body, "Hi Maria,\n\nTo prepare your 2026 return we still need:\n\n  - W-2 from Acme Logistics\n  - 1099-INT from First Farmers Bank\n  - 1098 from Hillcrest Mortgage\n\nUpload them here. No account or password needed:\nhttps://send.tallyhound.example/u/maple-" + e.link.key + "\n\nA phone photo or a PDF both work.\n\nThank you,\nDana Whitfield\nMaple & Pine Tax Co.");
+  assert.equal(m.body, "Hi Maria,\n\nTo prepare your 2026 return we still need:\n\n  - W-2 from Acme Logistics\n  - 1099-INT from First Farmers Bank\n  - 1098 from Hillcrest Mortgage\n\nUpload them here. No account or password needed:\nhttps://send.tallyhound.example/u/maple-" + e.link.key + "\n\nA phone photo or a PDF both work.\n\nAnything new this year, such as a new job, a home bought or sold, or a new baby? The same page lets you tell us.\n\nThank you,\nDana Whitfield\nMaple & Pine Tax Co.");
   assert.deepEqual(m.letterItems.length, 3); assert.equal(T.S.msgs.filter((x) => x.channel === "text").length, 0);
   T.advance(40 * T.DAY); const all = letters(T, e);
   // Working days from Monday January 25: 2 is Wed 1/27, 5 is Mon 2/1, 9 is Fri 2/5, 14 is Fri 2/12.
@@ -157,8 +157,11 @@ test("the wording of every letter, in every voice, passes the output check and h
     const L = letters(T, e); assert.equal(L.length, 5); for (const m of L) { assert.deepEqual(T.outputCheck(m.body, "email", { year: 2026 }), []); assert.ok(!/text|reply with a photo|STOP|\{|¶|§/i.test(m.body), voice + ": " + m.body); assert.match(m.body, /Dana Whitfield\nMaple & Pine Tax Co\.$/); } }
   const { T } = lfirm(); for (const v of ["professional", "warm", "brief"]) for (const code of Object.keys(T.LETTER[v].en)) assert.ok(!/reply with a photo|photo by reply|YES or NO|by text/i.test(T.LETTER[v].en[code]), v + " " + code);
 });
-test("a document with no issuer named reads as its own name: W-2 wage statement, never W-2 (W-2 wage statement)", () => {
-  const { T, e } = lfirm(); const w2 = item(T, e, "W2"); w2.payer = ""; assert.equal(T.itemTitle(w2, "en"), "W-2 wage statement"); assert.equal(T.itemTitle(item(T, e, "1098"), "en"), "1098 from Hillcrest Mortgage"); item(T, e, "1098").payer = ""; assert.equal(T.itemTitle(item(T, e, "1098"), "en"), "1098 (mortgage interest statement)");
+test("a document with no issuer named is asked for in the catalog's words, or the firm's own; a payer is shown by its display name", () => {
+  const { T, e } = lfirm(); T.setUser("u1"); const w2 = item(T, e, "W2"); w2.payer = ""; assert.equal(T.itemTitle(w2, "en"), "W-2 from each employer"); assert.equal(T.itemTitle(item(T, e, "1098"), "en"), "1098 from Hillcrest Mortgage");
+  item(T, e, "1098").payer = ""; assert.equal(T.itemTitle(item(T, e, "1098"), "en"), "1098 from your mortgage lender");
+  assert.equal(T.setCatalog("W2", { ask: "Your W-2 from every job you had" }), null); assert.equal(T.itemTitle(w2, "en"), "Your W-2 from every job you had"); assert.match(T.setCatalog("W2", { ask: "Your refund W-2" }), /cannot be used/);
+  w2.payer = "JPMORGAN CHASE BANK NA"; assert.equal(T.setAlias("JPMorgan Chase Bank, N.A.", "Chase"), null); assert.equal(T.itemTitle(w2, "en"), "W-2 from Chase");
 });
 test("TH-EML-2: the next letter can be read before it goes, word for word, without the client's link and without changing anything", () => {
   const { T, c, e } = lfirm(); e.confirmed = true; const before = JSON.stringify(T.dump()), p0 = T.letterPreview(e.id);

@@ -26,6 +26,8 @@ import { pdfCount, pdfCut, pdfPage, ready } from "./files.ts";
 import { registerPublic, type PublicDeps } from "./public.ts";
 import type { PrepareOpts } from "./kit.ts";
 import { planFor } from "./plan.ts";
+import { readPdf } from "./reader.ts";
+import { xlsxToCsv, XLSX_MAX_BYTES } from "./xlsx.ts";
 
 export interface ServerDeps {
   app: App; auth: AuthStore; signIn: SignIn; firms: Firms;
@@ -175,7 +177,7 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
 
   // ---- documents ----
   const MAX_UPLOAD = 25 * 1024 * 1024, SHOWN = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
-  f.addContentTypeParser(["application/octet-stream", "application/pdf", "image/jpeg", "image/png", "image/heic", "image/heif", "image/webp", "image/tiff"], { parseAs: "buffer", bodyLimit: MAX_UPLOAD }, (_req, b, done) => done(null, b));
+  f.addContentTypeParser(["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/octet-stream", "application/pdf", "image/jpeg", "image/png", "image/heic", "image/heif", "image/webp", "image/tiff"], { parseAs: "buffer", bodyLimit: MAX_UPLOAD }, (_req, b, done) => done(null, b));
   // T-90: a staff member adds a document they received some other way. It is prepared and checked like any other; the client is not messaged.
   f.post("/api/clients/:id/documents", { preHandler: full, bodyLimit: MAX_UPLOAD }, async (req, reply) => {
     const u = req.who!.user; if (u.role === "read_only") return reply.code(403).send({ error: "role", message: "Your account can look but not change things. Ask an owner to change your role." });
@@ -200,6 +202,21 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
     const u = req.who!.user, eid = (req.params as { id: string }).id, json = await d.readState(u.firmId), T0 = createEngine(); if (!json) return reply.code(404).send({ error: "no_firm", message: "This firm's workspace could not be found." }); T0.load(json);
     if (!T0.eng(eid)) return reply.code(404).send({ error: "no_client", message: "That client is not on your list." });
     return planFor(T0, eid, createEngine);
+  });
+  // docs/FETCH.md: a spreadsheet client list becomes CSV text, then goes through importBegin like a CSV. Nothing of the file is kept.
+  f.post("/api/imports/xlsx", { preHandler: full, bodyLimit: XLSX_MAX_BYTES }, async (req, reply) => {
+    const u = req.who!.user; if (u.role === "read_only") return reply.code(403).send({ error: "role", message: NO.read_only });
+    if (!Buffer.isBuffer(req.body) || !req.body.length) return reply.code(400).send({ error: "bad_request", message: "Choose the spreadsheet first." });
+    const r = xlsxToCsv(new Uint8Array(req.body)); return r.error ? reply.code(400).send({ error: "xlsx", message: r.error + "." }) : reply.header("cache-control", "no-store").send({ csv: r.csv });
+  });
+  // docs/FETCH.md: reading last year's file on the server, when the firm chooses that or the browser could not. The file is held in
+  // memory for this request only; only the findings (numbers stripped) are kept, on the client the file belongs to.
+  f.post("/api/imports/:id/read", { preHandler: full, bodyLimit: MAX_UPLOAD }, async (req, reply) => {
+    const u = req.who!.user, bid = (req.params as { id: string }).id, q = req.query as { name?: string; n?: string }; if (u.role === "read_only") return reply.code(403).send({ error: "role", message: NO.read_only });
+    if (!Buffer.isBuffer(req.body) || !req.body.length) return reply.code(400).send({ error: "bad_request", message: "Choose a PDF first." });
+    const read = await readPdf(new Uint8Array(req.body)), name = str(q.name).slice(0, 200) || "file.pdf";
+    const r = await d.app.staff(u.firmId, u.id, (T: Engine) => T.importRecord(bid, { file: name, kind: read.kind, status: read.status, by: "rules", where: "server", findings: read.findings }, q.n ? +q.n : null));
+    say("prior_read", u.firmId, read.kind, read.status, read.findings.length); return reply.header("cache-control", "no-store").send({ ...r, kind: read.kind, status: read.status, found: read.findings.length });
   });
   // T-46: a prior-year return in, a proposed checklist out. The file is read in memory and never kept; only the page count is recorded.
   f.post("/api/clients/:id/prior", { preHandler: full, bodyLimit: MAX_UPLOAD }, async (req, reply) => {

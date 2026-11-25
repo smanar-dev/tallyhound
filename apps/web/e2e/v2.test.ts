@@ -19,7 +19,7 @@ scene("v2: in approve mode Go fetch drafts one letter listing every document; Ap
   await page.getByRole("button", { name: "Go fetch" }).click(); await page.getByText(/^Off it goes\. The first letter goes by email/).waitFor();
   await page.getByRole("tab", { name: /Conversation/ }).click(); const draft = page.getByLabel(/^Draft: The first letter/); await draft.waitFor();
   assert.equal(W.email.sent.length, mails, "the first letter is a draft, not an email"); const body = await draft.inputValue();
-  assert.match(body, /^Hi Sam,\n\nTo prepare your 2026 return we still need:\n\n {2}- W-2 wage statement\n {2}- 1098 \(mortgage interest statement\)\n\nUpload them here\. No account or password needed:\n/); assert.match(text(await page.locator(".convo").textContent()), /Subject: 2 documents for your 2026 tax return/);
+  assert.match(body, /^Hi Sam,\n\nTo prepare your 2026 return we still need:\n\n {2}- W-2 from each employer\n {2}- 1098 from your mortgage lender\n\nUpload them here\. No account or password needed:\n/); assert.match(text(await page.locator(".convo").textContent()), /Subject: 2 documents for your 2026 tax return/);
   await page.getByRole("button", { name: "Approve and send" }).first().click(); await page.getByText("Approved. It goes out now.").waitFor(); await draft.waitFor({ state: "detached" });
   const sent = W.email.sent.at(-1)! as any; assert.equal(W.email.sent.length, mails + 1); assert.equal(sent.to, "sam@x.example"); assert.equal(sent.subject, "2 documents for your 2026 tax return"); assert.match(sent.body, /https:\/\/go\.tallyhound\.test\/u\/[a-z]+-[a-z]{28}\n/); assert.equal(W.sms.sent.length, 0);
   // The letter keeps its lines on screen, and one client can be set to send on its own.
