@@ -67,7 +67,7 @@ export function uploadPageV2(firm: FirmView, o: UploadView) {
   if (o.done) body.push(h("p", { key: "d" }, firm.name + " has everything it asked for."));
   else {
     if (o.items.length) body.push(h("div", { key: "l", className: "card" }, h("p", { className: "muted small" }, firm.name + " still needs"),
-      h("ul", { className: "owed" }, o.items.map((it) => h("li", { key: it.id },
+      h("ul", { className: "owed" }, o.items.map((it) => h("li", { key: it.id, "data-item": it.id },
         h("p", { className: "ask" }, it.title), it.note ? h("p", { className: "muted small" }, it.note) : null,
         // The two buttons open the same file pickers as the form below, so the page needs no script to send a file.
         h("p", { className: "acts" }, h("label", { htmlFor: "cam", className: "btn sm camonly" }, "Take photo"), " ", h("label", { htmlFor: "photo", className: "btn sm" }, "Choose file")),
@@ -86,8 +86,9 @@ export function uploadPageV2(firm: FirmView, o: UploadView) {
         h("button", { className: "btn pri" }, "Send"))));
     body.push(h("form", { key: "f", id: "send", method: "post", action: o.action, encType: "multipart/form-data" },
       h("div", { className: "pick cam" }, h("label", { htmlFor: "cam" }, "Take a photo"), h("input", { id: "cam", name: "file", type: "file", accept: "image/*", capture: "environment" })),
-      h("div", { className: "pick" }, h("label", { htmlFor: "photo" }, "Choose files"), h("input", { id: "photo", name: "file", type: "file", accept: "image/*,application/pdf", multiple: true })),
-      h("p", { className: "muted small" }, "A phone photo or a PDF both work. " + UPLOAD_TYPES + " You can also send something that isn't on the list, if you think " + firm.name + " needs it."), h("ul", { id: "rows", "aria-live": "polite" }), h("button", { className: "btn pri nojs" }, "Send")));
+      // UX review: one place the files wait before sending. A button above puts the file here, and the chosen file's name shows here, script or not.
+      h("div", { className: "pick" }, h("label", { htmlFor: "photo" }, o.items.length ? "Files to send" : "Choose files"), o.items.length ? h("p", { className: "muted small" }, "A file you choose with a button above shows here. Then press Send.") : null, h("input", { id: "photo", name: "file", type: "file", accept: "image/*,application/pdf", multiple: true })),
+      h("p", { className: "muted small" }, "A phone photo or a PDF both work. " + UPLOAD_TYPES + " Something that isn't on the list can go here too, if you think " + firm.name + " needs it."), h("ul", { id: "rows", "aria-live": "polite" }), h("button", { className: "btn pri nojs" }, "Send")));
     body.push(h("p", { key: "n", className: "muted small" }, "No account or password is needed. We never show documents here."));
   }
   return frame("Send your documents", firm, body, !o.done, o.checking ? 4 : 0);

@@ -52,3 +52,9 @@ details summary{cursor:pointer;color:#4F5F57;font-size:14px;margin-top:6px}form.
 .acts label.btn.sm{display:block;margin:0 0 8px;text-align:center}.owed li details{margin-top:2px}
 details.news summary{cursor:pointer;font-size:16px;color:#13261F}details.news .newsgrid{border:0;padding:0;margin:10px 0;display:grid;grid-template-columns:1fr;gap:6px}@media (min-width:520px){details.news .newsgrid{grid-template-columns:1fr 1fr}}
 label.tick{display:flex;gap:8px;align-items:flex-start;font-size:15px;line-height:1.35}label.tick input{width:20px;height:20px;margin-top:1px}
+/* UX review: every tap target on a client page is at least 44px high (summaries, the date box, the ticks, footer links). */
+details summary{min-height:44px;display:flex;align-items:center;gap:6px;padding:4px 0}details summary::-webkit-details-marker{margin-right:4px}
+input[type=date]{font:inherit;min-height:44px;padding:8px 10px;border:1px solid #B9B3A3;border-radius:10px;background:#fff}
+label.tick{min-height:44px;align-items:center}label.tick input{width:24px;height:24px;margin-top:0;flex:none}
+footer a{display:inline-block;min-height:44px;line-height:44px;padding:0 2px}
+.pick label{font-weight:700}.pick .muted{margin:4px 0 0}

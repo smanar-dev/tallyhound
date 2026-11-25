@@ -79,10 +79,12 @@ for (const kind of KINDS) {
     const u = await x.linkOf(), page = await H.server.inject({ method: "GET", url: u }); assert.equal(page.statusCode, 200); const t = words(page.body);
     assert.match(t, /Hi Maria .*Test CPAs 1 still needs W-2 from Acme Logistics .*1098 from Hillcrest Mortgage/); assert.ok(!/maria@|Garcia|pat@|@x\.example/.test(page.body), "the page shows more than a first name"); assert.equal(page.headers["set-cookie"], undefined);
     assert.equal((page.body.match(/Take photo/g) || []).length, 2); assert.match(page.body, /I don't have this one|I don&#x27;t have this one/);
+    // A file Tallyhound cannot open is answered at once, in words, and nothing is stored (QA review).
+    const txt = await x.upload(u, [["notes.txt", "text/plain", Buffer.from("hello")]]); assert.equal(txt.statusCode, 415); assert.match(words(txt.body), /We can't open that kind of file\. A photo \(JPG, PNG or HEIC\) or a PDF works\./);
     // A clean W-2: stored, sniffed, and the page says so.
     const up = await x.upload(u, [["w2.jpg", "image/jpeg", JPEG]]); assert.equal(up.statusCode, 303); const loc = String(up.headers.location); assert.match(loc, /\?up=[0-9a-f]{24}$/);
     await H.inbox.drain(); await H.worker.pass(); const res = await H.server.inject({ method: "GET", url: loc }); assert.match(words(res.body), /What you just sent Got it: W-2 from Acme Logistics\./); assert.ok(!/W-2 from Acme Logistics Take photo/.test(words(res.body)), "a document that passed is still asked for");
-    assert.deepEqual((await H.server.inject({ method: "GET", url: u + "/result?up=" + loc.split("up=")[1] })).json(), { done: true, lines: [{ ok: true, text: "Got it: W-2 from Acme Logistics." }] });
+    const rj = (await H.server.inject({ method: "GET", url: u + "/result?up=" + loc.split("up=")[1] })).json(); assert.equal(rj.received.length, 1, "the page is not told which item came off the list"); assert.deepEqual({ done: rj.done, lines: rj.lines }, { done: true, lines: [{ ok: true, text: "Got it: W-2 from Acme Logistics." }] });
     assert.deepEqual([...H.layer.tasks.values()].map((t) => [t.title, t.status]).sort(), [["1098 from Hillcrest Mortgage", "Open"], ["W-2 from Acme Logistics", "Done"]]);
     // Last year's mortgage statement: the fix sentence, not counted, still open in the layer.
     x.reading.doc = { ...W2, form: "1098", payer: "Hillcrest Mortgage", tax_year: 2025 }; const up2 = await x.upload(u, [["m.jpg", "image/jpeg", Buffer.concat([JPEG, Buffer.from("2")])]]); await H.inbox.drain(); await H.worker.pass();
@@ -103,7 +105,7 @@ for (const kind of KINDS) {
     assert.equal((await reply("r-stranger", "I am not a client", { from: "stranger@elsewhere.example" })).statusCode, 200); assert.equal((await x.state()).S.msgs.filter((m: any) => m.dir === "in").length, 0, "a sender who is not on the client list was read");
     // 8: a tax question. Passed on, and the reply gives no advice.
     const n0 = H.layer.letters.length; assert.equal((await reply("r1", "can I deduct my home office?\n\nOn Mon, Jan 25, 2027 Pat Owner wrote:\n> Hi Maria,\n> we still need")).statusCode, 200); await H.worker.pass();
-    assert.equal((await open("question")).length, 1); const ack = H.layer.letters[n0]!; assert.match(ack.body, /^Good question\. I've passed it to Pat/); assert.ok(!/deduct|you can|you should/i.test(ack.body)); assert.ok(!(await x.state()).S.msgs.some((m: any) => m.dir === "in" && /wrote:|> Hi/.test(m.body)), "the quoted letter was kept as the client's words");
+    assert.equal((await open("question")).length, 1); const ack = H.layer.letters[n0]!; assert.match(ack.body, /^Hi Maria,\n\nGood question\. I've passed it to Pat/); assert.ok(!/deduct|you can|you should/i.test(ack.body)); assert.ok(!(await x.state()).S.msgs.some((m: any) => m.dir === "in" && /wrote:|> Hi/.test(m.body)), "the quoted letter was kept as the client's words");
     // The same call delivered again changes nothing.
     await reply("r1", "can I deduct my home office?"); await H.worker.pass(); assert.equal((await open("question")).length, 1); assert.equal(H.layer.letters.length, n0 + 1);
     // 7: "after the 15th". A suggested step; nothing changes until the click.
@@ -215,7 +217,7 @@ for (const kind of KINDS) test("v2 (" + kind + "): without the mail layer the sa
   assert.equal(H.layer.calls, 0, "the mail layer was called for a firm that does not use it");
   // A reply to that address is read like any reply.
   await H.postmarkPost("/hooks/postmark/inbound", { MessageID: "pm1", OriginalRecipient: "test1@docs.tallyhound.test", From: "Maria Garcia <maria@x.example>", Subject: "Re: 2 documents", TextBody: "can I deduct my home office?", Headers: [{ Name: "Authentication-Results", Value: "mx; dmarc=pass" }], Attachments: [] });
-  await H.inbox.drain(); await H.worker.pass(); let T = await state(); assert.equal(T.S.tasks.filter((t: any) => t.kind === "question" && t.status === "open").length, 1); assert.match((H.email.sent.at(-1) as any).body, /^Good question\. I've passed it to Pat/); assert.equal(T.S.msgs.find((m: any) => m.dir === "in").channel, "email");
+  await H.inbox.drain(); await H.worker.pass(); let T = await state(); assert.equal(T.S.tasks.filter((t: any) => t.kind === "question" && t.status === "open").length, 1); assert.match((H.email.sent.at(-1) as any).body, /^Hi Maria,\n\nGood question\. I've passed it to Pat/); assert.equal(T.S.msgs.find((m: any) => m.dir === "in").channel, "email");
   // The upload link: live, then switched off by staff, then replaced.
   const u = () => "/u/" + T.S.firm.slug + "-" + T.S.engs[0].link.key, get = (url: string) => H.server.inject({ method: "GET", url }), old = u();
   assert.equal((await get(old)).statusCode, 200); assert.equal((await owner.post("/api/act", { fn: "revokeLink", args: [T.S.engs[0].id] })).status, 200);

@@ -36,12 +36,14 @@
     };
     img.onerror = function () { end(null); }; setTimeout(function () { end(null); }, 4000); img.src = url;
   }
+  // A document that arrived comes off the "still needs" list at once, so the page never says both "got it" and "still needs it".
+  function gone(ids) { for (var i = 0; ids && i < ids.length; i++) { var li = document.querySelector('li[data-item="' + String(ids[i]).replace(/[^a-z0-9_-]/gi, "") + '"]'); if (li && li.parentNode) li.parentNode.removeChild(li); } }
   // What the sniff test found for this file: one sentence from the server, asked for every few seconds for about a minute.
   function found(r, up, n) {
     var x = new XMLHttpRequest(); x.open("GET", form.action + "/result?up=" + encodeURIComponent(up)); x.setRequestHeader("x-tallyhound-client", "1");
     x.onload = function () {
       var j = null; try { j = JSON.parse(x.responseText); } catch { /* not ours */ }
-      if (j && j.lines && j.lines.length && (j.done || n >= 20)) { var bad = false, t = []; for (var i = 0; i < j.lines.length; i++) { if (!j.lines[i].ok) bad = true; t.push(j.lines[i].text); } say(r, bad ? "bad" : "done", (bad ? "" : "✓ ") + t.join(" ")); return; }
+      if (j && j.lines && j.lines.length && (j.done || n >= 20)) { var bad = false, t = []; for (var i = 0; i < j.lines.length; i++) { if (!j.lines[i].ok) bad = true; t.push(j.lines[i].text); } say(r, bad ? "bad" : "done", (bad ? "" : "✓ ") + t.join(" ")); gone(j.received); return; }
       if (n >= 20) return say(r, "done", "✓ Received. We'll let you know if anything is missing.");
       setTimeout(function () { found(r, up, n + 1); }, 3000);
     };

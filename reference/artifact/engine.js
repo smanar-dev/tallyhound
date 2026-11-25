@@ -613,8 +613,13 @@
     }, extra || {});
     let tt = t; if (it && LONGDOC.includes(it.form)) tt = tt.replace(LONGHOW[lang][0], LONGHOW[lang][1]);
     if (!String(S.firm.phone || "").trim()) tt = tt.replace(" or call us on {firm_phone}", "").replace("Call {firm_phone} or email {firm_email}", "Email {firm_email}").replace("Please call {firm_phone}.", "Please contact your preparer directly.").replace(" o llámenos al {firm_phone}", "").replace("Llame al {firm_phone} o escriba a {firm_email}", "Escriba a {firm_email}").replace("Por favor llame al {firm_phone}.", "Por favor contacte a su preparador directamente.").replace(/\{firm_phone\}/g, S.firm.email || "");
-    return tt.replace(/\{(\w+)\}/g, (m, k) => (v[k] !== undefined && v[k] !== null ? v[k] : m)).replace(/\s+/g, " ")
-      .replace(/\b(need|missing) 1 documents\b/g, "$1 1 document").replace(/\ball 1 documents\b/g, "your document").replace(/\b(Necesitamos|faltan) 1 documentos\b/g, (m, w) => (w === "faltan" ? "falta 1 documento" : "Necesitamos 1 documento")).replace(/\blos 1 documentos\b/g, "su documento").replace(/([A-Za-z])\.\.(?=\s|$)/g, "$1.").replace(/ ?¶ ?/g, "\n").replace(/§/g, "  ").trim();   // a firm name ending in a full stop does not double it; ¶ is a line break in a letter
+    const out = tt.replace(/\{(\w+)\}/g, (m, k) => (v[k] !== undefined && v[k] !== null ? v[k] : m)).replace(/\s+/g, " ")
+      .replace(/\b(need|missing) 1 documents\b/g, "$1 1 document").replace(/\ball 1 documents\b/g, "your document").replace(/\b(Necesitamos|faltan) 1 documentos\b/g, (m, w) => (w === "faltan" ? "falta 1 documento" : "Necesitamos 1 documento")).replace(/\blos 1 documentos\b/g, "su documento").replace(/([A-Za-z])\.\.(?=\s|$)/g, "$1.").replace(/ ?¶ ?/g, "\n").replace(/§/g, "  ").trim();
+    // Email-first (UX review): one document is "it", and a reply by email is a letter too, so it opens with the client's name and is signed.
+    if (!LETTERS() || !c || !c.first) return out;
+    let o = /^L\d/.test(code) && +v.k === 1 ? out.replace(lang === "es" ? "Súbalos aquí" : "Upload them here", lang === "es" ? "Súbalo aquí" : "Upload it here") : out;
+    if (!/^L\d/.test(code) && !(extra && extra.bare) && !/^(Hi|Hello|Dear|Hola|Estimad)/.test(o)) o = (lang === "es" ? "Hola " : "Hi ") + c.first + ",\n\n" + o.replace(new RegExp("^(Thanks|Thank you|Gracias),? " + c.first + "[.,!]\\s*"), "$1. ") + "\n\n" + (lang === "es" ? "Gracias,\n" : "Thank you,\n") + v.sign_name + (v.sign_name !== S.firm.sender ? "\n" + S.firm.sender : "");
+    return o;   // a firm name ending in a full stop does not double it; ¶ is a line break in a letter
   }
   function outputCheck(body, channel, vars) {
     const errs = [];
@@ -747,7 +752,7 @@
      the item. Otherwise a "gone quiet" item is opened, saying what is still missing and how many times each was asked. */
   const CALL_OUTCOMES = { reached_will_send: "Reached: will send", reached_has_none: "Reached: does not have some", voicemail: "Left a voicemail", no_answer: "No answer", wrong_number: "Wrong number" }, CALL_FOLLOW_UP_HOUR = 9;
   const BACKED = { question_waiting: "question", review_waiting: "document", client_says_none: "says_none" };
-  const askedCount = (e, i) => S.msgs.filter((m) => m.engId === e.id && m.dir === "out" && m.itemId === i.id && !["discarded", "approval", "writing"].includes(m.status)).length;
+  const askedCount = (e, i) => S.msgs.filter((m) => m.engId === e.id && m.dir === "out" && (m.itemId === i.id || (m.letterItems || []).includes(i.id)) && !["discarded", "approval", "writing"].includes(m.status)).length;
   function callScript(e, c) { const open = openItems(e.id); return "Hi " + c.first + ", it's " + ((S.users.find((u) => u.id === c.preparer) || {}).first || "your preparer") + " at " + S.firm.name + ". We're still missing " + open.length + " document" + (open.length === 1 ? "" : "s") + " for your return: " + open.map((i) => (i.custom || FORMS[i.form].plain) + (i.payer ? " from " + i.payer : "")).join(", ") + ". Is there anything making these hard to get? " + (LETTERS() ? "You can upload them with the link in our emails." : "You can text photos to the same number we've been using."); }
   /* TH-BRK-12: no usable channel is left (texts stopped or failing with no email to fall back on, or email bounced with no texts).
      A STOP that leaves email open is not this: it is a note on the client's activity and nothing more. */
@@ -771,7 +776,7 @@
   function unstick(e) { if (e.status === "stuck") { e.status = "in_progress"; e.stuck = null; e.step = 0; settleQuiet(e); } }
   /** TH-CMP-2: how much of the checklist is in and verified. Received or confirmed as not needed counts; "the client says they
       don't have it" does not, until a person confirms. */
-  function verified(eid) { const L = itemsOf(eid).filter((i) => ["expected", "requested", "partial", "in_review", "says_none", "received", "waived"].includes(i.state)); return { n: L.filter((i) => i.state === "received" || i.state === "waived").length, m: L.length }; }
+  function verified(eid) { const L = itemsOf(eid).filter((i) => ["expected", "requested", "partial", "in_review", "says_none", "received", "waived"].includes(i.state)); const waiting = (i) => i.state === "received" && S.docs.some((d) => d.id === i.docId && d.unconfirmed); const w = L.filter(waiting).length; return Object.assign({ n: L.filter((i) => (i.state === "received" && !waiting(i)) || i.state === "waived").length, m: L.length }, w ? { waiting: w } : {}); }
   /* T-120: the closing question. When a checklist is finished and the firm has switched this on, the client is asked once whether
      anything changed this year that nobody asked about. NO, or three days of silence, gets "that's everything". YES goes to a
      person. A client who already answered the check-in has been asked, so is not asked again. */
@@ -880,11 +885,11 @@
     return CATALOG.map(([code, group, issuerLabel, ask, arrives, fl]) => ({ code, display: formDisplay(code), name: FORMS[code].plain, group, issuerLabel, ask: askPhrase(code), askStd: ask.replace("last year's", y + ""), arrives, holdUntil: RELEASE[code] ? releaseOf({ form: code }, { year: y }) : null, oneTime: !!fl.oneTime, newForYear: !!fl.newForYear, hidden: !!(o[code] && o[code].hidden), changed: !!(o[code] && o[code].ask) }));
   }
   /** How a kind of document is asked for when nobody knows who issues it: the firm's wording if it changed it, else the catalog's. */
-  function askPhrase(code) { const r = CAT[code]; if (!r) return null; const o = (S.firm.catalog || {})[code]; return (o && o.ask) || r[3].replace("last year's", String(S.firm.taxYear || 2026)); }
+  function askPhrase(code) { const r = CAT[code]; if (!r) return null; const o = (S.firm.catalog || {})[code]; return (o && o.ask) || r[3].replace("last year's", String((S.firm.taxYear || 2026) - 1)); }   // last year's return is the one before the year being prepared
   function setCatalog(code, p) {
     if (!may("owner")) return "Only an owner can change this"; if (!CAT[code]) return "Not in the catalog"; const c = (S.firm.catalog = S.firm.catalog || {}), o = (c[code] = c[code] || {});
     if (p && p.hidden !== undefined) o.hidden = p.hidden === true;
-    if (p && p.ask !== undefined) { const v = String(p.ask || "").replace(/[<>{}]/g, "").replace(/\s+/g, " ").trim(); if (v) { if (v.length < 5 || v.length > 140) return "Write between 5 and 140 characters"; const errs = outputCheck(v, "email", {}).filter((x) => !x.startsWith("digit run")); if (errs.length) return "That wording cannot be used: " + errs.join(", "); o.ask = v; } else delete o.ask; }
+    if (p && p.ask !== undefined) { const v = String(p.ask || "").replace(/[<>{}]/g, "").replace(/\s+/g, " ").trim(); if (v && cleanText(v) !== v) return "Leave out numbers longer than four digits and amounts. Letters never carry them"; if (v) { if (v.length < 5 || v.length > 140) return "Write between 5 and 140 characters"; const errs = outputCheck(v, "email", {}).filter((x) => !x.startsWith("digit run")); if (errs.length) return "That wording cannot be used: " + errs.join(", "); o.ask = v; } else delete o.ask; }
     audit("settings.catalog", formDisplay(code) + (o.hidden ? " hidden" : " shown") + (o.ask ? ", asked as “" + o.ask + "”" : "")); return null;
   }
   /* The four firm rules (Settings). On unless the firm switches one off. Switching one off mid-season changes no open list. */
@@ -894,7 +899,7 @@
   /* Payer display names: "JPMORGAN CHASE BANK NA" shown as "Chase" in letters and on the upload page. The firm's to edit. */
   const aliasKey = (raw) => String(raw || "").toUpperCase().replace(/[.,']/g, "").replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
   function payerShown(raw) { if (!raw) return raw; const a = (S.firm.aliases || {})[aliasKey(raw)]; return a || raw; }
-  function setAlias(raw, shown) { if (!may()) return "Not allowed"; const k = aliasKey(raw); if (!k) return "Give the name as it appears"; const v = String(shown || "").replace(/[<>{}]/g, "").replace(/\s+/g, " ").trim().slice(0, 60); S.firm.aliases = Object.assign({}, S.firm.aliases); if (v && v.toUpperCase() !== k) S.firm.aliases[k] = v; else delete S.firm.aliases[k]; audit("settings.alias", k + (v ? " shown as " + v : " shown as it is")); return null; }
+  function setAlias(raw, shown) { if (!may()) return "Not allowed"; const k = aliasKey(raw); if (!k) return "Give the name as it appears"; const v = String(shown || "").replace(/[<>{}]/g, "").replace(/\s+/g, " ").trim().slice(0, 60); if (v && cleanText(v) !== v) return "Leave out numbers longer than four digits and amounts. Letters never carry them"; S.firm.aliases = Object.assign({}, S.firm.aliases); if (v && v.toUpperCase() !== k) S.firm.aliases[k] = v; else delete S.firm.aliases[k]; audit("settings.alias", k + (v ? " shown as " + v : " shown as it is")); return null; }
 
 
 
@@ -930,19 +935,21 @@
   const batchOf = (bid) => (S.imports || []).find((b) => b.id === bid && !b.gone);
   function importBegin(fileName, text) {
     if (!may()) return { error: "Not allowed" }; const p = parseCSV(String(text || "")); if (!p.head.length) return { error: "That file has no header row" };
+    if (!p.rows.some((r) => r.some((v) => String(v || "").trim()))) return { error: "That file has a header row but no clients under it" };   // QA review: no empty batches
     if (p.rows.length > IMPORT_MAX_ROWS) return { error: "Up to " + IMPORT_MAX_ROWS.toLocaleString() + " rows a file. Split it into smaller files" };
     const saved = (S.firm.importMaps || {})[sigOf(p.head)], map = saved && saved.length === p.head.length ? saved.map((m, i) => (p.sensitive[i] ? "" : m)) : p.map;
-    const b = { id: id("b"), file: String(fileName || "clients.csv").replace(/[<>]/g, "").slice(0, 100), at: new Date(S.now), expiresAt: new Date(S.now.getTime() + IMPORT_DAYS * DAY), by: S.user ? S.user.name : "", head: p.head, map, sensitive: p.sensitive, status: "mapping", savedMap: !!saved, raw: p.rows.map((r) => r.map((v, i) => (p.sensitive[i] ? "" : v))), rows: [], tray: [] };
+    const b = { id: id("b"), file: String(fileName || "clients.csv").replace(/[<>]/g, "").slice(0, 100), at: new Date(S.now), expiresAt: new Date(S.now.getTime() + IMPORT_DAYS * DAY), by: S.user ? S.user.name : "", head: p.head, map, sensitive: p.sensitive, status: "mapping", savedMap: !!saved, raw: p.rows.map((r) => r.map((v, i) => (p.sensitive[i] ? "" : scrub(v).text))), rows: [], tray: [] };   // and an SSN or card number typed into any other cell is removed
     (S.imports = S.imports || []).push(b); return importView(b.id);
   }
   /** Confirms the columns, saves them for the firm's next import, and normalises, matches and validates every row. */
   function importMap(bid, map) {
     const b = batchOf(bid); if (!b) return { error: "That import has expired. Start again" }; if (!may()) return { error: "Not allowed" };
+    if (!b.raw) return importView(b.id);   // QA review: confirmed already (another tab, a double click). Nothing runs twice; this tab just catches up.
     if (Array.isArray(map) && map.length === b.head.length) b.map = map.map((m, i) => (b.sensitive[i] || !IMPORT_FIELDS.includes(m) ? "" : m));
     if (!b.map.includes("email") && !b.map.includes("first") && !b.map.includes("name") && !b.map.includes("last")) return { error: "Choose which column holds the names" };
     S.firm.importMaps = Object.assign({}, S.firm.importMaps, { [sigOf(b.head)]: b.map.slice() });
-    const idx = (f) => b.map.indexOf(f), g = (r, f) => (idx(f) >= 0 ? String(r[idx(f)] || "") : ""), seenEmail = new Set(), out = [];
-    const clean = (v) => String(v || "").replace(/[<>]/g, "").replace(/^[=+\-@\t]+/, "").replace(/\s+/g, " ").trim().slice(0, 60), nice = (v) => (v && v === v.toUpperCase() && /[A-Z]{2}/.test(v) ? v.toLowerCase().replace(/(^|[\s'-])([a-z])/g, (m, a, b2) => a + b2.toUpperCase()) : v);
+    const idx = (f) => b.map.indexOf(f), g = (r, f) => (idx(f) >= 0 ? String(r[idx(f)] || "") : ""), seenEmail = new Set(), seenAt = new Map(), seenName = new Map(), out = [];
+    const clean = (v) => String(v || "").replace(/[<>]/g, "").replace(/^[=+\-@\t]+/, "").replace(/\s+/g, " ").trim().slice(0, 60), nice = (v) => (v && ((v === v.toUpperCase() && /\p{Lu}{2}/u.test(v)) || (v === v.toLowerCase() && /\p{Ll}{2}/u.test(v))) ? v.toLowerCase().replace(/(^|[\s'-])(\p{L})/gu, (m, a, b2) => a + b2.toUpperCase()) : v);   // ÉMILE and josé both come out as written on a letter
     b.raw.forEach((r, k) => {
       const nm = nice(clean(g(r, "name"))), sp = nice(clean(g(r, "spouse"))), parts = nm.includes(",") ? nm.split(",").map((x) => x.trim()).reverse() : nm.replace(/\s*(&| and ).*$/i, "").split(" ");
       const first = nice(clean(g(r, "first"))) || (nm ? (parts.length > 1 ? parts.slice(0, -1).join(" ") : parts[0]) : ""), last = nice(clean(g(r, "last"))) || (nm && parts.length > 1 ? parts[parts.length - 1] : "");
@@ -959,12 +966,14 @@
       if (okEmail && (byEmail || seenEmail.has(email))) {
         const other = byEmail || null, family = other && other.last.toLowerCase() === last.toLowerCase() && other.first.toLowerCase() !== first.toLowerCase();
         if (family) { row.status = "possible_duplicate"; row.why = "Shares an email with " + other.first + " " + other.last + ". A second return in the same household?"; row.like = other.id; out.push(row); return; }
-        row.status = "duplicate"; row.why = "Already a client"; row.clientId = other ? other.id : null; out.push(row); return;
+        row.status = "duplicate"; row.why = seenAt.has(email) ? "Same email as row " + seenAt.get(email) + " in this file" : "Already a client"; row.clientId = other ? other.id : null; out.push(row); return;
       }
       const sameNamePhone = phone ? S.clients.find((c) => c.mobile === phone && c.first.toLowerCase() === first.toLowerCase() && c.last.toLowerCase() === last.toLowerCase()) : null;
       if (sameNamePhone) { row.status = "possible_duplicate"; row.why = "Same name and phone as " + sameNamePhone.first + " " + sameNamePhone.last + ", with a different email"; row.like = sameNamePhone.id; out.push(row); return; }
-      if (okEmail) seenEmail.add(email); if (!okEmail) { row.status = "no_email"; row.why = email ? "Email is not valid: no letter goes until it is fixed" : "No email: no letter goes until one is added"; }
-      importCreate(b, row, r, g); out.push(row);
+      // Two rows with the same name and no email are probably one person entered twice: a person decides (QA review).
+      const nk = (first + "|" + last).toLowerCase(); if (!okEmail && seenName.has(nk)) { const was = seenName.get(nk); row.status = "possible_duplicate"; row.why = "Same name as row " + was.n + ", and neither has an email. The same person twice?"; row.like = was.clientId; out.push(row); return; }
+      if (okEmail) { seenEmail.add(email); seenAt.set(email, row.n); } if (!okEmail) { row.status = "no_email"; row.why = email ? "Email is not valid: no letter goes until it is fixed" : "No email: no letter goes until one is added"; }
+      importCreate(b, row, r, g); out.push(row); if (!okEmail && !seenName.has(nk)) seenName.set(nk, row);
     });
     b.rows = out; b.status = "records"; b.dropped = b.head.filter((h, i) => b.sensitive[i]); delete b.raw;
     audit("import", b.file + ": " + out.filter((r) => ["ok", "no_email"].includes(r.status) || r.created).length + " new, " + out.filter((r) => r.status === "updated").length + " updated, " + out.filter((r) => r.status === "duplicate").length + " already clients, " + out.filter((r) => r.status === "possible_duplicate").length + " to decide" + (b.dropped.length ? ". Never imported: " + b.dropped.join(", ") : ""));
@@ -986,13 +995,13 @@
   /** One file read in the browser (or on the server): its findings go to the row it belongs to, or to the tray. */
   function importRecord(bid, rec, n) {
     const b = batchOf(bid); if (!b) return { error: "That import has expired. Start again" }; if (!may()) return { error: "Not allowed" };
-    const rows = b.rows.filter((r) => r.engId), recip = ((rec && rec.findings) || []).find((f) => f.kind === "recipient"), name = " " + String((rec && rec.file) || "").toLowerCase().replace(/[_.\-]+/g, " ") + " ";
+    const rows = b.rows.filter((r) => r.engId), recip = ((rec && rec.findings) || []).find((f) => f.kind === "recipient"), name = " " + String((rec && rec.file) || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[_.\-]+/g, " ") + " ";
     let row = n ? rows.find((r) => r.n === n) : null;
     // A client ID in the file name. A name like "2001 Garcia 2025 organizer" can hold two numbers that are both IDs: the last name decides.
-    if (!row) { const byRef = rows.filter((r) => r.ref && name.includes(" " + r.ref.toLowerCase() + " ")), named = byRef.filter((r) => name.includes(" " + r.last.toLowerCase() + " ")); if (byRef.length === 1) row = byRef[0]; else if (named.length === 1) row = named[0]; }
-    if (!row && recip) { const w = String(recip.recipient || "").toLowerCase(), hit = rows.filter((r) => w.includes(r.last.toLowerCase()) && w.includes(r.first.toLowerCase())); if (hit.length === 1) row = hit[0]; }
+    if (!row) { const byRef = rows.filter((r) => r.ref && name.includes(" " + r.ref.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() + " ")), named = byRef.filter((r) => name.includes(" " + r.last.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() + " ")); if (byRef.length === 1) row = byRef[0]; else if (named.length === 1) row = named[0]; }
+    if (!row && recip) { const w = String(recip.recipient || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(), hit = rows.filter((r) => w.includes(r.last.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()) && w.includes(r.first.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase())); if (hit.length === 1) row = hit[0]; }
     // Last, by the name in the file name: first and last name together, or a last name only one client in the batch has.
-    if (!row) { const lastIn = rows.filter((r) => r.last.length > 2 && name.includes(" " + r.last.toLowerCase() + " ")), both = lastIn.filter((r) => name.includes(r.first.toLowerCase())); if (both.length === 1) row = both[0]; else if (lastIn.length === 1) row = lastIn[0]; }
+    if (!row) { const lastIn = rows.filter((r) => r.last.length > 2 && name.includes(" " + r.last.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() + " ")), both = lastIn.filter((r) => name.includes(r.first.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase())); if (both.length === 1) row = both[0]; else if (lastIn.length === 1) row = lastIn[0]; }
     if (!row) { const t = { id: id("y"), at: new Date(S.now), rec: Object.assign({}, rec, { findings: ((rec && rec.findings) || []).slice(0, 200).map(cleanFinding).filter(Boolean), file: cleanText(String((rec && rec.file) || "")).slice(0, 100) }) }; b.tray.push(t); return { tray: t.id }; }
     const r = attachRecord(row.engId, rec); return { row: row.n, record: r && r.id };
   }
@@ -1097,11 +1106,11 @@
     if (!["off", "expected"].includes(it.state)) return "That item cannot be changed here"; if (on === true && it.state === "off") it.wasOff = true; it.state = on === true ? "expected" : "off"; it.firmTouched = true; sortList(e); return null;
   }
   /** Type the issuer where it was unknown, or correct it. Left blank, the client is asked in general terms. */
-  function setIssuer(iid, payer) { const it = S.items.find((x) => x.id === iid), e = it && eng(it.engId); if (!it || !e) return "No such item"; if (!may()) return "Not allowed"; const v = String(payer || "").replace(/[<>{}]/g, "").replace(/\s+/g, " ").trim().slice(0, 60); if (/\d{5,}|\$/.test(v)) return "A name only, with no numbers"; it.payer = v || null; it.firmTouched = true; listLog(e, "Issuer " + (v ? "set: " + v : "cleared") + " for " + formDisplay(it.form)); sortList(e); return null; }
+  function setIssuer(iid, payer) { const it = S.items.find((x) => x.id === iid), e = it && eng(it.engId); if (!it || !e) return "No such item"; if (!may()) return "Not allowed"; const v = String(payer || "").replace(/[<>{}]/g, "").replace(/\s+/g, " ").trim().slice(0, 60); if (/\$/.test(v) || cleanText(v) !== v) return "A name only, with no numbers"; it.payer = v || null; it.firmTouched = true; listLog(e, "Issuer " + (v ? "set: " + v : "cleared") + " for " + formDisplay(it.form)); sortList(e); return null; }
   /** Add any catalog type, with or without an issuer. After approval it is asked for in the next letter. */
   function addCatalogItem(eid, code, payer) {
     const e = eng(eid); if (!e) return "No such client"; if (!may()) return "Not allowed"; if (!CAT[code]) return "Choose a document from the catalog";
-    const v = String(payer || "").replace(/[<>{}]/g, "").replace(/\s+/g, " ").trim().slice(0, 60); if (/\d{5,}|\$/.test(v)) return "A name only, with no numbers";
+    const v = String(payer || "").replace(/[<>{}]/g, "").replace(/\s+/g, " ").trim().slice(0, 60); if (/\$/.test(v) || cleanText(v) !== v) return "A name only, with no numbers";
     if (S.items.some((i) => i.engId === eid && !i.custom && ["expected", "requested", "partial"].includes(i.state) && sameItem(i, code, v) && (!v || i.payer))) return "That is already on the list";
     const it = proposeItem(e, { form: code, payer: v || null, source: "added", why: "Added by " + (S.user ? S.user.name : "the firm") }); it.firmTouched = true; it.state = "expected";
     listLog(e, "Added " + itemTitle(it, "en")); timeline(e, "Added to the list: " + itemTitle(it, "en"), S.user.name);
@@ -1152,7 +1161,9 @@
     const it = S.items.find((x) => x.id === iid), e = it && eng(it.engId), c = e && client(e.clientId); if (!it || !c) return "No such item"; if (!may()) return "Not allowed";
     if (contactId && !(c.contacts || []).some((x) => x.id === contactId && !x.emailOff)) return "Choose one of this client's contacts"; if (!OPEN.includes(it.state) && it.state !== "off") return "Only an item still owed can be assigned";
     if (contactId) it.assignee = contactId; else delete it.assignee; it.firmTouched = true; const who = contactId ? c.contacts.find((x) => x.id === contactId).name : c.first;
-    listLog(e, itemTitle(it, "en") + " now asked of " + who); timeline(e, itemTitle(it, "en") + " will be asked of " + who, S.user.name); if (e.status === "in_progress" && LETTERS()) letterSoon(e); return null;
+    listLog(e, itemTitle(it, "en") + " now asked of " + who); timeline(e, itemTitle(it, "en") + " will be asked of " + who, S.user.name);
+    if (e.status === "in_progress" && LETTERS() && contactId) e.contactFirst = { id: contactId, at: nextMorning(S.now) };   // the client's own reminders keep their days
+    return null;
   }
   /* "Anything new in 2026?" on the upload page (docs/FETCH.md). Fourteen choices and one optional name. Notes go straight to the
      client's page; suggested documents wait in the review queue for the firm to add with one click. A suggestion already on the
@@ -1225,6 +1236,28 @@
   function restartRun(e) { if (!LETTERS() || e.status !== "in_progress") return; const P = CADENCE_PRESETS[cadenceFor(e).key]; e.run = new Date(S.now); e.step = 1; delete e.runFresh; e.next = addWorkDays(S.now, P.days[0]); }
   // Something a person did calls for a letter now (ask again, restart). It still goes on a working day, one a day.
   function letterSoon(e) { if (!LETTERS() || e.status !== "in_progress") return; e.runFresh = true; e.next = nextMorning(S.now); }
+  /** One letter to one group: the client, or one contact with their own items (docs/FETCH.md). A contact is written to as the person
+      helping with someone else's return: their first letter is always a first letter, and it says whose return it is (QA review). */
+  function letterTo(e, c, g, code, k, why, lang) {
+    if (g.who && code !== "L1" && !S.msgs.some((x) => x.engId === e.id && x.contactId === g.who && /^L/.test(x.tpl || ""))) code = "L1";   // a contact's first letter is never "a reminder"
+      const later = g.later.length ? (g.now.length ? "¶¶These usually arrive later. Send them when they come:¶" : "") + g.later.map((i) => "§- " + itemTitle(i, lang) + " (" + laterWhen(i, e, lang) + ")").join("¶") : "";
+      const p = g.who ? c.contacts.find((x) => x.id === g.who) : null, all = g.now.concat(g.later);
+      const news = code === "L1" && !g.who && firmRule("ask_news") ? (lang === "es" ? "¶¶¿Algo nuevo este año, como un trabajo nuevo, una casa comprada o vendida, o un bebé? En la misma página puede contarnos." : "¶¶Anything new this year, such as a new job, a home bought or sold, or a new baby? The same page lets you tell us.") : "";
+      const mm = send(e, code, Object.assign({ news, items: g.now.map((i) => letterLine(i, lang)).join("¶") + later, k: all.length, years: g.now.map((i) => i.fixYear).filter(Boolean), why }, p ? { first: p.name.split(" ")[0], contact: p, link: contactLink(e, p.id) } : {}));
+      if (!mm) return null; mm.letterItems = all.map((i) => i.id); mm.stepIdx = k; mm.run = +(e.run || S.now); if (p) { mm.contactId = p.id; mm.why = why + "; to " + p.name; }
+      mm.subject = (LETTER_SUBJECT[lang] || LETTER_SUBJECT.en)[all.length === 1 ? 1 : 0].replace("{k}", all.length).replace("{year}", e.year) + (p ? " (" + c.first + " " + c.last + ")" : "");
+      g.now.forEach((i) => { if (i.state === "expected") i.state = "requested"; });
+      if (p) { mm.body = mm.body.replace(lang === "es" ? "su declaración de " + e.year : "your " + e.year + " return", lang === "es" ? "la declaración de " + e.year + " de " + c.first : c.first + "'s " + e.year + " tax return").replace(/^(Hi|Hola) ([^,\n]+),\n\n/, (x0) => x0 + (lang === "es" ? "Le escribimos de " + S.firm.sender + ", que prepara los impuestos de " + c.first + " " + c.last + ".\n\n" : "We're " + S.firm.sender + ", and we prepare " + c.first + " " + c.last + "'s taxes.\n\n")); if (mm.base) mm.base = mm.body; }
+      return mm;
+  }
+  /** A contact's first letter, on its own: assigning an item to them does not send the client another letter (QA review). */
+  function contactFirst(e) {
+    const cf = e.contactFirst, c = client(e.clientId); if (!cf || !c || !LETTERS() || e.status !== "in_progress") { delete e.contactFirst; return; } if (cf.at > S.now) return;
+    const p = (c.contacts || []).find((x) => x.id === cf.id && !x.emailOff); if (!p || S.msgs.some((x) => x.engId === e.id && x.contactId === p.id && /^L/.test(x.tpl || ""))) { delete e.contactFirst; return; }
+    const who = senderFor(c); if (!who.ok || sentToday(who.id) >= who.cap) { cf.at = nextMorning(dayAfter(S.now)); return; }
+    const g = { who: p.id, now: letterItems(e, p.id), later: laterItems(e, p.id) }; delete e.contactFirst; if (!g.now.length && !g.later.length) return;
+    letterTo(e, c, g, "L1", e.step || 0, "First letter to " + p.name, c.lang === "es" ? "es" : "en");
+  }
   function stepLetter(e) {
     const c = client(e.clientId), P = CADENCE_PRESETS[cadenceFor(e).key], days = P.days.concat([P.final]);
     if (halted() || e.status !== "in_progress" || e.takeover) return;
@@ -1248,13 +1281,7 @@
     let m = null;
     for (const g of groups) {
       if (!g.now.length && code !== "L1") continue;   // held items alone are never chased
-      const later = g.later.length ? (g.now.length ? "¶¶These usually arrive later. Send them when they come:¶" : "") + g.later.map((i) => "§- " + itemTitle(i, lang) + " (" + laterWhen(i, e, lang) + ")").join("¶") : "";
-      const p = g.who ? c.contacts.find((x) => x.id === g.who) : null, all = g.now.concat(g.later);
-      const news = code === "L1" && !g.who && firmRule("ask_news") ? (lang === "es" ? "¶¶¿Algo nuevo este año, como un trabajo nuevo, una casa comprada o vendida, o un bebé? En la misma página puede contarnos." : "¶¶Anything new this year, such as a new job, a home bought or sold, or a new baby? The same page lets you tell us.") : "";
-      const mm = send(e, code, Object.assign({ news, items: g.now.map((i) => letterLine(i, lang)).join("¶") + later, k: all.length, years: g.now.map((i) => i.fixYear).filter(Boolean), why }, p ? { first: p.name.split(" ")[0], contact: p, link: contactLink(e, p.id) } : {}));
-      if (!mm) continue; mm.letterItems = all.map((i) => i.id); mm.stepIdx = k; mm.run = +(e.run || S.now); if (p) { mm.contactId = p.id; mm.why = why + "; to " + p.name; }
-      mm.subject = (LETTER_SUBJECT[lang] || LETTER_SUBJECT.en)[all.length === 1 ? 1 : 0].replace("{k}", all.length).replace("{year}", e.year) + (p ? " (" + c.first + " " + c.last + ")" : "");
-      g.now.forEach((i) => { if (i.state === "expected") i.state = "requested"; }); if (!m) m = mm;
+      const mm = letterTo(e, c, g, code, k, why, lang); if (!mm) continue; if (!m) m = mm;
     }
     if (!m) { e.next = nextMorning(dayAfter(S.now)); return; }   // blocked by the output check: a review item is open, and nothing went
     e.letters = (e.letters || 0) + 1; e.letterDay = dayKey(S.now); e.step = k + 1;
@@ -1422,7 +1449,7 @@
     S.tasks.forEach((t) => { if (t.status !== "open") return; const e = t.engId && eng(t.engId), c = e && client(e.clientId);
       if (t.kind === "cant_reach" && e && c && (channelFor(c, e) || ["complete", "closed"].includes(e.status))) { t.status = "decided"; t.decision = "reachable_again"; t.by = "Tallyhound"; t.decidedAt = new Date(S.now); }
       if (t.snoozedUntil && t.snoozedUntil <= S.now) { delete t.snoozedUntil; t.reopenedAt = new Date(S.now); t.escalatedAt = null; (S.barks || []).forEach((b) => { if (b.status === "queued") b.taskIds = b.taskIds.filter((x) => x !== t.id); }); barkQueue(t, false); } });
-    S.engs.forEach((e) => { if (e.next && e.next <= S.now) step(e); });
+    S.engs.forEach((e) => { if (e.next && e.next <= S.now) step(e); if (e.contactFirst) contactFirst(e); });
     S.msgs.forEach((m) => { if (m.status === "approved" && m.sendAt && m.sendAt <= S.now) { const e = eng(m.engId), c = e && client(e.clientId); if (!e || e.takeover || ["closed", "opted_out", "paused"].includes(e.status) || (m.channel === "text" && c.textConsent !== "given") || (m.channel === "email" && !m.contactId && (c.emailOff || c.emailOk === false))) { m.status = "discarded"; m.note = "No longer needed when sending hours began"; } else if (LETTERS() && !letterCheck(m.id)) { /* thrown away; a fresh one follows */ } else if (!allowedC(S.now, c)) m.sendAt = nextAllowedC(S.now, c); else { m.status = "delivered"; m.at = new Date(S.now); e.lastOut = new Date(S.now); } }
       if (m.status === "approval" && S.now - m.at > S.firm.hound.slaHours * HOUR) { const e = eng(m.engId); if (e) alertx(e, "medium", "approval_wait", "A message to " + client(e.clientId).first + " " + client(e.clientId).last + " has waited over " + S.firm.hound.slaHours + " hours for approval. Nothing is sent until someone approves it.", "apw" + m.id); } });
     S.engs.forEach((e) => { const k = e.checkin; if (!k || k.doneAt || !k.afterOptIn || !k.pending || e.status !== "in_progress") return; const c = client(e.clientId); if (allowedC(S.now, c) && !e.takeover) { k.pending = null; k.sentAt = new Date(S.now); if (c.textConsent === "given") send(e, "M28", {}, "text"); } });
@@ -1587,7 +1614,9 @@
   function decide(d, e, c) {
     const F = FORMS[d.form] || FORMS.OTHER, items = itemsOf(e.id);
     const review = (reason, why) => { d.state = "in_review"; d.reasons.push(why); addTask({ kind: "document", reason, engId: e.id, docId: d.id }); if (reason !== "Wrong person") send(e, "M12", {});   /* SNF-2: nothing is said to a client about a document in someone else's name; a person looks first */ timeline(e, "Document sent to review: " + reason); };
-    const dup = S.docs.find((x) => x !== d && x.engId === e.id && x.state === "accepted" && x.form === d.form && x.year === d.year && payerMatch(x.payer, d.payer));
+    // QA review: a W-2 for someone else from the same employer is not a duplicate of the client's own. Nor is a spouse's.
+    const who = (x) => (["self", "spouse"].includes(x.recipient) ? x.recipient : null);
+    const dup = d.recipient === "other" ? null : S.docs.find((x) => x !== d && x.engId === e.id && x.state === "accepted" && x.form === d.form && x.year === d.year && payerMatch(x.payer, d.payer) && !(who(x) && who(d) && who(x) !== who(d)));
     // A corrected form replaces the copy received earlier. The preparer is told, because the figures may have changed.
     if (dup && d.corrected && !dup.corrected && d.form !== "OTHER" && d.quality >= S.firm.qualityMin) {
       dup.state = "duplicate"; dup.supersededBy = d.id; dup.reasons.push("Replaced by a corrected copy."); d.reasons.push("A corrected copy. It replaces the one received " + dlabel(dup.at) + ".");
@@ -1636,7 +1665,7 @@
     if (it) { if (!it.payer) it.payer = d.payer; d.reasons.push("Matches the checklist item for " + (it.payer || F.plain) + "."); }
     else { it = { id: id("i"), engId: e.id, form: d.form, payer: d.payer, state: "expected", source: "arrived", isNew: true }; S.items.push(it); d.reasons.push("Not on the checklist: added as a new item."); }
     it.state = "received"; it.docId = d.id; d.itemId = it.id; d.state = "accepted";
-    timeline(e, "Accepted " + d.form + (d.payer ? " from " + d.payer : "") + " with no staff touch"); audit("document.accepted", d.form + " for " + c.first + " " + c.last[0] + ".", "Tallyhound");
+    timeline(e, d.unconfirmed ? d.form + (d.payer ? " from " + d.payer : "") + " passed the sniff test. Waiting for a person to confirm it" : "Accepted " + d.form + (d.payer ? " from " + d.payer : "") + " with no staff touch"); audit("document.accepted", d.form + " for " + c.first + " " + c.last[0] + ".", "Tallyhound");
     afterAccept(e, c);
   }
   const OPTOUT = /^\s*(stop|stopall|unsubscribe|cancel|end|quit|revoke|alto|parar|cancelar)\s*[.!]*\s*$|\b(stop|quit) (texting|messaging|sending|bugging|bothering|contacting)\b|\bopt[ -]?out\b|\bunsubscribe\b|\brevoke\b|don'?t (text|message) me/i;
@@ -1709,11 +1738,29 @@
   function stopEmail(cid, how) {
     const c = client(cid), e = c && engOf(cid); if (!c) return { ok: false, why: "Unknown client" }; if (c.emailOff) return { ok: true, already: true };
     c.emailOff = true; c.emailOk = false; c.consentLog.push({ at: new Date(S.now), what: "Withdrawn: unsubscribed from email (" + (how || "link") + ")", channel: "email" });
+    if (c.email) c.stoppedEmails = [...new Set((c.stoppedEmails || []).concat(String(c.email).toLowerCase()))];   // remembered after the address changes
     // Nothing waiting goes either: drafts for approval, and approved letters held for a working day.
     if (e) S.msgs.forEach((m) => { if (m.engId === e.id && m.dir === "out" && m.channel === "email" && !m.contactId && ["approval", "approved"].includes(m.status)) { m.status = "discarded"; m.note = "Client unsubscribed from email"; } });
     sameAddress(c.email, c); audit("email.unsubscribed", c.first + " " + c.last, c.first);
-    if (e) { timeline(e, "Unsubscribed from email", c.first); if (!channelFor(c, e) && !["complete", "closed", "not_started", "paused"].includes(e.status)) { setStuck(e, "opted_out"); alertx(e, "high", "opted_out", c.first + " " + c.last + (LETTERS() ? " unsubscribed from email. Call them to collect the rest." : " unsubscribed from email and cannot be texted. Call them to collect the rest."), "eo" + c.id); } }
+    if (e) { timeline(e, "Unsubscribed from email", c.first); if (!channelFor(c, e) && !["complete", "closed", "not_started", "paused"].includes(e.status)) { setStuck(e, "opted_out");
+      // QA review: an older "no reply" item is no longer true. It closes, and the queue says the client can't be reached by email.
+      S.tasks.forEach((t) => { if (t.status === "open" && t.engId === e.id && t.kind === "gone_quiet") { t.status = "decided"; t.decision = "unsubscribed"; t.by = "Tallyhound"; t.decidedAt = new Date(S.now); } }); if (LETTERS()) cantReach(e, c, "unsubscribed");
+      alertx(e, "high", "opted_out", c.first + " " + c.last + (LETTERS() ? " unsubscribed from email. Call them to collect the rest." : " unsubscribed from email and cannot be texted. Call them to collect the rest."), "eo" + c.id); } }
     return { ok: true };
+  }
+  /** A new email address for a client, from the Details tab (QA review). Checked, lower-cased; an address that asked to stop anywhere is refused.
+      A different address the client gave the firm starts letters again; the same address stays stopped. */
+  function setEmail(cid, email) {
+    const c = client(cid); if (!c) return "No such client"; const a = String(email || "").trim().toLowerCase().slice(0, 254);
+    if (a === String(c.email || "").toLowerCase()) return null;
+    if (a && !/^[^@\s<>,;]+@[^@\s<>,;]+\.[a-z]{2,}$/.test(a)) return "That email address doesn't look right. Check it and save again";
+    const stopped = (x) => (x.emailOff && String(x.email || "").toLowerCase() === a) || (x.stoppedEmails || []).includes(a);
+    if (a && S.clients.some((x) => stopped(x) || (x.contacts || []).some(stopped))) return "That address asked to stop getting emails. Ask the client for another one";
+    const was = c.emailOff; c.email = a; delete c.ekey;
+    if (!a) return null;
+    c.emailOff = false; c.emailOk = true; delete c.bouncedAt; c.consentLog.push({ at: new Date(S.now), what: "New email address saved by " + (S.user ? S.user.name : "staff") + (was ? " after the old one was unsubscribed" : ""), channel: "email" });
+    const e = engOf(cid); if (e) { timeline(e, "New email address saved", S.user ? S.user.name : ""); if (e.status === "stuck" && ["opted_out", "not_delivering"].includes(e.stuck)) { unstick(e); if (LETTERS()) letterSoon(e); } }
+    return null;
   }
   // A key for the unsubscribe link. It never changes, so a link in an old email keeps working.
   function emailKey(c) { if (!c.ekey) c.ekey = linkKey(); return c.ekey; }
@@ -1990,6 +2037,8 @@
     const es = lang === "es", e = d.engId ? eng(d.engId) : null, it = d.itemId ? S.items.find((i) => i.id === d.itemId) : null, F = FORMS[d.form] || FORMS.OTHER, what = it ? itemTitle(it, lang) : d.form === "OTHER" ? (es ? "ese documento" : "that document") : formDisplay(d.form) + (d.payer ? (es ? " de " : " from ") + safeTitle(d.payer) : "");
     if (d.state === "accepted") return { ok: true, text: (es ? "Recibido: " : "Got it: ") + what + "." };
     if (d.state === "duplicate") return { ok: true, text: es ? "Ya tenemos ese. No hace falta nada más." : "We already have that one. Nothing more is needed for it." };
+    // QA/UX review: when what came is not on the list, say so, and say what is still needed, so a receipt is never taken for the W-2.
+    if ((d.state === "in_review" || d.state === "tray") && !it && e) { const still = letterItems(e, null).map((i) => itemTitle(i, lang)); return { ok: false, text: es ? "Esto no parece uno de los documentos de su lista. " + S.firm.name + " lo va a revisar." + (still.length ? " Todavía necesitamos: " + still.join(", ") + "." : "") : "This doesn't look like one of the documents on your list. " + S.firm.name + " will take a look." + (still.length ? " We still need: " + still.join(", ") + "." : "") }; }
     if (d.state === "in_review" || d.state === "tray") return { ok: true, text: es ? "Recibido. " + S.firm.name + " lo va a revisar." : "Got it. " + S.firm.name + " will take a look at this one." };
     if (d.state === "incomplete") { const t = missText((it && it.missing) || [], es ? "es" : "en", d.form); return { ok: false, text: es ? "Recibimos su " + what + ", pero " + t.missing + ". Envíe " + t.fix + "." : "We got your " + what + ", but " + t.missing + ". Please send " + t.fix + "." }; }
     if (d.state === "rejected" && (d.findings || []).includes("wrong_year")) return { ok: false, text: es ? "Ese es de " + d.year + ". Necesitamos el de " + (e ? e.year : "") + "." : "That one is for " + d.year + ". We need the " + (e ? e.year : "") + " version." + (usualIssue(d.form, "en") ? " " + usualIssue(d.form, "en") : "") };
@@ -2067,7 +2116,11 @@
     const emailOn = c && c.email && c.emailOk && !c.emailOff, ev = m.v2 && m.v2.change ? (L === "es" ? { sold_home: "vendió la casa", account_closed: "cerró la cuenta", no_longer_employed: "ya no trabaja allí" }[m.v2.change.reason] || "algo cambió" : CHANGE_WORDS[m.v2.change.reason] || "something changed") : "";
     const fill = (t) => t.replace("{date1}", d1 ? dateWords(d1, L) : "").replace(/\{name\}/g, sp ? sp.first : "").replace(/\{preparer\}/g, prep).replace("{event}", ev).replace("{found}", found).replace("{foundteam}", foundteam)
       .replace("{email}", emailOn ? (L === "es" ? " El correo continúa." : " Email continues.") : "").replace("{stopteam}", emailOn ? (L === "es" ? "Nada que hacer." : "Nothing to do.") : (L === "es" ? "No queda forma de contactar al cliente." : "No way is left to reach the client."));
-    return { v: 1, intent: k === "moved" ? "someone_else_has_it" : k, summary: fill(row[0]), fields, action: { code: PANEL_CODES[k][0], text: fill(row[1]) }, team: { code: PANEL_CODES[k][1], text: fill(row[2]) },
+    // A one-click step still waiting for a person (pilot): nothing has been done yet, and the screen must not say it has.
+    const pend = S.tasks.find((t) => t.kind === "step" && t.msgId === m.id && t.status === "open"), done0 = fill(row[1]);
+    const action = pend ? { code: "pending", text: (L === "es" ? "Sugerido, sin hacer todavía: " : "Suggested, not done yet: ") + done0.charAt(0).toLowerCase() + done0.slice(1) } : { code: PANEL_CODES[k][0], text: done0 };
+    const team = pend ? { code: "approve_step", text: L === "es" ? "Apruébelo u omítalo en la cola de revisión. Hasta entonces nada cambia." : "Do it or skip it in the review queue. Until then nothing changes." } : { code: PANEL_CODES[k][1], text: fill(row[2]) };
+    return { v: 1, intent: k === "moved" ? "someone_else_has_it" : k, summary: fill(row[0]), fields, action, team,
       confidence: k === "low" ? "low" : v || m.ai ? "high" : "rules", model: (v && v.by === "Claude") || m.ai ? "reply-v2" : "rules", shadow: m.shadow ? m.shadow.intent : null };
   }
 
@@ -2620,8 +2673,14 @@
     const head = rows.shift() || [];
     /* Tax software exports carry far more than Tallyhound needs. Columns that hold an SSN, a date of birth, bank details,
        income or fees are marked sensitive: they are never offered for import and never leave the import screen. */
-    const SENS = /\b(ssn|ss#|social|itin|tin|ein|fein|dob|birth|routing|bank|acct|account|password|pin|agi|income|refund|balance|fee|invoice|wage|dependent)\b/i, ssnLike = /^\d{3}-?\d{2}-?\d{4}$/, dateLike = /^(0?[1-9]|1[0-2])[\/-](0?[1-9]|[12]\d|3[01])[\/-](19|20)\d\d$/;
-    const sensitive = head.map((h, i) => { const hd = String(h).replace(/[_.]/g, " "); if (SENS.test(hd)) return true; const vals = rows.slice(0, 25).map((r) => r[i] || "").filter(Boolean); return vals.length >= 2 && vals.filter((v) => ssnLike.test(v.replace(/\s/g, ""))).length / vals.length > 0.6 && !/phone|mobile|cell|zip|postal|id|number|code|ref/i.test(hd) ? true : vals.length >= 2 && /birth|dob/i.test(hd) && vals.every((v) => dateLike.test(v)); });
+    const SENS = /\b(ssn|ss#|social|itin|tin|ein|fein|dob|d o b|birth|birthday|birthdate|born|routing|bank|acct|account|password|pin|agi|income|refund|balance|fee|invoice|wage|dependent)\b|tax\s*id|taxpayer\s*(id|no|num)|tax\s*payer\s*id|tax\s*(no|num)/i, ssnLike = /^\d{3}-?\d{2}-?\d{4}$/, dateLike = /^(0?[1-9]|1[0-2])[\/-](0?[1-9]|[12]\d|3[01])[\/-](19|20)\d\d$/;
+    const sensitive = head.map((h, i) => { const hd = String(h).replace(/[_.]/g, " "); if (SENS.test(hd)) return true; const vals = rows.slice(0, 25).map((r) => r[i] || "").filter(Boolean); if (!vals.length) return false;
+      // A dashed 3-2-4 number is an SSN whatever the header says (QA review: "Tax ID"). Nine bare digits might be a zip+4 or an ID, so those still need a neutral header.
+      if (vals.filter((v) => /^\d{3}-\d{2}-\d{4}$/.test(v.trim())).length / vals.length > 0.4) return true;
+      if (vals.length >= 2 && vals.filter((v) => ssnLike.test(v.replace(/\s/g, ""))).length / vals.length > 0.6 && !/phone|mobile|cell|zip|postal|id|number|code|ref/i.test(hd)) return true;
+      // Dates: with a birth header, or a column of full dates all at least 16 years back (nobody's engagement letter is that old).
+      const dates = vals.filter((v) => dateLike.test(v.trim())); if (dates.length && dates.length === vals.length && (/birth|dob|born/i.test(hd) || dates.every((v) => +v.trim().slice(-4) <= (S.firm.taxYear || 2026) - 16))) return true;
+      return false; });
     // Score each column for each field, then give every field its best column. A spouse's or preparer's details never win.
     const score = (h, f) => { const x = " " + String(h).toLowerCase().replace(/[_.\-\/]+/g, " ") + " ";
       if (f === "spouse") return /^ (spouse|spouse name|spouse full name|partner|partner name|spouse first name) $/.test(x) ? 6 : 0;
@@ -3042,7 +3101,7 @@
     if (e.status === "complete" && open) { e.status = "in_progress"; e.completedAt = null; e.step = 0; if (!e.next) e.next = nextAllowed(S.now); timeline(e, "Reopened: a document is outstanding again"); }
     else if (["in_progress", "stuck"].includes(e.status) && !open && any) { if (checkComplete(e)) finished(e); }
   }
-  window.TH = { contactReply, contactBounced, contactByAddress, importBegin, importMap, importDecide, importRecord, importPlace, importBuild, importApprove, importView, importsOpen, IMPORT_FIELDS, IMPORT_MAX_ROWS, stopContact, contactByEmailKey, cleanText, cleanFinding, attachRecord, confirmRecord, dropRecord, uploadList, laterItems, contactLink, listOf, buildList, sortList, tickItem, setIssuer, addCatalogItem, itemNeeded, rulePrecision, RULE_TEXT, approveList, approveMany, approveReady, setSeason, noteForPreparer, addNote, addContact2, assignItem, NEWS, clientNews, SOURCES, ONE_TIME, CATALOG, CATALOG_GROUPS, CATALOG_SEASON, RULES_VERSION, catalog, askPhrase, setCatalog, FIRM_RULES, firmRule, setFirmRule, payerShown, setAlias, aliasKey, pilotMeasures, PILOT, letterPreview, workDays, WORKDAYS_DEFAULT, LETTER_HOUR, attachmentWaiting, emailBounced, mirrorWant, MIRROR_STATUS, dayKey, sentToday, restartRun, letterSoon, inboundReply, portalLater, uploadResult, agreement, setConfirmAll, CONFIRM_MIN_DOCS, CONFIRM_MIN_AGREE, LETTERS, isWorkDay, nextMorning, addWorkDays, setWorkDays, letterItems, itemTitle, senderFor, setMailbox, setMailCap, setClientSendMode, letterCheck, linkFind, linkState, rotateLink, revokeLink, seasonLink, MAIL_CAP, LETTER, released, panelOf, PANEL, traceOf, TRACE_STEPS, keepTrace, activity, LIFE_SUGGEST, suggestFor, dumpOne, setDuty, cantReach, BARK_TARGETS, BARK_DEFAULT, CALL_OUTCOMES, setHold, askNow, holdOf, heldUntil, releaseOf, usualIssue, USUAL, formDisplay, filedName, SEND_HOUR_MIN_REPLIES, bestHour, SLOW_ITEM_ASKS, memoryWrite, memoryOf, clearMemory, setMemory, keepRemoved, confirmRemoved, addTask, BARK_KINDS, BARK_BATCH_MIN, BARK_SETTLE_MIN, REVIEW_OVERDUE_HOURS, barkRoute, barkDue, barkHeld, barkRead, barkWords, setMyBarks, setBarkRules, setStaffHours, staffHours, V2, WAIVE_REASONS, LASTING, CHANGE_WORDS, LATER_MAX_DAYS, ALREADY_SENT_LOOKBACK_DAYS, replyV2, setSpouse, VOICES, VOICE_TPL, VOICE_FIXED, voiceFor, setVoice, setClientVoice, setSignOff, previewVoice, verified, CADENCE_PRESETS, gapsOf, cadenceFor, setIntensity, setClientIntensity, undiscard, setClosedDays, startMany, deletionEvidence, setCallOk, plans, quoteFor, areaZone, zoneFor, addContact, removeContact, planEnded, setLine, isLandline, RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
+  window.TH = { setEmail, contactReply, contactBounced, contactByAddress, importBegin, importMap, importDecide, importRecord, importPlace, importBuild, importApprove, importView, importsOpen, IMPORT_FIELDS, IMPORT_MAX_ROWS, stopContact, contactByEmailKey, cleanText, cleanFinding, attachRecord, confirmRecord, dropRecord, uploadList, laterItems, contactLink, listOf, buildList, sortList, tickItem, setIssuer, addCatalogItem, itemNeeded, rulePrecision, RULE_TEXT, approveList, approveMany, approveReady, setSeason, noteForPreparer, addNote, addContact2, assignItem, NEWS, clientNews, SOURCES, ONE_TIME, CATALOG, CATALOG_GROUPS, CATALOG_SEASON, RULES_VERSION, catalog, askPhrase, setCatalog, FIRM_RULES, firmRule, setFirmRule, payerShown, setAlias, aliasKey, pilotMeasures, PILOT, letterPreview, workDays, WORKDAYS_DEFAULT, LETTER_HOUR, attachmentWaiting, emailBounced, mirrorWant, MIRROR_STATUS, dayKey, sentToday, restartRun, letterSoon, inboundReply, portalLater, uploadResult, agreement, setConfirmAll, CONFIRM_MIN_DOCS, CONFIRM_MIN_AGREE, LETTERS, isWorkDay, nextMorning, addWorkDays, setWorkDays, letterItems, itemTitle, senderFor, setMailbox, setMailCap, setClientSendMode, letterCheck, linkFind, linkState, rotateLink, revokeLink, seasonLink, MAIL_CAP, LETTER, released, panelOf, PANEL, traceOf, TRACE_STEPS, keepTrace, activity, LIFE_SUGGEST, suggestFor, dumpOne, setDuty, cantReach, BARK_TARGETS, BARK_DEFAULT, CALL_OUTCOMES, setHold, askNow, holdOf, heldUntil, releaseOf, usualIssue, USUAL, formDisplay, filedName, SEND_HOUR_MIN_REPLIES, bestHour, SLOW_ITEM_ASKS, memoryWrite, memoryOf, clearMemory, setMemory, keepRemoved, confirmRemoved, addTask, BARK_KINDS, BARK_BATCH_MIN, BARK_SETTLE_MIN, REVIEW_OVERDUE_HOURS, barkRoute, barkDue, barkHeld, barkRead, barkWords, setMyBarks, setBarkRules, setStaffHours, staffHours, V2, WAIVE_REASONS, LASTING, CHANGE_WORDS, LATER_MAX_DAYS, ALREADY_SENT_LOOKBACK_DAYS, replyV2, setSpouse, VOICES, VOICE_TPL, VOICE_FIXED, voiceFor, setVoice, setClientVoice, setSignOff, previewVoice, verified, CADENCE_PRESETS, gapsOf, cadenceFor, setIntensity, setClientIntensity, undiscard, setClosedDays, startMany, deletionEvidence, setCallOk, plans, quoteFor, areaZone, zoneFor, addContact, removeContact, planEnded, setLine, isLandline, RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
     dump, load, blank, setNow, setUser, linkFor, linkLive, LINK_DAYS, consentFromPage, declineTexts, stopEmail, unsubscribeLink, CONSENT_WORDING,
     get S() { return S; }, FORMS, TPL, TPL_USE, QUESTIONS, STUCK, DAY, HOUR, MIN,
     client, eng, engOf, itemsOf, openItems, progress, fill, outputCheck, channelFor, allowed, nextAllowed, live, nextItem,

@@ -57,10 +57,12 @@ export const ACTIONS: Record<string, Rule> = {
   // and a wrong-number flag is cleared (spec TH-CON-9). The language is not editable here while Spanish is off for pilots.
   saveClient: { role: "staff", n: 2, run: (T, [cid, v]) => {
     const c = T.client(cid), f = (v && typeof v === "object" ? v : {}) as Record<string, unknown>, str = (k: string, max: number) => String(f[k] ?? "").replace(/[<>]/g, "").trim().slice(0, max); if (!c) return "No such client";
+    // The email goes first, through the engine: checked, lower-cased, and a new address after an unsubscribe starts letters again (QA review). A bad one changes nothing.
+    const em = T.setEmail(c.id, str("email", 254)); if (em) return em;
     c.first = str("first", 60) || c.first; c.last = str("last", 60) || c.last;
     const mobile = String(f.mobile ?? "").replace(/\D/g, "").slice(-10);
     if (mobile !== c.mobile) { c.mobileBad = false; if (c.textConsent === "given") { c.textConsent = "none"; c.consentLog.push({ at: new Date(T.S.now), what: "Reset: the mobile number was changed", channel: "text" }); } }
-    c.mobile = mobile; c.email = str("email", 254); c.notes = String(f.notes ?? "").slice(0, 4000);
+    c.mobile = mobile; c.notes = String(f.notes ?? "").slice(0, 4000);
     if (T.S.users.some((u: { id: string; role: string }) => u.id === f.preparer && u.role !== "read_only")) c.preparer = f.preparer;
     const tz = String(f.tz ?? ""); if ((c.tz || "") !== tz && (tz === "" || Object.hasOwn(T.ZNAME, tz))) T.setZone(c.id, tz);
     T.audit("client.edit", c.last); return null; } },
@@ -164,6 +166,9 @@ export const ACTIONS: Record<string, Rule> = {
     if (multi ? body.length < 40 || body.length > 1500 : body.length < 10 || body.length > 600) return multi ? "Write between 40 and 1,500 characters" : "Write between 10 and 600 characters"; if (/!/.test(body)) return "No exclamation marks";
     const blanks = (t: string) => [...new Set(t.match(/\{\w+\}/g) || [])], need = multi ? ["{first}", "{items}", "{link}"] : blanks(std).filter((x) => x !== "{sign_off}"), lost = need.filter((x) => !body.includes(x)), odd = blanks(body).filter((x) => !need.includes(x) && !blanks(std).includes(x) && !["{first}", "{firm}", "{preparer}", "{year}", "{sign_off}", "{sign_name}"].includes(x));
     if (lost.length) return "It must keep " + lost.join(", "); if (odd.length) return "Tallyhound does not know " + odd.join(", ");
+    // QA review: a client must be able to trust every letter. The only link is their own ({link}), and no letter asks for an SSN, a password, a payment or bank details.
+    if (/https?:\/\/|www\.|\b[a-z0-9-]+\.(com|net|org|io|co|us|info|biz|app|link|xyz)\b/i.test(body)) return "The only link in a letter is the client's own upload link, {link}. Take the other one out";
+    if (/\b(send|reply with|give|provide|enter|confirm|text|email|include|share|tell)\b[^.¶]{0,40}\b(ssn|social security|password|passcode|pin|bank|routing|account number|card|payment|pay|wire|gift card)/i.test(body) || /\b(pay|payment|wire)\b[^.¶]{0,30}\b(now|today|here|online|fee|invoice)\b/i.test(body)) return "A letter never asks for a Social Security number, a password, a payment or bank details";
     const c = { id: "", first: "Maria", last: "Garcia", lang: "en", voice, preparer: T.S.user ? T.S.user.id : null }, year = T.S.firm.taxYear || 2026;
     const F = T.S.firm, slot: Record<string, string> = pro ? (F.templates.en = F.templates.en || {}) : (((F.templatesBy = F.templatesBy || {})[voice] = F.templatesBy[voice] || {}).en = F.templatesBy[voice].en || {});
     const was = slot[k]; slot[k] = body;

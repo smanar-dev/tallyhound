@@ -96,7 +96,7 @@ export async function registerPublic(f: FastifyInstance, d: PublicDeps): Promise
   const resultsOf = (x: Found, ups: string[]) => {
     const now = +new Date(x.T.S.now), docs = x.e ? x.T.S.docs.filter((q: any) => q.engId === x.e.id && q.batch && ups.includes(String(q.batch).replace(/^up-/, "")) && now - +new Date(q.at) < RESULT_MINUTES * 60000) : [];
     const lines = docs.map((q: any) => x.T.uploadResult(q, lang(x))).filter(Boolean) as { ok: boolean; text: string }[];
-    return { lines, pending: docs.length === 0 || lines.length < docs.length };
+    return { lines, pending: docs.length === 0 || lines.length < docs.length, received: docs.filter((q: any) => q.state === "accepted" && q.itemId).map((q: any) => String(q.itemId)) };
   };
   const upsOf = (v: unknown) => String(v || "").split(".").filter((s) => /^[0-9a-f]{24}$/.test(s)).slice(0, MAX_FILES);
   const lettersView = (x: Found, t: string, o: { error?: string; said?: string; ups?: string[]; tries?: number } = {}) => {
@@ -107,7 +107,7 @@ export async function registerPublic(f: FastifyInstance, d: PublicDeps): Promise
   };
   f.get("/u/:t/result", { preHandler: brake }, async (req, reply) => {
     const x = await find(params(req).t, "u"); if (!x || !x.c || !x.T.LETTERS()) return reply.code(404).header("cache-control", "no-store").send({ error: "This link no longer works." });
-    const r = resultsOf(x, upsOf((req.query as { up?: string }).up)); return reply.header("cache-control", "no-store").send({ done: !r.pending, lines: r.lines });
+    const r = resultsOf(x, upsOf((req.query as { up?: string }).up)); return reply.header("cache-control", "no-store").send({ done: !r.pending, lines: r.lines, received: r.received });
   });
   f.get("/u/:t", { preHandler: brake }, async (req, reply) => {
     const x = await find(params(req).t, "u"); if (!x || !x.c) return gone(reply, x);
@@ -146,6 +146,9 @@ export async function registerPublic(f: FastifyInstance, d: PublicDeps): Promise
     catch (err) { if ((err as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE" || (err as { code?: string }).code === "FST_FILES_LIMIT") tooBig = true; else throw err; }
     if (tooBig) return script ? no(413, "Too large. The limit is 25 MB.") : html(reply, view({ error: "Too large. The limit is 25 MB a file, and " + MAX_FILES + " files at a time." }), 413);
     if (!files.length) return script ? no(400, "Choose a photo or a PDF first.") : html(reply, view({ error: "Choose a photo or a PDF first." }), 400);
+    // QA review: a kind of file Tallyhound cannot open is answered here and now, in words, not with "checking" that never ends. The same rule as the reader's.
+    const cannot = files.filter((f) => !/^image\/(jpeg|jpg|png|webp|heic|heif|tiff?)$/.test(String(f.type || "").toLowerCase()) && String(f.type || "").toLowerCase() !== "application/pdf");
+    if (V2 && cannot.length) { const why = (cannot.length === files.length ? "We can't open that kind of file" : "We can't open " + (cannot.length === 1 ? "one of those files" : "some of those files")) + ". A photo (JPG, PNG or HEIC) or a PDF works. Nothing was sent: please choose again."; return script ? no(415, why) : html(reply, view({ error: why }), 415); }
     if (V2 && overHour(x, t, files.length)) return script ? no(429, "That is a lot of files in one hour. Please try again later, or call " + x.firm.name + ".") : html(reply, view({ error: "That is a lot of files in one hour. Please try again later, or call " + x.firm.name + "." }), 429);
     // Stored sealed and answered at once; the worker reads it. A failure here tells the client to try again, and nothing is half kept.
     const id = randomBytes(12).toString("hex");
@@ -173,6 +176,7 @@ export async function registerPublic(f: FastifyInstance, d: PublicDeps): Promise
     const S = JSON.parse(json).state, n = String(S.firm.smsNumber || "").replace(/\D/g, "").slice(-10);
     // This one page carries its own small inline styles, so it is served with a policy that allows styles and still no script at all.
     return reply.header("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'").type("text/html; charset=utf-8")
-      .send(kitRegistration.firmPage({ name: S.firm.name, phone: S.firm.phone }, { number: S.firm.senderStatus === "approved" && n ? "(" + n.slice(0, 3) + ") " + n.slice(3, 6) + "-" + n.slice(6) : undefined, address: S.firm.email || undefined }));
+      .send(S.firm.letters === true ? kitRegistration.firmPage({ name: S.firm.name, phone: S.firm.phone }, { letters: true, own: S.firm.mail === "mailbox", address: (S.firm.domain && S.firm.domain.verified && S.firm.domain.from) || S.firm.email || undefined })
+        : kitRegistration.firmPage({ name: S.firm.name, phone: S.firm.phone }, { number: S.firm.senderStatus === "approved" && n ? "(" + n.slice(0, 3) + ") " + n.slice(3, 6) + "-" + n.slice(6) : undefined, address: S.firm.email || undefined }));
   });
 }

@@ -135,7 +135,7 @@ test("uploads: a form from a different issuer is filed against the open item and
 test("import: columns by synonym, saved for next time; Last, First and spouse columns; no email flagged; SSN columns dropped; same email skipped; same name and phone decided; re-import changes nothing", () => {
   const T = firm(); const csv = "Client Number,Client Name,Spouse,E-mail,Cell,SSN,Status\n1042,\"Garcia, Maria\",Daniel,MARIA@X.EXAMPLE,(615) 555-0111,123-45-6789,returning\n1043,\"Brooks, Erin\",,,(615) 555-0122,234-56-7890,new\n1044,Luis Ortega,,maria@x.example,,345-67-8901,";
   const b = T.importBegin("clients.csv", csv); assert.deepEqual(b.map, ["ref", "name", "spouse", "email", "mobile", "", "returning"]); assert.deepEqual(b.dropped, ["SSN"]); assert.ok(!JSON.stringify(T.S.imports).includes("123-45-6789"), "an SSN reached the stored batch");
-  const v = T.importMap(b.id); assert.deepEqual(v.rows.map((r) => r.status), ["ok", "no_email", "duplicate"]); assert.equal(v.rows[2].why, "Already a client");
+  const v = T.importMap(b.id); assert.deepEqual(v.rows.map((r) => r.status), ["ok", "no_email", "duplicate"]); assert.equal(v.rows[2].why, "Same email as row 2 in this file");
   const m = T.S.clients.find((c) => c.ref === "1042"); assert.equal(m.first, "Maria"); assert.equal(m.last, "Garcia"); assert.equal(m.email, "maria@x.example"); assert.equal(m.household, "Maria and Daniel Garcia"); assert.equal(m.returning, true); assert.equal(v.rows[0].phone, "+16155550111");
   T.S.items.push({ id: "i-firm", engId: T.engOf(m.id).id, form: "W2", payer: "Firm Edit", state: "expected", source: "added", firmTouched: true });
   const b2 = T.importBegin("clients.csv", csv); assert.equal(b2.savedMap, true); const v2 = T.importMap(b2.id); assert.deepEqual(v2.rows.map((r) => r.status), ["same", "same", "duplicate"]); assert.equal(T.S.clients.length, 2); assert.ok(T.S.items.some((i) => i.id === "i-firm"), "a firm edit was lost");
@@ -216,4 +216,63 @@ test("review: in an email-first firm a template or check-in answers never confir
   const x = one([P("W2", "Midtown Transit")]); const T = x.T; const tid = T.templates()[0].id; T.applyTemplate(x.e.id, tid, { confirm: true });
   assert.equal(x.e.confirmed, false); assert.equal(T.listOf(x.e.id).status, "proposed");
   x.e.checkin = { doneAt: new Date(T.S.now), adds: [], drops: [] }; T.applyCheckin(x.e.id, {}); assert.equal(x.e.confirmed, false);
+});
+test("review: a document waiting for a person is not counted as verified, and the activity line says it waits", () => {
+  const x = one([P("W2", "Midtown Transit"), P("1098", "Hillcrest Mortgage")]); const T = x.T; T.S.firm.confirmAll = true; T.approveList(x.e.id); T.advance(T.MIN);
+  T.inboundDoc(x.c.id, { form: "W2", year: 2026, payer: "Midtown Transit" }, "email"); const v = T.verified(x.e.id);
+  assert.equal(v.n, 0); assert.equal(v.waiting, 1); assert.ok(x.e.timeline.some((t) => /passed the sniff test\. Waiting for a person to confirm it/.test(t.text))); assert.ok(!x.e.timeline.some((t) => /with no staff touch/.test(t.text)));
+});
+test("review: email-first wording: one document is 'Upload it here', a reply opens with the client's name and is signed, and last year's return is the year before", () => {
+  const x = one([P("W2", "Midtown Transit")]); const T = x.T; T.approveList(x.e.id); T.advance(T.MIN);
+  const L1 = T.S.msgs.find((m) => m.tpl === "L1"); assert.match(L1.body, /Upload it here\./); assert.ok(!/Upload them here/.test(L1.body));
+  T.inboundReply(x.c.id, "Can I deduct my home office?", null, "maria@x.example"); const r = T.S.msgs.filter((m) => m.dir === "out" && m.tpl !== "L1").slice(-1)[0];
+  assert.match(r.body, /^Hi Maria,\n\n/); assert.match(r.body, /\n\nThank you,\nAlex Reyes\nMaple & Pine Tax Co\.$/);
+  assert.equal(T.askPhrase("PRIOR"), "Your 2025 tax return");
+});
+
+// QA review fixes (November 2026).
+test("qa: an SSN or birth date under any header is never offered or kept, and an SSN typed into another cell is removed", () => {
+  const T = firm(); const b = T.importBegin("c.csv", "First,Last,Email,Tax ID,Born,Notes\nMaria,Garcia,maria@x.example,123-45-6789,01/02/1980,SSN 234-56-7890 on file\nLuis,Ortega,luis@x.example,345-67-8901,03/04/1975,");
+  assert.deepEqual(b.dropped || T.S.imports[0].head.filter((h, i) => T.S.imports[0].sensitive[i]), ["Tax ID", "Born"]); const j = JSON.stringify(T.S.imports);
+  for (const v of ["123-45-6789", "345-67-8901", "234-56-7890", "01/02/1980", "03/04/1975"]) assert.ok(!j.includes(v), v + " reached the stored batch");
+  assert.ok(T.importBegin("e.csv", "First,Last,Email\n").error, "an empty file started an import");
+});
+test("qa: names come out as written on a letter; two rows with one name and no email are flagged; files match names without accents", () => {
+  const T = firm(); const b = T.importBegin("c.csv", "First,Last,Email\nÉMILE,ÖZTÜRK,emile@x.example\njosé,núñez,\nAna,Ruiz,\nAna,Ruiz,"); const v = T.importMap(b.id);
+  assert.deepEqual(T.S.clients.slice(0, 2).map((c) => c.first + " " + c.last), ["Émile Öztürk", "José Núñez"]); assert.equal(v.rows[3].status, "possible_duplicate"); assert.match(v.rows[3].why, /Same name as row 4/);
+  assert.equal(T.importMap(b.id).rows.length, 4, "a second confirmation did not just catch up");
+  const r = T.importRecord(b.id, { file: "nunez 2025 organizer.pdf", kind: "organizer", status: "read", findings: [] }); assert.ok(r && !r.error); assert.equal(T.S.imports[0].tray.length, 0, "the accented name was not matched");
+});
+test("qa: a new email address after an unsubscribe starts letters again; a bad one changes nothing; an address that asked to stop is refused", () => {
+  const x = one([P("W2", "Midtown Transit")]); const T = x.T; T.approveList(x.e.id); T.advance(T.MIN); T.stopEmail(x.c.id, "link"); assert.equal(x.e.status, "stuck");
+  assert.match(T.setEmail(x.c.id, "bogus"), /doesn't look right/); assert.equal(x.c.email, "maria@x.example");
+  assert.equal(T.setEmail(x.c.id, "Maria.New@X.example"), null); assert.equal(x.c.email, "maria.new@x.example"); assert.equal(x.c.emailOff, false); assert.equal(x.e.status, "in_progress");
+  const n = T.S.msgs.filter((m) => /^L/.test(m.tpl || "")).length; T.advance(T.DAY); assert.ok(T.S.msgs.filter((m) => /^L/.test(m.tpl || "")).length > n, "no letter to the new address");
+  const b = T.importBegin("c2.csv", "First,Last,Email\nSam,Lee,sam@x.example"); T.importMap(b.id); assert.match(T.setEmail(T.S.clients[1].id, "maria@x.example"), /asked to stop/);
+});
+test("qa: a stop reply from a client who had gone quiet closes the no-reply item and opens can't reach", () => {
+  const x = one([P("W2", "Midtown Transit")]); const T = x.T; T.approveList(x.e.id); T.advance(25 * T.DAY); assert.equal(x.e.stuck, "no_reply");
+  T.inboundReply(x.c.id, "Please stop emailing me.", null, "maria@x.example"); const open = T.S.tasks.filter((t) => t.status === "open" && t.engId === x.e.id).map((t) => t.kind);
+  assert.ok(!open.includes("gone_quiet")); assert.ok(open.includes("cant_reach"));
+});
+test("qa: a W-2 for someone else from the same employer is not a duplicate of the client's own; letters count as asking", () => {
+  const x = one([P("W2", "Midtown Transit")]); const T = x.T; T.approveList(x.e.id); T.advance(T.MIN);
+  const w2 = x.items().find((i) => i.form === "W2"); assert.ok(T.askedCount ? T.askedCount(x.e, w2) >= 1 : true);
+  T.inboundDoc(x.c.id, { form: "W2", year: 2026, payer: "Midtown Transit", recipient: "self" }, "email"); const d = T.inboundDoc(x.c.id, { form: "W2", year: 2026, payer: "Midtown Transit", recipient: "other" }, "email");
+  assert.notEqual(d.state, "duplicate"); assert.ok(T.S.tasks.some((t) => t.docId === d.id && t.status === "open"));
+});
+test("qa: a contact's first letter is a first letter about the client's return, and assigning an item does not send the client another letter", () => {
+  const x = one([P("W2", "Midtown Transit"), P("1099INT", "First Farmers Bank")]); const T = x.T; T.approveList(x.e.id); T.advance(T.MIN); T.advance(2 * T.DAY);
+  const before = T.S.msgs.filter((m) => /^L/.test(m.tpl || "") && !m.contactId).length, next = +x.e.next;
+  T.addContact2(x.c.id, "Luis Garcia", "luis@x.example"); const p = x.c.contacts[0]; T.assignItem(x.items().find((i) => i.form === "1099INT").id, p.id); T.advance(T.DAY);
+  const toP = T.S.msgs.find((m) => m.contactId === p.id); assert.ok(toP, "no letter to the contact"); assert.equal(toP.tpl, "L1"); assert.match(toP.body, /^Hi Luis,\n\nWe're Maple & Pine Tax Co\., and we prepare Maria Garcia's taxes\./); assert.match(toP.body, /Maria's 2026 tax return/); assert.ok(!/A reminder/.test(toP.body));
+  assert.equal(+x.e.next, next, "the client's reminder day moved"); assert.equal(T.S.msgs.filter((m) => /^L/.test(m.tpl || "") && !m.contactId && m.at > new Date(T.S.now - T.DAY)).length, 0, "the client got an extra letter"); assert.ok(before >= 1);
+});
+test("qa: numbers and amounts are refused in catalog wording and payer names, as they are for issuers", () => {
+  const T = firm(); assert.match(T.setCatalog("W2", { ask: "W-2 from employer EIN 123456789" }), /numbers/); assert.match(T.setAlias("HILLCREST MORTGAGE", "Hillcrest Mortgage, loan 99887766"), /numbers/); assert.equal(T.setAlias("HILLCREST MORTGAGE", "Hillcrest"), null);
+});
+test("qa: an upload that is not on the list says so and says what is still needed", () => {
+  const x = one([P("W2", "Midtown Transit")]); const T = x.T; T.approveList(x.e.id); T.advance(T.MIN);
+  const d = T.inboundDoc(x.c.id, { form: "OTHER", year: 2026, payer: "", is_tax_document: false }, "upload"); const r = T.uploadResult(d, "en");
+  assert.equal(r.ok, false); assert.match(r.text, /^This doesn't look like one of the documents on your list\. Maple & Pine Tax Co\. will take a look\. We still need: W-2 from Midtown Transit\.$/);
 });

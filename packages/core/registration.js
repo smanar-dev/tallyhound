@@ -45,6 +45,7 @@ function campaign(firm, reg) {
 }
 // The public page. Plain HTML, nothing to click, readable by a carrier reviewer in a minute and by a wary client in less.
 function firmPage(firm, opt) {
+  if (opt && opt.letters) return letterPage(firm, opt);
   const o = opt || {}, n = esc(firm.name), num = o.number ? esc(o.number) : "a local number we will list here once it is active", addr = esc(o.address || "");
   return "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>" + n + ": document requests by text and email</title></head><body style=\"font:16px/1.6 system-ui,sans-serif;max-width:680px;margin:40px auto;padding:0 20px;color:#14213d\">" +
     "<h1>" + n + "</h1><p>" + n + " collects the documents for your tax return by text message and email. We use a service called Tallyhound to send the requests and check what comes back.</p>" +
@@ -52,6 +53,16 @@ function firmPage(firm, opt) {
     "<h2 id=\"texts\">Text messages</h2><p>We text you only if you have agreed. You agree by ticking the box on your personal page, by signing our engagement letter, or by texting START to our number. Agreeing is never a condition of being our client. We text about one thing: the documents needed for your return. Message frequency varies, usually a few messages a week while documents are outstanding. Message and data rates may apply. Reply <b>STOP</b> at any time to stop, or <b>HELP</b> for help.</p>" +
     "<h2 id=\"privacy\">Privacy</h2><p>Your mobile number and your agreement to receive texts are never sold, rented or shared with anyone for marketing. Documents you send are checked, filed in " + n + "'s own storage, and then deleted from Tallyhound on a schedule. Tallyhound does not keep Social Security numbers or account numbers that are typed into a message.</p>" +
     "<h2 id=\"terms\">Terms</h2><p>This messaging programme is run by " + n + (firm.phone ? ", " + esc(firm.phone) : "") + ". Carriers are not liable for delayed or undelivered messages. To stop texts reply STOP. For help reply HELP or call our office.</p></body></html>";
+}
+// The same page for an email-first firm (docs/V2.md): it never texts, so nothing about texts, numbers, carriers or STOP.
+// own: letters come from each preparer's own mailbox; address: otherwise the one address letters come from.
+function letterPage(firm, o) {
+  const n = esc(firm.name), addr = esc(o.address || "");
+  return "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>" + n + ": document requests by email</title></head><body style=\"font:17px/1.6 system-ui,sans-serif;max-width:680px;margin:40px auto;padding:0 20px;color:#14213d\">" +
+    "<h1>" + n + "</h1><p>" + n + " asks for the documents for your tax return by email, with a private link where you can upload them. We use a service called Tallyhound to send the letters and check what comes back.</p>" +
+    "<h2 id=\"check\">Is this email really from us?</h2><ul>" + (o.own ? "<li>Our letters come from your preparer's own work email at " + n + ".</li>" : addr ? "<li>Our letters come from <b>" + addr + "</b>.</li>" : "") + "<li>Every letter names your preparer.</li><li>We will never ask you to email a Social Security number, a password, or a payment.</li>" + (firm.phone ? "<li>If you are unsure, call our office on <b>" + esc(firm.phone) + "</b> before you send anything.</li>" : "") + "</ul>" +
+    "<h2 id=\"stop\">Stopping the emails</h2><p>Every letter has a link at the bottom to stop them. You can also reply and ask us to stop. Either way no more letters go to you, and someone at " + n + " will be in touch another way.</p>" +
+    "<h2 id=\"privacy\">Privacy</h2><p>Your email address is never sold, rented or shared with anyone for marketing. Documents you send are checked, filed in " + n + "'s own storage, and then deleted from Tallyhound on a schedule. Tallyhound does not keep Social Security numbers or account numbers that are typed into a message.</p></body></html>";
 }
 // What the firm sends its own clients, from its own usual email, before Tallyhound's first message.
 function headsUp(firm, opt) {

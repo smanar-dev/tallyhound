@@ -75,7 +75,9 @@ test("scenario 7: \"after the 15th\" opens a suggested step and changes nothing 
   T.inboundReply(c.id, "Can I send the W-2 after the 15th?"); const w2 = item(T, e, "W2");
   assert.equal(T.holdOf(w2, e), null, "the reply paused a document by itself"); assert.equal(out(T, e).length, n, "nothing is sent back");
   const t = open(T, e, "step")[0]; assert.ok(t, "no suggested step"); assert.equal(t.step.type, "hold"); assert.equal(md(new Date(t.step.until)), "2/16");
-  assert.equal(T.decideTask(t.id, "apply_step", null), null); assert.equal(T.holdOf(w2, e).reason, "client_date"); assert.equal(md(new Date(T.holdOf(w2, e).until)), "2/16");
+  // The understood panel says it is only suggested while the step waits (UX review): it must not say the reminders already paused.
+  const mIn = T.S.msgs.find((m) => m.id === t.msgId), P0 = T.panelOf(mIn); assert.equal(P0.action.code, "pending"); assert.match(P0.action.text, /^Suggested, not done yet: /); assert.match(P0.team.text, /review queue/);
+  assert.equal(T.decideTask(t.id, "apply_step", null), null); assert.notEqual(T.panelOf(mIn).action.code, "pending"); assert.equal(T.holdOf(w2, e).reason, "client_date"); assert.equal(md(new Date(T.holdOf(w2, e).until)), "2/16");
   T.advance(5 * T.DAY); const L = letters(T, e).slice(-1)[0]; assert.ok(!/W-2/.test(L.body), "a held document was named in a letter"); assert.match(L.body, /1099-INT/);
   // Dismissing leaves everything as it was.
   const y = go(); y.T.setUser("u1"); y.T.inboundReply(y.c.id, "I'll send the mortgage statement after the 20th"); const t2 = open(y.T, y.e, "step")[0]; assert.equal(y.T.decideTask(t2.id, "dismiss_step", null), null); assert.equal(y.T.holdOf(item(y.T, y.e, "1098"), y.e), null);
