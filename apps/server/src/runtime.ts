@@ -13,7 +13,8 @@ import { createWatch, postgresOpsStore } from "./ops.ts";
 import { createFirms } from "./firms.ts";
 import { createInbox, postgresQueue } from "./queue.ts";
 import { handlers } from "./hooks.ts";
-import { pdfCut, prepareOpts } from "./files.ts";
+import { pdfCut, pdfPages, prepareOpts } from "./files.ts";
+import { readWithModel } from "./priorread.ts";
 import { guarded, type MailLayer } from "./maillayer.ts";
 import { createMailboxes, layerKeys, postgresMailboxStore } from "./mailbox.ts";
 import { neeter } from "./integrations/neeter/index.ts";
@@ -110,6 +111,7 @@ export function runtime() {
   const hooks = { cleanup, store, inbox, twilioAuthToken: env("TWILIO_AUTH_TOKEN") || undefined, postmarkHook: env("POSTMARK_HOOK_PASSWORD") ? { user: env("POSTMARK_HOOK_USER") || "postmark", pass: env("POSTMARK_HOOK_PASSWORD") } : undefined };
   return { systemSms, production, appUrl, pool, store, auth, app, signIn, firms, inbox, hooks, prepare, clock, log, root: ROOT, bucket, keyring, sms, email, twilioOn: !!twilio, emailOn: !!env("POSTMARK_TOKEN"), mailer, notify: createNotifier({ appUrl }), ops, lookup, storage, billing, cleanup, voiceOn: !!voice, mailboxes, layerHook: layerName === "neeter" && layerReplies === "webhook" ? { secret: need("NEETER_WEBHOOK_SECRET") } : undefined, layerMode: layerName ? { name: layerName, send: layerSend, replies: layerReplies } : null,
     layerPoll: mailboxes && (layerName === "fake" || layerReplies === "poll") ? (firmId: string) => mailboxes.poll(firmId, (e) => layerEvent({ app, firmOfAssistant: (a) => mailboxes.firmOfAssistant(a), prepare, log }, e)) : undefined,
+    readModel: ai ? (firmId: string, pdf: Buffer, why: "unreadable" | "nothing_found") => readWithModel({ render: pdfPages, ask: (f, prompt, images) => forFirm(f, () => ai.json(prompt, { images, tier: "default" })), forms: Object.keys(createEngine().FORMS) }, firmId, pdf, why) : undefined,
     prior: ai ? createPrior({ read: (firmId, prompt, images) => forFirm(firmId, () => ai.json(prompt, { images, tier: "default" })), prompt: () => kitPrompts.priorReturn(), forms: () => createEngine().FORMS }) : undefined,   // T-46
     domains: env("POSTMARK_ACCOUNT_TOKEN") ? createDomains({ app, accountToken: env("POSTMARK_ACCOUNT_TOKEN")!, log }) : undefined,   // T-110
     // Public sign-up (TH_SIGNUP=on) and the price page. New sign-ups go on the second price list when TH_PRICE_TEST=on (T-97).

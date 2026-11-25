@@ -540,6 +540,21 @@ Source: the v2 tech spec. `docs/V2.md` maps it onto this codebase, lists what is
 86. T-190, the pilot's measures (spec section 11): `pilotMeasures` in the engine, the card on Progress, `admin pilot-report`.
 87. T-191, the morning overview says which letters went out and which wait for approval.
 
+# Round 22 (November 25): client import and fetch lists
+
+Source: the client import and fetch list spec. `docs/FETCH.md` maps it onto this codebase, lists what is not real yet, the open questions and the differences.
+
+88. T-192, the catalog: 31 types with issuer labels, ask phrases, usual arrival and hold dates (moved off weekends and holidays), one-time and new-for-2026 flags; firm overrides; the four firm rules; payer display names.
+89. T-193, the reader (`reader.ts`): organizer payer lines, source documents (form, issuer, recipient, year), return schedules and "has an entry" lines, Schedule B payers, numbers stripped first, evidence; the same code in the browser and on the server.
+90. T-194, the rules table (`buildList`), every row and every "not proposed when" case, rule ids and the rules version; ready or needs a look with tags; rule precision.
+91. T-195, the fetch list: a proposal until approved; tick, issuer, add; approval starts the season; versions after; Not this season.
+92. T-196, import batches: CSV and XLSX, columns by synonym saved per firm, normalising, matching on client ID then email, validation and duplicates, SSN columns dropped, records matched to clients or the tray, build, approve ready or all, 30 days.
+93. T-197, held items listed under "These usually arrive later" in letters and on the upload page, never chased before the date.
+94. T-198, "Anything new" on the upload page, notes for the preparer, "Not on the checklist", renamed issuers.
+95. T-199, items assigned to another person: their own letter, link and unsubscribe.
+96. T-200, the model's reading of scans and unread files, with a person confirming; never stored.
+97. T-201, the staff screens: the import wizard, the fetch list on the client page, Settings, Documents, the review queue's New this year, Not this season on the client list.
+
 ## Everything still to be done (November 25)
 
 Nothing in `docs/TICKETS.md` is unbuilt. What is left needs something code cannot supply.
@@ -549,6 +564,8 @@ Nothing in `docs/TICKETS.md` is unbuilt. What is left needs something code canno
 **Before any real client is contacted:** the hour with counsel (Safeguards, Section 7216, whether form and issuer names are tax return information); each pilot firm's insurer; the security plan addendum; Google's verification for mailbox permissions, or each pilot firm's administrator approving the sign-in app for their own organisation; the kill criteria agreed.
 
 **A first live run of each outside service** (all are only tested against stand-ins): Claude, Postmark (letters out, replies in, bounces), Google and Microsoft sign-in for mailboxes and for storage, the storage services, Stripe if billing is switched on. Twilio only matters if texting returns.
+
+**Fetch lists:** a sample organizer PDF from each pilot firm's tax software and a shadow import of 20 of its clients; a CPA adviser's review of the rules table and catalog dates; the 1098-VLI furnishing date; whether importing is shown as free (it depends on the price on hold); a full WCAG 2.2 AA audit.
 
 **People and decisions:** hosting; the accuracy measurements on real documents, including real multi-form PDFs; the outside security review and the penetration test; a fluent Spanish review; the pricing decision (on hold); whether pilot firms need one-button sign-in with Google or Microsoft; confirming the daily sending limits.
 

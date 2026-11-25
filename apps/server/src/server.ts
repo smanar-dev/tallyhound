@@ -49,6 +49,8 @@ export interface ServerDeps {
   signup?: Omit<SignupDeps, "auth" | "firms" | "app" | "appUrl" | "log" | "requestSignInLink">;
   /** Card billing. Absent until Stripe is set up: plans are then started with the admin command and invoiced by hand. */
   billing?: Billing;
+  /** docs/FETCH.md: the model's reading of a scan, or of a file the rules found nothing in. Absent when no model is connected. */
+  readModel?: (firmId: string, pdf: Buffer, why: "unreadable" | "nothing_found") => Promise<import("./reader.ts").ReadResult & { by: "ocr" | "model" }>;
   /** A firm's own storage. Absent when no Google sign-in has been set up for this service. */
   storage?: Storage;
   /** v2: each preparer's own mailbox, through the mail layer. Absent when letters go from Tallyhound's own mail service. */
@@ -214,9 +216,20 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
   f.post("/api/imports/:id/read", { preHandler: full, bodyLimit: MAX_UPLOAD }, async (req, reply) => {
     const u = req.who!.user, bid = (req.params as { id: string }).id, q = req.query as { name?: string; n?: string }; if (u.role === "read_only") return reply.code(403).send({ error: "role", message: NO.read_only });
     if (!Buffer.isBuffer(req.body) || !req.body.length) return reply.code(400).send({ error: "bad_request", message: "Choose a PDF first." });
-    const read = await readPdf(new Uint8Array(req.body)), name = str(q.name).slice(0, 200) || "file.pdf";
-    const r = await d.app.staff(u.firmId, u.id, (T: Engine) => T.importRecord(bid, { file: name, kind: read.kind, status: read.status, by: "rules", where: "server", findings: read.findings }, q.n ? +q.n : null));
+    let read: import("./reader.ts").ReadResult & { by?: string } = await readPdf(new Uint8Array(req.body)); const name = str(q.name).slice(0, 200) || "file.pdf";
+    // A scan, or nothing the rules know: the model's reading, limited to names from fixed lists, for a person to confirm.
+    if (read.status !== "read" && d.readModel) { const m = await d.readModel(u.firmId, req.body, read.status === "unreadable" ? "unreadable" : "nothing_found").catch(() => null); if (m && m.findings.length) read = m; }
+    const r = await d.app.staff(u.firmId, u.id, (T: Engine) => T.importRecord(bid, { file: name, kind: read.kind, status: read.status, by: read.by || "rules", where: "server", findings: read.findings }, q.n ? +q.n : null));
     say("prior_read", u.firmId, read.kind, read.status, read.findings.length); return reply.header("cache-control", "no-store").send({ ...r, kind: read.kind, status: read.status, found: read.findings.length });
+  });
+  // docs/FETCH.md: last year's file for one client, read on the server (rules first, then the model for a scan), never stored.
+  f.post("/api/clients/:id/records", { preHandler: full, bodyLimit: MAX_UPLOAD }, async (req, reply) => {
+    const u = req.who!.user, eid = (req.params as { id: string }).id, name = str((req.query as { name?: string }).name).slice(0, 200) || "file.pdf"; if (u.role === "read_only") return reply.code(403).send({ error: "role", message: NO.read_only });
+    if (!Buffer.isBuffer(req.body) || !req.body.length) return reply.code(400).send({ error: "bad_request", message: "Choose a PDF first." });
+    let read: import("./reader.ts").ReadResult & { by?: string } = await readPdf(new Uint8Array(req.body));
+    if (read.status !== "read" && d.readModel) { const m = await d.readModel(u.firmId, req.body, read.status === "unreadable" ? "unreadable" : "nothing_found").catch(() => null); if (m && m.findings.length) read = m; }
+    const r = await d.app.staff(u.firmId, u.id, (T: Engine) => { if (!T.eng(eid)) return null; const x = T.attachRecord(eid, { file: name, kind: read.kind, status: read.status, by: read.by || "rules", where: "server", findings: read.findings }); if (x && T.listOf(eid).status !== "approved") T.buildList(eid); return x; });
+    if (!r) return reply.code(404).send({ error: "no_client", message: "That client is not on your list." }); return reply.header("cache-control", "no-store").send({ record: r.id, kind: r.kind, status: r.status, found: r.findings.length });
   });
   // T-46: a prior-year return in, a proposed checklist out. The file is read in memory and never kept; only the page count is recorded.
   f.post("/api/clients/:id/prior", { preHandler: full, bodyLimit: MAX_UPLOAD }, async (req, reply) => {

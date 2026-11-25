@@ -66,3 +66,18 @@ test("the 60-client test set imports through the web service with its SSN column
   for (const fn of ["importBegin", "importMap", "importRecord", "approveList", "tickItem", "setCatalog"]) assert.equal((await reader.post("/api/act", { fn, args: [] })).status, 403, fn);
   await H.close();
 });
+
+test("a scan with no text goes to the model, which may answer only with names from fixed lists; numbers are stripped and a person must confirm it before it shapes a list", async () => {
+  const { readWithModel, findingsPrompt } = await import("../src/priorread.ts"), forms = Object.keys(createEngine().FORMS);
+  const ask = async () => ({ kind: "source_doc", payers: [{ form: "W2", payer: "Midtown Transit 62-1234567", page: 1 }, { form: "BANKSTMT", payer: "x" }, { form: "1099INT", payer: "$412.00" }], schedules: ["Schedule A", "Schedule Z"], lines: ["wages", "lottery"], recipient: "MARIA GARCIA 123-45-6789", ssn: "123-45-6789" });
+  const r = await readWithModel({ render: async () => [Buffer.from("page")], ask, forms }, "f1", Buffer.from("%PDF-1.4"), "unreadable");
+  assert.equal(r.by, "ocr"); assert.deepEqual(r.findings.map((f) => [f.kind, f.form || f.value || f.recipient, f.payer || null]), [["payer", "W2", "Midtown Transit"], ["payer", "1099INT", null], ["schedule", "Schedule A", null], ["line", "wages", null], ["recipient", "MARIA GARCIA", null]]);
+  assert.ok(!/\d{5,}|\$|ssn/i.test(JSON.stringify(r))); assert.match(findingsPrompt(forms), /Never write a number/);
+  // Through the service: the record waits for a person, and the list does not use it until they confirm.
+  const H = await build("memory", { letters: true, readModel: (firmId, pdf, why) => readWithModel({ render: async () => [Buffer.from("p")], ask, forms }, firmId, pdf, why) }), { firmId, ownerId } = await H.newFirm(), owner = await H.signInAs("pat1@firm1.test");
+  await H.app.staff(firmId, ownerId, (T: Engine) => { T.importRows(T.parseCSV("First,Last,Email\nMaria,Garcia,maria@x.example")); }); let T = createEngine(); T.load((await H.store.readState(firmId))!); const eid = T.S.engs[0].id;
+  const up = await H.server.inject({ method: "POST", url: "/api/clients/" + eid + "/records?name=scan0001.pdf", payload: pdfPagesWith([[]]), headers: { "content-type": "application/pdf", cookie: owner.cookie(), "x-tallyhound": "1" } }); assert.equal(up.statusCode, 200); assert.equal(up.json().status, "needs_person");
+  T = createEngine(); T.load((await H.store.readState(firmId))!); const e = T.S.engs[0]; assert.ok(!T.S.items.some((i: any) => i.engId === eid && i.source === "doc"), "an unconfirmed reading shaped the list"); assert.ok(T.listOf(eid).reasons.includes("A file couldn't be read"));
+  assert.equal((await owner.post("/api/act", { fn: "confirmRecord", args: [eid, e.records[0].id] })).json.result, null);
+  T = createEngine(); T.load((await H.store.readState(firmId))!); assert.ok(T.S.items.some((i: any) => i.engId === eid && i.form === "W2" && i.payer === "Midtown Transit" && i.source === "doc")); await H.close();
+});

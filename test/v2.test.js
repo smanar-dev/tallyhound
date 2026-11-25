@@ -90,13 +90,13 @@ test("scenario 9: unsubscribe stops every letter and opens a can't-reach item, b
     assert.equal(c.emailOff, true); assert.equal(open(T, e, "cant_reach").length, 1, how); const n = out(T, e).length; T.advance(30 * T.DAY); assert.equal(out(T, e).length, n, "a letter went to an unsubscribed address");
   }
 });
-test("scenario 10: a K-1 on the checklist in January is in no letter before its usual issue date, and is in the one after", () => {
+test("scenario 10 (as changed by docs/FETCH.md): a K-1 in January is listed only under 'These usually arrive later', never chased before its usual date, and asked for after it", () => {
   const { T, c, e } = lfirm(); T.addItem(e.id, "K1", "Okafor Family Trust"); e.confirmed = true; T.start(e.id); T.advance(5 * T.MIN);
   const k1 = item(T, e, "K1"), until = T.holdOf(k1, e); assert.ok(until && until.reason === "catalogue_date");
-  assert.ok(!/K-1|Okafor/.test(letters(T, e)[0].body)); assert.equal(letters(T, e)[0].subject, "3 documents for your 2026 tax return");
+  const first = letters(T, e)[0].body; assert.match(first, /These usually arrive later\. Send them when they come:\n {2}- Schedule K-1 from Okafor Family Trust \(usually arrives by mid-March\)/); assert.ok(first.indexOf("Okafor") > first.indexOf("usually arrive later"), "the K-1 was asked for as if it were due");
   for (const f of ["W2", "1099INT", "1098"]) T.inboundDoc(c.id, { form: f, year: 2026, payer: item(T, e, f).payer }, "portal");
-  assert.equal(e.status, "in_progress"); const n = letters(T, e).length; T.advance((+new Date(until.until) - +T.S.now) - T.DAY); assert.equal(letters(T, e).length, n, "the K-1 was asked for before its date");
-  T.advance(4 * T.DAY); const L = letters(T, e).slice(-1)[0]; assert.match(L.body, /K-1 from Okafor Family Trust/); assert.equal(L.subject, "1 document for your 2026 tax return");
+  assert.equal(e.status, "in_progress"); const n = letters(T, e).length; T.advance((+new Date(until.until) - +T.S.now) - T.DAY); assert.equal(letters(T, e).length, n, "the K-1 was chased before its date");
+  T.advance(4 * T.DAY); const L = letters(T, e).slice(-1)[0]; assert.match(L.body, /- Schedule K-1 from Okafor Family Trust\n/); assert.ok(!/usually arrive later/.test(L.body)); assert.equal(L.subject, "1 document for your 2026 tax return");
 });
 test("TH-EML-4, 5: in approve mode nothing leaves without a click, for the firm or for one client; a letter whose list changed is not sent", () => {
   const { T, c, e } = lfirm({ mode: "copilot" }); T.setUser("u1"); e.confirmed = true; T.start(e.id); T.advance(5 * T.MIN);
