@@ -7,8 +7,15 @@ import type { Notifier, StaffMail, StaffMailer, SystemSms } from "./notify.ts";
 import { snapshot, type FirmSnapshot, type OpsStore, type Watch } from "./ops.ts";
 
 export interface WorkerStatus { lastPass: Date | null; firms: number; failed: number; lastError: string | null }
-export function createWorker({ app, auth, clock, log, inbox, notify, mailer, ops, watch, lines, billing, cleanup, expireSupport, systemSms }: { notify?: Notifier; mailer?: StaffMailer; ops?: OpsStore; watch?: Watch; lines?: (firmId: string) => Promise<number>; cleanup?: { sweep(force?: boolean): Promise<number> }; expireSupport?: () => Promise<number>; systemSms?: SystemSms; billing?: { check(firmId: string, b: { state: string; pausedUntil: Date | null }): Promise<void> }; app: App; auth: AuthStore; clock: () => Date; log?: (event: string, ...ids: unknown[]) => void; inbox?: { drain(): Promise<number>; sweep(): Promise<number>; counts(): Promise<{ waiting: number; dead: number }> } }) {
+export function createWorker({ app, auth, clock, log, inbox, notify, mailer, ops, watch, lines, billing, cleanup, expireSupport, systemSms, reconcileHour }: { reconcileHour?: number | null; notify?: Notifier; mailer?: StaffMailer; ops?: OpsStore; watch?: Watch; lines?: (firmId: string) => Promise<number>; cleanup?: { sweep(force?: boolean): Promise<number> }; expireSupport?: () => Promise<number>; systemSms?: SystemSms; billing?: { check(firmId: string, b: { state: string; pausedUntil: Date | null }): Promise<void> }; app: App; auth: AuthStore; clock: () => Date; log?: (event: string, ...ids: unknown[]) => void; inbox?: { drain(): Promise<number>; sweep(): Promise<number>; counts(): Promise<{ waiting: number; dead: number }> } }) {
   const status: WorkerStatus = { lastPass: null, firms: 0, failed: 0, lastError: null }; const failedBefore = new Map<string, number>(); let deadBefore = 0, running = false, timer: NodeJS.Timeout | null = null, quick: NodeJS.Timeout | null = null;
+  // TH-NTR-7: once a night each firm's copy in the mail layer is compared with Tallyhound and put right. reconcileHour is the hour
+  // (server time) after which it runs; null or undefined means there is no mail layer.
+  let reconciledOn = "";
+  async function reconcileAll(ids: string[]): Promise<void> {
+    if (reconcileHour == null) return; const now = clock(), day = now.toISOString().slice(0, 10); if (reconciledOn === day || now.getHours() < reconcileHour) return; reconciledOn = day;
+    for (const id of ids) { try { const r = await app.reconcile(id); if (log && r.checked) log("reconciled", id, r.checked, r.drift.length); if (watch && r.drift.length) await watch.tell("drift", id, r.drift.length + " records in the email service did not match Tallyhound overnight and were put back"); } catch (err) { if (log) log("reconcile_failed", id, (err as Error).message); } }
+  }
   async function pass(): Promise<WorkerStatus> {
     if (running) return status; running = true;
     try {
@@ -29,6 +36,7 @@ export function createWorker({ app, auth, clock, log, inbox, notify, mailer, ops
         if (ops) await ops.noteTick(id, clock(), status.lastError, null).catch(() => {}); if (watch) await watch.tell("tick", id, "The timer could not finish a firm's turn");
       } }
       if (inbox && watch) { const dead = (await inbox.counts()).dead; if (dead > deadBefore) await watch.tell("webhook", "", (dead - deadBefore) + " arriving " + (dead - deadBefore === 1 ? "message" : "messages") + " could not be processed after every retry"); deadBefore = dead; }
+      await reconcileAll(ids);
       if (expireSupport) await expireSupport().catch((err: Error) => { if (log) log("support_expire_failed", err.message); });   // T-107
       if (cleanup) await cleanup.sweep().catch((err: Error) => { if (log) log("twilio_cleanup_failed", err.message); });   // T-108
       if (ops) await ops.sweep(clock());
@@ -45,7 +53,7 @@ export function createWorker({ app, auth, clock, log, inbox, notify, mailer, ops
     const t = setTimeout(() => { soonFor.delete(firmId); void app.tick(firmId).catch((err: Error) => { if (log) log("tick_failed", firmId, err.message); }); }, afterMs); t.unref(); soonFor.set(firmId, t);
   }
   return {
-    status, pass, soon,
+    status, pass, soon, reconcileNow: async () => { reconciledOn = ""; const was = reconcileHour; reconcileHour = 0; try { await reconcileAll(await auth.activeFirmIds()); } finally { reconcileHour = was; } },
     start(everyMs = 5 * 60000) { if (timer) return; void pass(); timer = setInterval(() => void pass(), everyMs); timer.unref(); },
     stop() { if (timer) clearInterval(timer); if (quick) clearInterval(quick); timer = quick = null; },
     /** The queue is looked at far more often than the firms are ticked: a retry is due within the minute, not within five. */

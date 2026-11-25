@@ -7,6 +7,8 @@ import { registerSignup, type SignupDeps } from "./signup.ts";
 import { kitAuth, kitRegistration } from "./kit.ts";
 import { BillingError, type Billing } from "./billing.ts";
 import { SLUG, StorageError, type Storage } from "./storage.ts";
+import { hookSigned, MailboxError, type Mailboxes, type Provider } from "./mailbox.ts";
+import { kitEmailIn } from "./kit.ts";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import cookie from "@fastify/cookie";
 import QRCode from "qrcode";
@@ -46,6 +48,10 @@ export interface ServerDeps {
   billing?: Billing;
   /** A firm's own storage. Absent when no Google sign-in has been set up for this service. */
   storage?: Storage;
+  /** v2: each preparer's own mailbox, through the mail layer. Absent when letters go from Tallyhound's own mail service. */
+  mailboxes?: Mailboxes;
+  /** The secret the mail layer signs its calls to us with. Without it the route does not exist. */
+  layerHook?: { secret: string };
   /** Ask the Hound. Absent when no model is connected. */
   ask?: (firmId: string, who: { name: string; role: string }, turns: { role: "user" | "assistant"; text: string }[]) => Promise<string>;
   health?: () => Record<string, unknown> | Promise<Record<string, unknown>>;
@@ -240,7 +246,7 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
   // The one thing the sign-in page needs to know before anyone has signed in: whether a firm can sign itself up.
   f.get("/api/site", async () => ({ signup: !!(d.signup && d.signup.open) }));
   // What this installation has connected, so the screens show only what works (T-45): no tab, switch or button for a service that is not set up.
-  f.get("/api/features", { preHandler: full }, async () => ({ ask: !!d.ask, prior: !!d.prior, signup: !!(d.signup && d.signup.open), billing: !!d.billing, domain: !!d.domains, voice: !!d.voice, textBarks: !!d.systemSms, storage: d.storage ? d.storage.offered() : [] }));
+  f.get("/api/features", { preHandler: full }, async () => ({ ask: !!d.ask, prior: !!d.prior, signup: !!(d.signup && d.signup.open), billing: !!d.billing, domain: !!d.domains, voice: !!d.voice, textBarks: !!d.systemSms, storage: d.storage ? d.storage.offered() : [], mailbox: d.mailboxes ? d.mailboxes.offered() : [] }));
   // The note a firm sends its own clients before Tallyhound's first message, worded for this firm. Read only.
   f.get("/api/headsup", { preHandler: full }, async (req, reply) => {
     const json = await d.readState(req.who!.user.firmId); if (!json) return reply.code(404).send({ error: "no_firm", message: "This firm's workspace could not be found." });
@@ -262,6 +268,43 @@ export async function buildServer(d: ServerDeps): Promise<FastifyInstance> {
   f.post("/api/billing/portal", { preHandler: full }, async (req, reply) => { const u = req.who!.user; if (u.role !== "owner") return reply.code(403).send({ error: "role", message: NO.other }); if (!d.billing) return reply.code(503).send({ error: "not_connected", message: "Paying by card is not switched on yet." }); return billed(reply, u.firmId, () => d.billing!.portal(u.firmId)); });
   // Stripe's webhook. Its own small scope, because the signature is over the exact bytes sent and so the body must not be parsed first.
   if (d.billing) void f.register(async (s) => { s.addContentTypeParser("application/json", { parseAs: "buffer", bodyLimit: 1024 * 1024 }, (_req, b, done) => done(null, b)); s.post("/hooks/stripe", async (req, reply) => { const r = await d.billing!.webhook(Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0), String(req.headers["stripe-signature"] || "")); return reply.code(r.status).send({ received: r.ok }); }); });
+
+  // ---- v2: each preparer's own mailbox (TH-MBX). Connecting is a visit to Google or Microsoft and back; nothing else can mark a mailbox as connected. ----
+  const PROVIDERS = ["google", "microsoft"];
+  f.get("/api/mailbox", { preHandler: full }, async (req) => { const u = req.who!.user, all = d.mailboxes ? await d.mailboxes.status(u.firmId) : []; return { layer: !!d.mailboxes, offered: d.mailboxes ? d.mailboxes.offered() : [], mine: all.find((m) => m.userId === u.id) || null, all: u.role === "owner" ? all : all.filter((m) => m.userId === u.id) }; });
+  f.get("/api/mailbox/:provider/start", { preHandler: full }, async (req, reply) => {
+    const u = req.who!.user, p = (req.params as { provider: string }).provider as Provider; if (u.role === "read_only") return reply.code(403).send({ error: "role", message: NO.read_only });
+    if (!d.mailboxes || !PROVIDERS.includes(p) || !d.mailboxes.offered().includes(p)) return reply.redirect("/settings?tab=mailbox&problem=unavailable", 303);
+    return reply.header("cache-control", "no-store").redirect(d.mailboxes.startUrl(u.firmId, u.id, p), 303);
+  });
+  f.get("/api/mailbox/:provider/callback", { preHandler: full }, async (req, reply) => {
+    const u = req.who!.user, p = (req.params as { provider: string }).provider as Provider, q = req.query as { code?: string; state?: string; error?: string };
+    if (!d.mailboxes || !PROVIDERS.includes(p)) return reply.redirect("/settings?tab=mailbox&problem=unavailable", 303);
+    try { await d.mailboxes.finish(u.firmId, u.id, q, p); await d.auth.audit(u.firmId, u.id, "mailbox.connected", p); if (d.nudge) d.nudge(u.firmId); return reply.header("cache-control", "no-store").redirect("/settings?tab=mailbox&connected=1", 303); }
+    catch (err) { const code = err instanceof MailboxError ? err.code : "error"; say("mailbox_connect_failed", u.firmId, code); return reply.header("cache-control", "no-store").redirect("/settings?tab=mailbox&problem=" + encodeURIComponent(code), 303); }
+  });
+  // One click (TH-MBX-3). A person disconnects their own mailbox; an owner may disconnect anyone's.
+  f.post("/api/mailbox/disconnect", { preHandler: full }, async (req, reply) => {
+    const u = req.who!.user, who = str((req.body as { userId?: string } | null)?.userId) || u.id; if (who !== u.id && u.role !== "owner") return reply.code(403).send({ error: "role", message: NO.other });
+    if (!d.mailboxes) return reply.code(404).send({ error: "not_connected", message: "No mailbox is connected." });
+    const done = await d.mailboxes.disconnect(u.firmId, who); if (done) await d.auth.audit(u.firmId, u.id, "mailbox.disconnected", who === u.id ? "their own" : "for another person"); return { ok: true, disconnected: done };
+  });
+  // The mail layer calls in: a reply it read, or a letter that came back (TH-EML-8, 9). Its own small scope, because the signature is
+  // over the exact bytes. Signed and not older than five minutes; each event is acted on once however often it is delivered.
+  if (d.mailboxes && d.layerHook) void f.register(async (s) => {
+    s.addContentTypeParser("application/json", { parseAs: "buffer", bodyLimit: 30 * 1024 * 1024 }, (_req, b, done) => done(null, b));
+    s.post("/hooks/neeter", async (req, reply) => {
+      const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0); if (!hookSigned(d.layerHook!.secret, String(req.headers["x-layer-signature"] || ""), raw, new Date())) return reply.code(401).send({ error: "signature" });
+      let j: Record<string, unknown>; try { j = JSON.parse(raw.toString("utf8")) as Record<string, unknown>; } catch { return reply.code(400).send({ error: "bad_request" }); }
+      const id = str(j.id).slice(0, 80), where = await d.mailboxes!.firmOfAssistant(str(j.assistant_id)); if (!id || !where) return reply.code(202).send({ ok: true });   // not ours, or a mailbox since disconnected: nothing is kept
+      if (j.type === "bounce") { await d.app.layerBounce({ firmId: where.firmId, to: str(j.to), providerId: "ly-" + id }); return { ok: true }; }
+      if (j.type !== "reply") return reply.code(202).send({ ok: true });
+      const sent = (Array.isArray(j.attachments) ? j.attachments : []).slice(0, 10) as { content_type?: string; content_base64?: string; name?: string }[];
+      const files = await Promise.all(sent.filter((a) => typeof a.content_base64 === "string").map((a) => ready({ bytes: Buffer.from(a.content_base64!, "base64"), contentType: str(a.content_type), name: str(a.name).slice(0, 120) }, d.prepare || {})));
+      const r = await d.app.layerReply({ firmId: where.firmId, from: str(j.from), text: kitEmailIn.stripReply(str(j.text)).slice(0, 5000), proposed: str(j.proposed_status), attachments: files.filter((x) => !x.refused), attachmentsHeld: Math.max(0, (+(j.attachment_count as number) || 0) - files.length), providerId: "ly-" + id });
+      say("layer_reply", where.firmId, r && r.client ? "matched" : "unmatched"); if (d.nudge) d.nudge(where.firmId); return { ok: true };
+    });
+  });
 
   // ---- the firm's own storage (owner only). Connecting is a visit to Google and back; nothing else can mark a drive as connected. ----
   const ownerOnly = (req: FastifyRequest, reply: FastifyReply) => (req.who!.user.role === "owner" ? null : reply.code(403).send({ error: "role", message: NO.other }));

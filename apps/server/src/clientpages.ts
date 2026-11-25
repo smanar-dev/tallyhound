@@ -5,9 +5,9 @@ import { createElement as h, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 export interface FirmView { name: string; phone: string; page: string }
-const frame = (title: string, firm: FirmView, body: ReactNode, script = false): string => "<!doctype html>" + renderToStaticMarkup(
+const frame = (title: string, firm: FirmView, body: ReactNode, script = false, refresh = 0): string => "<!doctype html>" + renderToStaticMarkup(
   h("html", { lang: "en" },
-    h("head", null, h("meta", { charSet: "utf-8" }), h("meta", { name: "viewport", content: "width=device-width, initial-scale=1" }), h("meta", { name: "robots", content: "noindex, nofollow" }), h("title", null, title + " · " + firm.name), h("link", { rel: "stylesheet", href: "/client.css" }), script ? h("script", { src: "/client.js", defer: true }) : null),
+    h("head", null, h("meta", { charSet: "utf-8" }), h("meta", { name: "viewport", content: "width=device-width, initial-scale=1" }), h("meta", { name: "robots", content: "noindex, nofollow" }), h("title", null, title + " · " + firm.name), h("link", { rel: "stylesheet", href: "/client.css" }), refresh ? h("meta", { httpEquiv: "refresh", content: String(refresh) }) : null, script ? h("script", { src: "/client.js", defer: true }) : null),
     h("body", null, h("main", null, h("p", { className: "firm" }, firm.name), body,
       h("footer", null, h("a", { href: firm.page + "#privacy" }, "Privacy"), " · ", h("a", { href: firm.page + "#terms" }, "Terms"), " · ", h("a", { href: firm.page + "#check" }, "Is this really from " + firm.name + "?"), h("p", { className: "sent" }, "Sent with Tallyhound"))))));
 const call = (firm: FirmView) => (firm.phone ? ", or call " + firm.phone : "");
@@ -49,6 +49,41 @@ export function uploadPage(firm: FirmView, o: { action: string; ask: string | nu
       h("p", { key: 4, className: "muted small" }, "We never show documents here. If one is missing or hard to read, " + firm.name + " will tell you.")];
   return frame("Send your documents", firm, waiting, !o.done);
 }
+
+/* v2 (docs/V2.md section 6): the upload page of an email-first firm. It opens from the link in any letter and shows only the firm's
+   name, the client's first name and the names of the documents still owed (TH-UPL-2): never an email address, a number, an
+   amount or anything already sent. Each document has its own Take photo and Choose file, and a way to say "I don't have this
+   one" or "I'll send it later". After an upload the page says what the sniff test found, in one sentence, and nothing else.
+   It works with no script: the result then arrives by the page reloading itself for a minute. */
+export interface UploadItem { id: string; title: string; note?: string }
+export interface UploadView { action: string; first: string; items: UploadItem[]; done?: boolean; idle?: boolean; error?: string; said?: string; results?: { ok: boolean; text: string }[]; checking?: boolean; minDay?: string }
+export function uploadPageV2(firm: FirmView, o: UploadView) {
+  const body: ReactNode[] = [h("h1", { key: "h" }, o.done ? "Thank you, " + o.first + "." : "Hi " + o.first)];
+  if (o.results && o.results.length) body.push(h("div", { key: "r", className: "card", role: "status" }, h("p", { className: "muted small" }, "What you just sent"), h("ul", { className: "res" }, o.results.map((r, i) => h("li", { key: i, className: r.ok ? "good" : "fix" }, r.text)))));
+  if (o.checking) body.push(h("p", { key: "c", className: "ok", role: "status" }, "Got it. Checking what you sent. This page will say what we found in a moment."));
+  if (o.said) body.push(h("p", { key: "s", className: "ok", role: "status" }, o.said));
+  if (o.error) body.push(h("p", { key: "e", className: "err", role: "alert" }, o.error));
+  if (o.done) body.push(h("p", { key: "d" }, firm.name + " has everything it asked for."));
+  else {
+    if (o.items.length) body.push(h("div", { key: "l", className: "card" }, h("p", { className: "muted small" }, firm.name + " still needs"),
+      h("ul", { className: "owed" }, o.items.map((it) => h("li", { key: it.id },
+        h("p", { className: "ask" }, it.title), it.note ? h("p", { className: "muted small" }, it.note) : null,
+        // The two buttons open the same file pickers as the form below, so the page needs no script to send a file.
+        h("p", { className: "acts" }, h("label", { htmlFor: "cam", className: "btn sm camonly" }, "Take photo"), " ", h("label", { htmlFor: "photo", className: "btn sm" }, "Choose file")),
+        h("details", null, h("summary", null, "I don't have this one, or I'll send it later"),
+          h("form", { method: "post", action: o.action, className: "tiny" }, h("input", { type: "hidden", name: "form", value: "none" }), h("input", { type: "hidden", name: "item", value: it.id }), h("button", { className: "btn sm" }, "I don't have this one")),
+          h("form", { method: "post", action: o.action, className: "tiny" }, h("input", { type: "hidden", name: "form", value: "later" }), h("input", { type: "hidden", name: "item", value: it.id }), h("label", null, "I'll send it by ", h("input", { type: "date", name: "day", min: o.minDay })), " ", h("button", { className: "btn sm" }, "I'll send this later"))))))));
+    else body.push(h("p", { key: "i" }, o.idle ? "Nothing more is needed from you right now. If you have something else for " + firm.name + ", you can send it here." : "Send your documents here."));
+    body.push(h("form", { key: "f", id: "send", method: "post", action: o.action, encType: "multipart/form-data" },
+      h("div", { className: "pick cam" }, h("label", { htmlFor: "cam" }, "Take a photo"), h("input", { id: "cam", name: "file", type: "file", accept: "image/*", capture: "environment" })),
+      h("div", { className: "pick" }, h("label", { htmlFor: "photo" }, "Choose files"), h("input", { id: "photo", name: "file", type: "file", accept: "image/*,application/pdf", multiple: true })),
+      h("p", { className: "muted small" }, "A phone photo or a PDF both work. " + UPLOAD_TYPES), h("ul", { id: "rows", "aria-live": "polite" }), h("button", { className: "btn pri nojs" }, "Send")));
+    body.push(h("p", { key: "n", className: "muted small" }, "No account or password is needed. We never show documents here."));
+  }
+  return frame("Send your documents", firm, body, !o.done, o.checking ? 4 : 0);
+}
+/** A link staff switched off or replaced, or one for a file closed more than a month ago (TH-UPL-1, 7). */
+export const askForLinkPage = (firm: FirmView) => frame("Ask for a new link", firm, [h("h1", { key: 1 }, "This link no longer works"), h("p", { key: 2 }, "Ask your accountant for a new link" + call(firm) + ".")]);
 
 export function unsubscribePage(firm: FirmView, o: { action: string; keep: string; done?: boolean }) {
   return o.done ? frame("Emails stopped", firm, [h("h1", { key: 1 }, "Emails stopped"), h("p", { key: 2 }, "You will get no more emails from " + firm.name + " about your tax documents." + (firm.phone ? " To send documents another way, call " + firm.phone + "." : ""))])

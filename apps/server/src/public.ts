@@ -14,10 +14,10 @@ import type { Inbox } from "./queue.ts";
 import * as pages from "./clientpages.ts";
 
 const CSS = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../assets/client.css")), JS = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../assets/client.js"));
-export const MAX_FILE = 25 * 1024 * 1024, MAX_FILES = 10, PER_LINK_A_MINUTE = 30, PER_ADDRESS_A_MINUTE = 60;
-export interface PublicDeps { lookup?: { lineType(mobile10: string): Promise<string> } | null; app: App; store: KitStore; auth: AuthStore; inbox: Inbox; clock: () => Date; log?: (event: string, ...ids: unknown[]) => void }
+export const MAX_FILE = 25 * 1024 * 1024, MAX_FILES = 10, PER_LINK_A_MINUTE = 30, PER_ADDRESS_A_MINUTE = 60, UPLOADS_AN_HOUR = 20, RESULT_MINUTES = 30;
+export interface PublicDeps { secure?: boolean; lookup?: { lineType(mobile10: string): Promise<string> } | null; app: App; store: KitStore; auth: AuthStore; inbox: Inbox; clock: () => Date; log?: (event: string, ...ids: unknown[]) => void }
 /* eslint-disable @typescript-eslint/no-explicit-any */
-type Found = { firmId: string; firm: pages.FirmView; T: Engine; c: any | null; e: any | null };
+type Found = { firmId: string; firm: pages.FirmView; T: Engine; c: any | null; e: any | null; dead?: boolean };
 
 export async function registerPublic(f: FastifyInstance, d: PublicDeps): Promise<void> {
   const say = d.log || (() => {});
@@ -29,11 +29,24 @@ export async function registerPublic(f: FastifyInstance, d: PublicDeps): Promise
     const m = /^([a-z]{1,40})-([a-z]{28})$/.exec(String(token || "")); if (!m) return null;
     const firmId = await d.auth.firmIdBySlug(m[1]!), json = firmId && (await d.store.readState(firmId)); if (!firmId || !json) return null;
     const T = createEngine(); T.load(json); T.setNow(T.S.firm.iana ? wallTime(d.clock(), T.S.firm.iana) : d.clock());
+    const firm = { name: T.S.firm.name, phone: T.S.firm.phone || "", page: "/f/" + m[1] };
+    // v2: an email-first firm's upload link belongs to the season. One staff replaced or switched off, or one for a file closed
+    // over a month ago, finds nobody and says to ask for a new one (TH-UPL-1, 7).
+    if (kind === "u" && T.LETTERS()) { const L = T.linkFind(m[2]); return L && L.state === "live" ? { firmId, firm, T, c: L.c, e: L.e } : { firmId, firm, T, c: null, e: null, dead: !!L }; }
     const c = T.S.clients.find((x: any) => (kind === "e" ? x.ekey === m[2] : x.key === m[2] && T.linkLive(x))) || null;
-    return { firmId, firm: { name: T.S.firm.name, phone: T.S.firm.phone || "", page: "/f/" + m[1] }, T, c, e: c ? T.engOf(c.id) : null };
+    return { firmId, firm, T, c, e: c ? T.engOf(c.id) : null };
   }
   const html = (reply: FastifyReply, body: string, status = 200) => reply.code(status).header("x-robots-tag", "noindex, nofollow").type("text/html; charset=utf-8").send(body);
-  const gone = (reply: FastifyReply, x: Found | null) => html(reply, x ? pages.expiredPage(x.firm) : pages.unknownPage(), 404);
+  const gone = (reply: FastifyReply, x: Found | null) => html(reply, x ? (x.dead ? pages.askForLinkPage(x.firm) : pages.expiredPage(x.firm)) : pages.unknownPage(), 404);
+  // TH-UPL-3: documents only ever travel encrypted. When the service is on https, a request that reached it in the clear is refused.
+  const secure = d.secure === true;
+  f.addHook("onRequest", async (req, reply) => { if (secure && /^\/[cue]\//.test(req.url) && req.protocol !== "https") return reply.code(400).type("text/plain; charset=utf-8").send("Open this link with https."); });
+  // TH-UPL-6: so many files an hour through one link, counted here and against what the firm's own record already holds.
+  const hourly = new Map<string, { n: number; until: number }>();
+  const overHour = (x: Found, t: string, adding: number): boolean => {
+    const now = Date.now(), h = hourly.get(t), mem = h && h.until > now ? h.n : 0, held = x.e ? x.T.S.docs.filter((q: any) => q.engId === x.e.id && q.channel === "portal" && +new Date(x.T.S.now) - +new Date(q.at) < 3600000).length : 0;
+    if (Math.max(mem, held) + adding > UPLOADS_AN_HOUR) return true; hourly.set(t, { n: mem + adding, until: h && h.until > now ? h.until : now + 3600000 }); if (hourly.size > 20000) hourly.clear(); return false;
+  };
   // A brake on guessing and on flooding: so many requests a minute per link, and per address.
   const hits = new Map<string, { n: number; until: number }>();
   const brake = async (req: FastifyRequest, reply: FastifyReply) => {
@@ -76,8 +89,30 @@ export async function registerPublic(f: FastifyInstance, d: PublicDeps): Promise
   const checkinOpen = (x: Found) => !!(x.e && x.e.checkin && x.e.checkin.sentAt && !x.e.checkin.doneAt && !["complete", "closed"].includes(x.e.status));
   const checkinView = (x: Found, t: string, changed: boolean, error?: string) => { const p = x.T.checkinPrefill(x.e.id), name = (i: { form: string; payer: string }) => (x.T.FORMS[i.form] || x.T.FORMS.OTHER).plain + (i.payer ? " from " + i.payer : "");
     return pages.checkinPage(x.firm, { action: "/u/" + t, year: x.e.year, choices: x.T.CHECKQ.map((q: string[]) => [q[0], q[1]]), ticked: p.facts, employers: p.w2, last: p.last.map(name), returning: !!p.returning && p.last.length > 0, changed, error }); };
+  // ---- v2: the email-first upload page ----
+  const lang = (x: Found) => (x.c && x.c.lang === "es" ? "es" : "en");
+  /** What the sniff test found for the files of one upload, as sentences. Only for a short while, and only by the id the uploader was given. */
+  const resultsOf = (x: Found, ups: string[]) => {
+    const now = +new Date(x.T.S.now), docs = x.e ? x.T.S.docs.filter((q: any) => q.engId === x.e.id && q.batch && ups.includes(String(q.batch).replace(/^up-/, "")) && now - +new Date(q.at) < RESULT_MINUTES * 60000) : [];
+    const lines = docs.map((q: any) => x.T.uploadResult(q, lang(x))).filter(Boolean) as { ok: boolean; text: string }[];
+    return { lines, pending: docs.length === 0 || lines.length < docs.length };
+  };
+  const upsOf = (v: unknown) => String(v || "").split(".").filter((s) => /^[0-9a-f]{24}$/.test(s)).slice(0, MAX_FILES);
+  const lettersView = (x: Found, t: string, o: { error?: string; said?: string; ups?: string[]; tries?: number } = {}) => {
+    const done = !x.e || ["complete", "closed"].includes(x.e.status), items = done ? [] : x.T.letterItems(x.e).map((i: any) => ({ id: i.id, title: x.T.itemTitle(i, lang(x)), note: i.fixNote ? i.fixNote[lang(x) === "es" ? 1 : 0] : undefined }));
+    const r = o.ups && o.ups.length ? resultsOf(x, o.ups) : null, tm = new Date(+new Date(x.T.S.now) + 86400000), minDay = tm.getFullYear() + "-" + String(tm.getMonth() + 1).padStart(2, "0") + "-" + String(tm.getDate()).padStart(2, "0");
+    return pages.uploadPageV2(x.firm, { action: "/u/" + t, first: x.c.first, items, done, idle: !done && !items.length, error: o.error, said: o.said, results: r ? r.lines : undefined, checking: !!(r && r.pending && (o.tries || 0) < 15), minDay });
+  };
+  f.get("/u/:t/result", { preHandler: brake }, async (req, reply) => {
+    const x = await find(params(req).t, "u"); if (!x || !x.c || !x.T.LETTERS()) return reply.code(404).header("cache-control", "no-store").send({ error: "This link no longer works." });
+    const r = resultsOf(x, upsOf((req.query as { up?: string }).up)); return reply.header("cache-control", "no-store").send({ done: !r.pending, lines: r.lines });
+  });
   f.get("/u/:t", { preHandler: brake }, async (req, reply) => {
     const x = await find(params(req).t, "u"); if (!x || !x.c) return gone(reply, x);
+    if (x.T.LETTERS() && !checkinOpen(x)) { const q = req.query as { up?: string; said?: string; n?: string }, ups = upsOf(q.up), tries = Math.max(0, +q.n! || 0);
+      // With no script the page reloads itself every few seconds until the result is in, counting its tries in the address so it stops.
+      const page = lettersView(x, params(req).t, { ups, tries, said: q.said === "none" ? "Thanks. We've let " + x.firm.name + " know you don't have that one." : q.said === "later" ? "Thanks. We've let " + x.firm.name + " know it's coming later." : undefined });
+      return html(reply, ups.length ? page.replace('http-equiv="refresh" content="4"', 'http-equiv="refresh" content="4;url=/u/' + params(req).t + "?up=" + ups.join(".") + "&amp;n=" + (tries + 1) + '"') : page); }
     if (checkinOpen(x)) return html(reply, checkinView(x, params(req).t, !!(req.query as { changed?: string }).changed));
     const sent = Math.min(MAX_FILES, Math.max(0, +(req.query as { sent?: string }).sent! || 0)); return html(reply, uploadView(x, params(req).t, { sent: sent || undefined }));
   });
@@ -92,15 +127,23 @@ export async function registerPublic(f: FastifyInstance, d: PublicDeps): Promise
       await d.app.checkinAnswers(x.firmId, x.c.id, b.same === "1" ? { same: true, facts: {}, counts: {} } : { facts, counts: { w2: Math.min(9, Math.max(1, Math.round(+b.w2!) || 1)) }, note: String(b.note || "").slice(0, 300) });
       return html(reply, pages.checkinDone(x.firm));
     }
-    if (!req.isMultipart()) return script ? no(400, "Choose a photo or a PDF first.") : html(reply, uploadView(x, t, { error: "Choose a photo or a PDF first." }), 400);
+    const V2 = x.T.LETTERS(), view = (o: { error?: string }) => (V2 ? lettersView(x, t, o) : uploadView(x, t, o));
+    // "I don't have this one" and "I'll send this later" do what the same replies by email do (docs/V2.md section 6).
+    if (V2 && !req.isMultipart() && (fields(req).form === "none" || fields(req).form === "later")) {
+      const b = fields(req), iid = String(b.item || ""), ok = x.e && x.T.letterItems(x.e).some((i: any) => i.id === iid); if (!ok) return reply.redirect("/u/" + t, 303);
+      await d.app.withFirm(x.firmId, (T: Engine) => (b.form === "none" ? T.portalNone(iid) : T.portalLater(iid, String(b.day || "").slice(0, 10)))); return reply.redirect("/u/" + t + "?said=" + b.form, 303);
+    }
+    if (!req.isMultipart()) return script ? no(400, "Choose a photo or a PDF first.") : html(reply, view({ error: "Choose a photo or a PDF first." }), 400);
     const files: { name: string; type: string; b64: string }[] = []; let tooBig = false;
     try { for await (const part of req.files()) { const buf = await part.toBuffer(); if (buf.length) files.push({ name: String(part.filename || "").slice(0, 120), type: part.mimetype, b64: buf.toString("base64") }); } }
     catch (err) { if ((err as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE" || (err as { code?: string }).code === "FST_FILES_LIMIT") tooBig = true; else throw err; }
-    if (tooBig) return script ? no(413, "Too large. The limit is 25 MB.") : html(reply, uploadView(x, t, { error: "Too large. The limit is 25 MB a file, and " + MAX_FILES + " files at a time." }), 413);
-    if (!files.length) return script ? no(400, "Choose a photo or a PDF first.") : html(reply, uploadView(x, t, { error: "Choose a photo or a PDF first." }), 400);
+    if (tooBig) return script ? no(413, "Too large. The limit is 25 MB.") : html(reply, view({ error: "Too large. The limit is 25 MB a file, and " + MAX_FILES + " files at a time." }), 413);
+    if (!files.length) return script ? no(400, "Choose a photo or a PDF first.") : html(reply, view({ error: "Choose a photo or a PDF first." }), 400);
+    if (V2 && overHour(x, t, files.length)) return script ? no(429, "That is a lot of files in one hour. Please try again later, or call " + x.firm.name + ".") : html(reply, view({ error: "That is a lot of files in one hour. Please try again later, or call " + x.firm.name + "." }), 429);
     // Stored sealed and answered at once; the worker reads it. A failure here tells the client to try again, and nothing is half kept.
     const id = randomBytes(12).toString("hex");
     await d.inbox.accept("upload", id, x.firmId, "upload", Buffer.from(JSON.stringify({ id, clientId: x.c.id, files }))); void d.inbox.drain(); say("upload_received", x.firmId, files.length);
+    if (V2) return script ? reply.header("cache-control", "no-store").send({ ok: true, sent: files.length, up: id }) : reply.redirect("/u/" + t + "?up=" + id, 303);
     return script ? reply.header("cache-control", "no-store").send({ ok: true, sent: files.length }) : reply.redirect("/u/" + t + "?sent=" + files.length, 303);
   });
 

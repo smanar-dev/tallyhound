@@ -36,6 +36,18 @@
     };
     img.onerror = function () { end(null); }; setTimeout(function () { end(null); }, 4000); img.src = url;
   }
+  // What the sniff test found for this file: one sentence from the server, asked for every few seconds for about a minute.
+  function found(r, up, n) {
+    var x = new XMLHttpRequest(); x.open("GET", form.action + "/result?up=" + encodeURIComponent(up)); x.setRequestHeader("x-tallyhound-client", "1");
+    x.onload = function () {
+      var j = null; try { j = JSON.parse(x.responseText); } catch { /* not ours */ }
+      if (j && j.lines && j.lines.length && (j.done || n >= 20)) { var bad = false, t = []; for (var i = 0; i < j.lines.length; i++) { if (!j.lines[i].ok) bad = true; t.push(j.lines[i].text); } say(r, bad ? "bad" : "done", (bad ? "" : "✓ ") + t.join(" ")); return; }
+      if (n >= 20) return say(r, "done", "✓ Received. We'll let you know if anything is missing.");
+      setTimeout(function () { found(r, up, n + 1); }, 3000);
+    };
+    x.onerror = function () { if (n < 20) setTimeout(function () { found(r, up, n + 1); }, 3000); };
+    x.send();
+  }
   function add(file) {
     var r = row(file);
     if (file.size > MAX) return say(r, "bad", "Too large. The limit is 25 MB.");
@@ -56,7 +68,7 @@
     x.upload.onprogress = function (e) { if (e.lengthComputable) { r.bar.value = Math.round(e.loaded / e.total * 100); r.state.textContent = r.bar.value + "%"; } };
     x.onload = function () {
       var j = null; try { j = JSON.parse(x.responseText); } catch { /* not ours */ }
-      if (x.status === 200 && j && j.ok) { r.bar.value = 100; say(r, "done", "✓ Received"); thanks(); }
+      if (x.status === 200 && j && j.ok) { r.bar.value = 100; if (j.up) { say(r, "going", "Received. Checking it now"); found(r, j.up, 0); } else { say(r, "done", "✓ Received"); thanks(); } }
       else again(r, (j && j.error) || "That did not go through.");
       next();
     };

@@ -37,6 +37,10 @@ export interface App {
   clientUpload(m: { firmId: string; clientId: string; files: { bytes: Buffer; contentType?: string }[]; providerId?: string }): Promise<{ handled: boolean; duplicate?: boolean; held?: boolean; docs?: string[]; unusable?: string }>;
   staffUpload(firmId: string, userId: string, clientId: string, file: { bytes: Buffer; contentType?: string }): Promise<{ error?: string; docs?: (string | null)[] }>;
   openFile(firmId: string, userId: string, docId: string): Promise<{ bytes: Buffer; contentType: string } | null>;
+  /** v2: a reply the mail layer read, a letter that came back, and the nightly comparison of the layer's copy with ours. */
+  layerReply(m: { firmId: string; from: string; text: string; proposed?: string; attachments?: { bytes: Buffer; contentType?: string }[]; attachmentsHeld?: number; providerId?: string }): Promise<any>;
+  layerBounce(m: { firmId: string; to: string; providerId?: string }): Promise<any>;
+  reconcile(firmId: string): Promise<{ checked: number; drift: { engId: string; what: string; itemId?: string }[] }>;
 }
 
 export const { createEngine } = require("../../../packages/engine") as { createEngine(): Engine };
@@ -44,7 +48,7 @@ export const { wallTime } = require("../../../packages/core/pipeline.js") as { w
 export const { pagesToFile: kitPagesToFile } = require("../../../packages/core/pipeline.js") as { pagesToFile(total: number, own: number[], others: number[][]): number[] };
 export const kitRegistration = require("../../../packages/core/registration.js") as { firmPage(firm: { name: string; phone?: string }, opt?: { number?: string; address?: string }): string; brand(firm: unknown, reg: unknown): unknown; campaign(firm: unknown, reg: unknown): unknown; headsUp(firm: { name: string }, opt?: { number?: string; address?: string }): { subject: string; email: string; letter: string; website: string; voicemail: string } };
 export const { createApp } = require("../../../packages/core/pipeline.js") as {
-  createApp(deps: { store: KitStore; sms: Sender; email: Sender; ai: unknown; clock?: () => Date; log?: (event: string, ...ids: unknown[]) => void; files?: unknown; voice?: unknown; cut?: (bytes: Buffer, own: number[], others: number[][]) => Promise<Buffer | null> }): App;
+  createApp(deps: { store: KitStore; sms: Sender; email: Sender; ai: unknown; clock?: () => Date; log?: (event: string, ...ids: unknown[]) => void; files?: unknown; voice?: unknown; cut?: (bytes: Buffer, own: number[], others: number[][]) => Promise<Buffer | null>; layer?: unknown }): App;
 };
 export const kitAuth = require("../../../packages/core/auth.js") as {
   issueLink(secret: string, email: string, now: Date | number): string;
@@ -74,5 +78,5 @@ export const kitTwilio = require("../../../packages/adapters/twilio.js") as { tw
 export const kitEmailOut = require("../../../packages/adapters/email-out.js") as { postmark(o: Record<string, unknown>): Sender; bounceEvent(j: unknown): any };
 export interface PrepareOpts { heic?: (b: Buffer) => Promise<Buffer>; image?: (b: Buffer) => Promise<{ bytes?: Buffer; width: number; height: number; mean?: number; sharp?: number }>; scan?: (b: Buffer) => Promise<{ clean: boolean; name?: string }> }
 export const kitPrepare = require("../../../packages/adapters/prepare.js") as { prepare(file: { bytes: Buffer; contentType?: string; name?: string; inline?: boolean }, opt?: PrepareOpts): Promise<any>; sniff(b: Buffer): string };
-export const kitEmailIn = require("../../../packages/adapters/email-inbound.js") as { fromPostmark(j: unknown): { to: string; from: string; body: string; providerId: string | null; trusted: boolean; forwarded?: unknown; attachments: any[] } };
+export const kitEmailIn = require("../../../packages/adapters/email-inbound.js") as { stripReply(text: string): string; fromPostmark(j: unknown): { to: string; from: string; body: string; providerId: string | null; trusted: boolean; forwarded?: unknown; attachments: any[] } };
 export const kitPrompts = require("../../../packages/core/prompts.js") as { priorReturn(): string };

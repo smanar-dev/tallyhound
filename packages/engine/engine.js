@@ -177,7 +177,78 @@
       M31: "{firm} no está recibiendo documentos aquí por ahora. Comuníquese con {firm} directamente: llame al {firm_phone} o escriba a {firm_email}."
     }
   };
-  const TPL_USE = { M34: "Someone else has the document", M35: "Says it was already sent: we have it", M35R: "Says it was already sent: asked again", M35Y: "Says it was already sent: found under another item", M36: "A change passed to the preparer", M37: "Says the messages are not theirs", M20D: "Will send after a date", M33: "Voicemail after the final reminder", M32: "The closing question", M31: "Auto-reply while the firm is paused", M30L: "Locked PDF", M30T: "A file we cannot open", M30K: "A link instead of a file", M1: "Invitation to text (email)", M1R: "Invitation reminder (email)", M2: "Texting turned on", M3: "First request", M4: "Next request", M5: "Reminder", M6: "Final reminder", M7: "Wrong year", M8: "Photo too hard to read", M8L: "Photo too hard to read, second time", M9: "Missing page", M10: "Did anything change this year?", M11: "Duplicate", M12: "Passed to your team", M13: "Everything is in", M14: "Question passed to a person", M15: "Where to find a form", M16: "Texting turned off (STOP)", M16H: "Reply to HELP", M19: "Client has none, next request", M19X: "Client has none", M20: "Will send later", M21: "Unknown sender", M26: "What is still needed", M27: "Document arrived before we asked", M28: "Check-in invitation", M28R: "Check-in reminder", M29: "Check-in thanks", M22: "Part of a document is missing", M22R: "Reminder for the missing part", M23: "One reply for several documents", M24: "Passed to a person", M25: "Pause when a client is upset" };
+
+  /* ---------- v2: email-first (docs/V2.md) ----------
+     A firm with firm.letters set sends no texts. Each send is one letter by email listing every document still owed and not on hold,
+     with the client's private upload link (TH-EML-1). The wording is fixed, by voice, like every other client message, and no
+     model-written text reaches a client. ¶ marks a line break; fill() turns it into one. L1 the first letter, L2 a follow-up,
+     L3 the last one. The other entries replace wording that was written for texting ("reply with a photo", "reply YES or NO"). */
+  const LETTER_SUBJECT = { en: ["{k} documents for your {year} tax return", "1 document for your {year} tax return"], es: ["{k} documentos para su declaración de {year}", "1 documento para su declaración de {year}"] };
+  const LETTER = {
+    professional: {
+      en: {
+        L1: "Hi {first},¶¶To prepare your {year} return{for_entity} we still need:¶¶{items}¶¶Upload them here. No account or password needed:¶{link}¶¶A phone photo or a PDF both work.¶¶Thank you,¶{sign_name}¶{firm}",
+        L2: "Hi {first},¶¶A reminder for your {year} return{for_entity}. We still need:¶¶{items}¶¶Upload them here. No account or password needed:¶{link}¶¶If you don't have one of these, the same page lets you say so.¶¶Thank you,¶{sign_name}¶{firm}",
+        L3: "Hi {first},¶¶This is our last reminder for your {year} return{for_entity}. We are still missing:¶¶{items}¶¶Upload them here:¶{link}¶¶If something is in the way, reply to this email and we will help.¶¶Thank you,¶{sign_name}¶{firm}",
+        M35R: "Thanks, {first}. We don't have your {plain_name}{from_payer} yet. Could you upload it here? {link}",
+        M22: "Thanks, we got your {plain_name}{from_payer}, but {missing}. Could you upload {fix} here? {link}",
+        M7: "Thanks. That one is for {doc_year}. We need the {year} version of your {plain_name}{from_payer}. {usual_issue} You can upload it here: {link}",
+        M8: "Thanks. We can't read part of that one. Could you take the photo again, flat, in good light, with all four corners showing, and upload it here? {link}",
+        M8L: "Still hard to read, sorry. Could you try once more here? A PDF works best if you have one: {link}",
+        M9: "Thanks. That looks like one page of a longer document. Please upload the other pages too: {link}",
+        M26: "Still needed for your {year} return: {list}. Upload them here: {link}",
+        M19: "No problem, I've let {preparer} know.",
+        M30K: "Thanks {first}. {firm} cannot open links to files. Please upload the photo or PDF itself here: {link}",
+        M30L: "Thanks {first}. That PDF is locked with a password, so {firm} could not open it. Please upload a copy without the password here: {link}",
+        M30T: "Thanks {first}. {firm} could not open that kind of file. A photo of the page or a PDF works best. Upload it here: {link}",
+        M27: "Thanks, got it. Next time this page is the quickest way to send a document: {link}",
+        M6: "{firm}: we are still missing {k} documents for your {year} return. Reply to this email or upload them here: {link}"
+      },
+      es: {
+        L1: "Hola {first}:¶¶Para preparar su declaración de {year}{for_entity} todavía necesitamos:¶¶{items}¶¶Súbalos aquí. No necesita cuenta ni contraseña:¶{link}¶¶Sirve una foto del teléfono o un PDF.¶¶Gracias,¶{sign_name}¶{firm}",
+        L2: "Hola {first}:¶¶Un recordatorio para su declaración de {year}{for_entity}. Todavía necesitamos:¶¶{items}¶¶Súbalos aquí. No necesita cuenta ni contraseña:¶{link}¶¶Si no tiene alguno, puede decirlo en la misma página.¶¶Gracias,¶{sign_name}¶{firm}",
+        L3: "Hola {first}:¶¶Este es nuestro último recordatorio para su declaración de {year}{for_entity}. Todavía nos falta:¶¶{items}¶¶Súbalos aquí:¶{link}¶¶Si algo se lo impide, responda a este correo y le ayudamos.¶¶Gracias,¶{sign_name}¶{firm}",
+        M35R: "Gracias, {first}. Todavía no tenemos su {plain_name}{from_payer}. ¿Puede subirlo aquí? {link}",
+        M22: "Gracias, recibimos su {plain_name}{from_payer}, pero {missing}. ¿Puede subir {fix} aquí? {link}",
+        M7: "Gracias. Ese es de {doc_year}. Necesitamos el de {year} de su {plain_name}{from_payer}. {usual_issue} Puede subirlo aquí: {link}",
+        M8: "Gracias. No podemos leer parte de ese documento. ¿Puede tomar la foto de nuevo, plana, con buena luz y con las cuatro esquinas visibles, y subirla aquí? {link}",
+        M8L: "Sigue siendo difícil de leer, disculpe. ¿Puede intentarlo una vez más aquí? Un PDF es lo mejor si lo tiene: {link}",
+        M9: "Gracias. Parece una página de un documento más largo. Suba también las otras páginas: {link}",
+        M26: "Todavía falta para su declaración de {year}: {list}. Súbalos aquí: {link}",
+        M19: "No hay problema, ya le avisé a {preparer}.",
+        M30K: "Gracias {first}. {firm} no puede abrir enlaces a archivos. Suba la foto o el PDF aquí: {link}",
+        M30L: "Gracias {first}. Ese PDF tiene contraseña y {firm} no pudo abrirlo. Suba una copia sin contraseña aquí: {link}",
+        M30T: "Gracias {first}. {firm} no pudo abrir ese tipo de archivo. Lo mejor es una foto de la página o un PDF. Súbalo aquí: {link}",
+        M27: "Gracias, recibido. La próxima vez esta página es la forma más rápida de enviar un documento: {link}",
+        M6: "{firm}: todavía faltan {k} documentos para su declaración de {year}. Responda a este correo o súbalos aquí: {link}"
+      }
+    },
+    warm: {
+      en: {
+        L1: "Hi {first},¶¶I hope you're well. To get started on your {year} return{for_entity}, here is what we still need from you:¶¶{items}¶¶You can upload them here whenever you have them. There is no account or password:¶{link}¶¶A phone photo or a PDF both work.¶¶Thank you so much,¶{sign_name}¶{firm}",
+        L2: "Hi {first},¶¶Just a friendly reminder for your {year} return{for_entity}. We are still waiting on:¶¶{items}¶¶You can upload them here, with no account or password:¶{link}¶¶If you don't have one of these, the same page lets you tell us.¶¶Thank you so much,¶{sign_name}¶{firm}",
+        L3: "Hi {first},¶¶This is our last reminder for your {year} return{for_entity}, and we would hate for it to hold you up. We are still missing:¶¶{items}¶¶You can upload them here:¶{link}¶¶If something is in the way, just reply to this email and we will help.¶¶Thank you so much,¶{sign_name}¶{firm}",
+        M35R: "Thank you, {first}. Sorry, we don't have your {plain_name}{from_payer} yet. Could you upload it once more here? {link}",
+        M8: "Thank you. Sorry, we can't read part of that one. Could you take the photo again, flat, in good light, with all four corners showing, and upload it here? {link}",
+        M27: "Thank you, we got it. Next time this page is the quickest way to send us a document: {link}"
+      }, es: {}
+    },
+    brief: {
+      en: {
+        L1: "Hi {first},¶¶For your {year} return{for_entity} we need:¶¶{items}¶¶Upload here, no account needed:¶{link}¶¶{sign_name}¶{firm}",
+        L2: "Hi {first},¶¶Still needed for your {year} return{for_entity}:¶¶{items}¶¶Upload here:¶{link}¶¶{sign_name}¶{firm}",
+        L3: "Hi {first},¶¶Last reminder. Still missing for your {year} return{for_entity}:¶¶{items}¶¶Upload here:¶{link}¶¶{sign_name}¶{firm}",
+        M35R: "We don't have your {plain_name}{from_payer} yet. Please upload it here: {link}",
+        M8: "We can't read part of that one. Please retake it flat, in good light, and upload it here: {link}",
+        M27: "Got it. Next time, upload here: {link}"
+      }, es: {}
+    }
+  };
+  const LETTER_CODES = ["L1", "L2", "L3"], LETTER_HOUR = 9, WORKDAYS_DEFAULT = [1, 2, 3, 4, 5];
+  // TH-EML-11: letters a day from one mailbox, at half of what the provider allows a business account (Google Workspace 2,000,
+  // Microsoft 365 10,000). Confirm both figures against the provider's current page before a firm larger than the pilot starts.
+  const MAIL_CAP = { google: 1000, microsoft: 5000, own: 2000 };
+  const TPL_USE = { L1: "The first letter", L2: "A follow-up letter", L3: "The last reminder",  M34: "Someone else has the document", M35: "Says it was already sent: we have it", M35R: "Says it was already sent: asked again", M35Y: "Says it was already sent: found under another item", M36: "A change passed to the preparer", M37: "Says the messages are not theirs", M20D: "Will send after a date", M33: "Voicemail after the final reminder", M32: "The closing question", M31: "Auto-reply while the firm is paused", M30L: "Locked PDF", M30T: "A file we cannot open", M30K: "A link instead of a file", M1: "Invitation to text (email)", M1R: "Invitation reminder (email)", M2: "Texting turned on", M3: "First request", M4: "Next request", M5: "Reminder", M6: "Final reminder", M7: "Wrong year", M8: "Photo too hard to read", M8L: "Photo too hard to read, second time", M9: "Missing page", M10: "Did anything change this year?", M11: "Duplicate", M12: "Passed to your team", M13: "Everything is in", M14: "Question passed to a person", M15: "Where to find a form", M16: "Texting turned off (STOP)", M16H: "Reply to HELP", M19: "Client has none, next request", M19X: "Client has none", M20: "Will send later", M21: "Unknown sender", M26: "What is still needed", M27: "Document arrived before we asked", M28: "Check-in invitation", M28R: "Check-in reminder", M29: "Check-in thanks", M22: "Part of a document is missing", M22R: "Reminder for the missing part", M23: "One reply for several documents", M24: "Passed to a person", M25: "Pause when a client is upset" };
   const COMPLIANCE = ["M1", "M1R", "M2", "M16", "M16H", "M21"];
   /* Voice (TH-VOI, docs/REBRAND.md section 5). How the firm's messages sound: Warm, Professional or Brief, for the firm or for one
      client. Professional is TPL above. Warm and Brief are written by hand below, one for one; nothing here is written by a model.
@@ -443,6 +514,7 @@
 
   /* ---------- time rules ---------- */
   function allowed(d) {
+    if (LETTERS()) return true;   // the 8 to 8 window and the client's own clock were texting rules; a letter's day is chosen by nextMorning
     const f = S.firm, h = d.getHours() + d.getMinutes() / 60;
     return h >= f.quietStart && h < f.quietEnd && d.getDay() !== 0 && !isHoliday(d) && !(f.closedDays || []).includes(dayKey(d));
   }
@@ -474,7 +546,20 @@
   function linkKey() { const A = "abcdefghijkmnpqrstuvwxyz", b = new Uint8Array(28); globalThis.crypto.getRandomValues(b); let k = ""; for (const x of b) k += A[x % A.length]; return k; }
   function linkLive(c) { return !!(c && c.key && c.keyAt && S.now - new Date(c.keyAt) <= LINK_DAYS * DAY); }
   function linkFresh(c) { if (!S.firm.linkBase || !c) return; if (!linkLive(c)) { c.key = linkKey(); c.keyAt = new Date(S.now); } }
-  function linkFor(c, kind) { return S.firm.linkBase ? S.firm.linkBase + "/" + kind + "/" + (S.firm.slug ? S.firm.slug + "-" : "") + ((c && c.key) || "") : LINK_SAMPLE + "/" + kind + "/k3x9"; }
+  /* TH-UPL-1, 7: in a letters firm the upload link belongs to the engagement, so one link lasts the season. It is made at Go fetch,
+     stays the same in every letter, can be replaced or switched off by staff, and stops 30 days after the file is closed. */
+  const LINK_AFTER_CLOSE_DAYS = 30;
+  function seasonLink(e) { if (!e.link || !e.link.key) e.link = { key: linkKey(), at: new Date(S.now) }; return e.link; }
+  function linkState(e) { const L = e && e.link; if (!L || !L.key) return "none"; if (L.revokedAt) return "revoked"; if (e.status === "closed" && e.closedAt && S.now - new Date(e.closedAt) > LINK_AFTER_CLOSE_DAYS * DAY) return "expired"; return "live"; }
+  /** Whose link is this key? { c, e, state } with state live, revoked or expired; null for a key nobody has. An old key that staff replaced reads as revoked. */
+  function linkFind(key) {
+    if (!key) return null;
+    for (const e of S.engs) { if (e.link && e.link.key === key) return { c: client(e.clientId), e, state: linkState(e) }; if (e.link && (e.link.old || []).includes(key)) return { c: client(e.clientId), e, state: "revoked" }; }
+    const c = S.clients.find((x) => x.key === key); return c ? { c, e: engOf(c.id), state: linkLive(c) ? "live" : "expired" } : null;
+  }
+  function rotateLink(eid) { const e = eng(eid); if (!e) return "No such client"; if (!may()) return "Not allowed"; const L = seasonLink(e); L.old = (L.old || []).concat([L.key]).slice(-5); L.key = linkKey(); L.at = new Date(S.now); delete L.revokedAt; timeline(e, "A new upload link was made. The old one no longer works", S.user.name); audit("link.rotated", client(e.clientId).first + " " + client(e.clientId).last); return null; }
+  function revokeLink(eid) { const e = eng(eid); if (!e) return "No such client"; if (!may()) return "Not allowed"; const L = seasonLink(e); if (L.revokedAt) return null; L.revokedAt = new Date(S.now); timeline(e, "The upload link was switched off", S.user.name); audit("link.revoked", client(e.clientId).first + " " + client(e.clientId).last); return null; }
+  function linkFor(c, kind, e) { if (LETTERS() && kind === "u" && S.firm.linkBase) { const en = e || (c && engOf(c.id)); if (en) return (/^https?:/.test(S.firm.linkBase) ? "" : "https://") + S.firm.linkBase + "/u/" + (S.firm.slug ? S.firm.slug + "-" : "") + seasonLink(en).key; } return S.firm.linkBase ? S.firm.linkBase + "/" + kind + "/" + (S.firm.slug ? S.firm.slug + "-" : "") + ((c && c.key) || "") : LINK_SAMPLE + "/" + kind + "/k3x9"; }
   function voiceFor(c) { const k = (c && c.voice) || (S.firm.hound && S.firm.hound.voice) || "professional"; return VOICES[k] ? k : "professional"; }
   function setVoice(k) { if (!may("owner")) return "Only an owner can change this"; if (!VOICES[k]) return "Choose Warm, Professional or Brief"; const H = S.firm.hound; if ((H.voice || "professional") === k) return null; H.voice = k; audit("firm.voice_changed", "Messages now sound " + VOICES[k].label); return null; }
   function setClientVoice(cid, k) { const c = client(cid); if (!c) return "Unknown client"; if (!may()) return "Not allowed"; if (k && !VOICES[k]) return "Choose Warm, Professional or Brief"; if ((c.voice || null) === (k || null)) return null; if (k) c.voice = k; else delete c.voice; const e = engOf(cid); if (e) timeline(e, "Voice: " + (k ? VOICES[k].label : "the firm's (" + VOICES[voiceFor(c)].label + ")"), S.user.name); audit("client.voice_changed", c.first + " " + c.last + ": " + (k ? VOICES[k].label : "firm default")); return null; }
@@ -492,8 +577,10 @@
     return fill(TPL.en[code] ? code : "M3", c, null, { voice: c.voice, item: { form: "W2", payer: "Acme Health" }, n: 3, k: 2, doc_year: (S.firm.taxYear || 2026) - 1, link: LINK_SAMPLE + "/u/k3x9", list: "W-2 from Acme Health, 1099-INT from First Farmers Bank", question: PORTALQ[0][lang === "es" ? 2 : 1].replace("{year}", S.firm.taxYear || 2026), missing: "page 2 is missing", fix: "page 2", summary: "" });
   }
   function fill(code, c, e, extra) {
-    const lang = c && c.lang === "es" ? "es" : "en", voice = (extra && extra.voice && VOICES[extra.voice] ? extra.voice : voiceFor(c)), std = (S.firm.templates[lang] || {})[code] || TPL[lang][code] || TPL.en[code];
-    const t = voice === "professional" || VOICE_FIXED.includes(code) ? std : (((S.firm.templatesBy || {})[voice] || {})[lang] || {})[code] || VOICE_TPL[voice][lang][code] || VOICE_TPL[voice].en[code] || std;
+    const lang = c && c.lang === "es" ? "es" : "en", voice = (extra && extra.voice && VOICES[extra.voice] ? extra.voice : voiceFor(c));
+    const LT = LETTERS() || LETTER_CODES.includes(code) ? LETTER : null, ltr = (v) => (LT ? LT[v][lang][code] || (lang !== "en" && LT.professional[lang][code]) || LT[v].en[code] || LT.professional.en[code] || null : null);
+    const std = (S.firm.templates[lang] || {})[code] || ltr("professional") || TPL[lang][code] || TPL.en[code];
+    const t = voice === "professional" || VOICE_FIXED.includes(code) ? std : (((S.firm.templatesBy || {})[voice] || {})[lang] || {})[code] || ltr(voice) || VOICE_TPL[voice][lang][code] || VOICE_TPL[voice].en[code] || std;
     const it = extra && extra.item, F = it ? FORMS[it.form] : null, p = progress(e ? e.id : "");
     const prep = c ? (S.users.find((u) => u.id === c.preparer) || {}).first || S.firm.sender : S.firm.sender;
     const v = Object.assign({
@@ -502,27 +589,30 @@
       firm: S.firm.sender, first: c ? c.first : "", preparer: prep, year: e ? e.year : S.firm.taxYear || 2026, n: p.total, k: e ? openItems(e.id).length : 0,
       plain_name: F ? (it.custom ? ((x) => (/^[A-ZÁÉÍÓÚ][a-záéíóúñ]/.test(x) ? x[0].toLowerCase() + x.slice(1) : x))(lang === "es" && it.customEs ? it.customEs : it.custom) : lang === "es" ? F.es : F.plain) : "", from_payer: it && it.payer ? (lang === "es" ? " de " : " from ") + it.payer : "",
       where_hint: F ? (lang === "es" ? F.hintEs : F.hint) : "", issuer: F ? (lang === "es" ? F.issuerEs : F.issuer) : "",
-      link: linkFor(c, code.startsWith("M1") ? "c" : "u"), firm_phone: S.firm.phone, firm_email: S.firm.email,
+      link: linkFor(c, code.startsWith("M1") ? "c" : "u", e), firm_phone: S.firm.phone, firm_email: S.firm.email,
       how_send: LONGHOW[lang][it && LONGDOC.includes(it.form) ? 1 : 0], usual_issue: it ? usualIssue(it.form, lang) || (F ? (lang === "es" ? F.hintEs : F.hint) || "" : "") : "",
       // The firm's sign-off (up to 30 characters). With none set, Warm signs with the preparer's first name and Professional does not sign.
-      sign_off: S.firm.signOff || (voice === "warm" && prep && prep !== S.firm.sender ? prep : "")
+      sign_off: S.firm.signOff || (voice === "warm" && prep && prep !== S.firm.sender ? prep : ""),
+      // A letter is signed by the preparer and the firm (TH-WLB-2). The firm's own sign-off, when it has one, takes the preparer's line.
+      sign_name: S.firm.signOff || (c ? (S.users.find((u) => u.id === c.preparer) || {}).name : "") || S.firm.sender
     }, extra || {});
     let tt = t; if (it && LONGDOC.includes(it.form)) tt = tt.replace(LONGHOW[lang][0], LONGHOW[lang][1]);
     if (!String(S.firm.phone || "").trim()) tt = tt.replace(" or call us on {firm_phone}", "").replace("Call {firm_phone} or email {firm_email}", "Email {firm_email}").replace("Please call {firm_phone}.", "Please contact your preparer directly.").replace(" o llámenos al {firm_phone}", "").replace("Llame al {firm_phone} o escriba a {firm_email}", "Escriba a {firm_email}").replace("Por favor llame al {firm_phone}.", "Por favor contacte a su preparador directamente.").replace(/\{firm_phone\}/g, S.firm.email || "");
     return tt.replace(/\{(\w+)\}/g, (m, k) => (v[k] !== undefined && v[k] !== null ? v[k] : m)).replace(/\s+/g, " ")
-      .replace(/\b(need|missing) 1 documents\b/g, "$1 1 document").replace(/\ball 1 documents\b/g, "your document").replace(/\b(Necesitamos|faltan) 1 documentos\b/g, (m, w) => (w === "faltan" ? "falta 1 documento" : "Necesitamos 1 documento")).replace(/\blos 1 documentos\b/g, "su documento").replace(/([A-Za-z])\.\.(?=\s|$)/g, "$1.").trim();   // a firm name ending in a full stop does not double it
+      .replace(/\b(need|missing) 1 documents\b/g, "$1 1 document").replace(/\ball 1 documents\b/g, "your document").replace(/\b(Necesitamos|faltan) 1 documentos\b/g, (m, w) => (w === "faltan" ? "falta 1 documento" : "Necesitamos 1 documento")).replace(/\blos 1 documentos\b/g, "su documento").replace(/([A-Za-z])\.\.(?=\s|$)/g, "$1.").replace(/ ?¶ ?/g, "\n").replace(/§/g, "  ").trim();   // a firm name ending in a full stop does not double it; ¶ is a line break in a letter
   }
   function outputCheck(body, channel, vars) {
     const errs = [];
     if (/\{\w+\}/.test(body)) errs.push("unfilled variable");
     if (channel === "text" && body.length > 320) errs.push("over 320 characters");
-    const allowedNums = [String((vars && vars.year) || 2026), String((vars && vars.doc_year) || ""), S.firm.phone.replace(/\D/g, ""), "1040", "1095", "1098", "1099", "1065", "1120", "2441", "5498", "8879"];
+    const allowedNums = [String((vars && vars.year) || 2026), String((vars && vars.doc_year) || "")].concat(((vars && vars.years) || []).map(String)).concat([ S.firm.phone.replace(/\D/g, ""), "1040", "1095", "1098", "1099", "1065", "1120", "2441", "5498", "8879"]);
     (body.replace(/[().\-\s]/g, (m) => (m === " " ? " " : "")).match(/\d{4,}/g) || []).forEach((n) => { if (!allowedNums.some((a) => a && a.includes(n) || n.includes(a) && a)) errs.push("digit run " + n); });
     const low = body.toLowerCase(); BLOCK.forEach((w) => { if (new RegExp("\\b" + w + "\\b").test(low)) errs.push('blocked word "' + w + '"'); });
     if (channel === "text" && !body.includes(S.firm.sender) && vars && vars.needFirm) errs.push("firm name missing");
     return errs;
   }
   function channelFor(c, e) {
+    if (LETTERS()) return c.email && c.emailOk && !c.emailOff ? "email" : null;
     if (c.textConsent === "given" && c.mobile && S.firm.senderStatus === "approved") return "text";
     if (c.email && c.emailOk) return "email";
     return null;
@@ -536,7 +626,7 @@
     e.queue = (e.queue || []).concat([{ code, itemId: it && it.id ? it.id : null, item: it ? { form: it.form, payer: it.payer || null } : null, doc_year: extra && extra.doc_year }]);
     e.next = nextAllowedC(S.now, c); timeline(e, "Held until sending hours: " + (TPL_USE[code] || code).toLowerCase()); return null;
   }
-  const PROACTIVE = ["M3", "M5", "M6", "M10", "M22R"];
+  const PROACTIVE = ["M3", "M5", "M6", "M10", "M22R", "L1", "L2", "L3"];
   /* ---------- billing: a short trial, then a paid plan; an off-season pause that only stores data ---------- */
   // Plans go by client count only. Prices are working figures. See docs/PRICING.md for the cost model behind them.
   const PLANS = [["Solo", 99, 150, 1], ["Practice", 249, 500, 5], ["Firm", 599, 1000, 15], ["Large", 999, 2500, 99]];
@@ -604,7 +694,13 @@
   function resumeNow() { const b = billing(); if (b.state !== "paused") return "Not paused"; const p = (b.pauses || [])[(b.pauses || []).length - 1]; if (p) p.to = new Date(S.now); b.state = "active"; b.pausedUntil = null; audit("billing.resumed", "Resumed early"); wake(); return null; }
   // While the firm is paused or its trial has ended, a client who writes in is told to contact the firm directly. Once a week at most.
   function awayReply(e, c) { if (access().ok || !e) return false; if (!e.awayAt || S.now - new Date(e.awayAt) > 7 * DAY) { const m = send(e, "M31", {}); if (m) e.awayAt = new Date(S.now); } return true; }
+  // In an email-first firm a request or reminder for one document is never sent by itself: the next letter carries it. And when the
+  // document came through the upload page, the page has already said what happened, so no email repeats it.
+  const LETTER_INSTEAD = ["M3", "M4", "M5", "M22R"], PAGE_SAYS = ["M7", "M8", "M8L", "M9", "M11", "M12", "M22", "M23", "M27", "M30L", "M30T", "M30K", "M35"];
+  let viaPage = false;
   function send(e, code, extra, forceChannel) {
+    if (LETTERS() && LETTER_INSTEAD.includes(code)) { letterSoon(e); return null; }
+    if (LETTERS() && viaPage && PAGE_SAYS.includes(code)) return null;
     const c = client(e.clientId); let ch = forceChannel || channelFor(c, e);
     if (ch === "text" && !forceChannel && ["M5", "M6", "M22R", "M28R", "M1R"].includes(code) && c.email && c.emailOk && overTexts()) ch = "email";
     if (!ch) { if (code === "M31") return null; setStuck(e, c.textConsent === "withdrawn" ? "opted_out" : "not_delivering"); return null; }
@@ -614,12 +710,14 @@
     if (S.hold && code !== "M23") { S.hold.push({ code, extra }); return null; }
     if (e.takeover && !COMPLIANCE.includes(code)) { hlog(e, "held", "Held " + (TPL_USE[code] || code).toLowerCase() + ": " + e.takeover.by + " has this conversation", "The Hound listens but does not reply while staff are in control", "Rules"); return null; }
     linkFresh(c);
-    const body = fill(code, c, e, extra), errs = outputCheck(body, ch, { year: e.year, doc_year: extra && extra.doc_year }).filter((x) => !(code === "M23" && x.startsWith("digit run")));
-    if (errs.length) { addTask({ kind: "output_check", reason: "Message blocked: " + errs.join(", "), engId: e.id }); audit("message.blocked", code + " for " + c.last + ": " + errs.join(", "), "Tallyhound"); return null; }
-    const H = S.firm.hound, comp = COMPLIANCE.includes(code) || code === "M31", it0 = extra && extra.item;
+    const body = fill(code, c, e, extra), errs = outputCheck(body, ch, { year: e.year, doc_year: extra && extra.doc_year, years: extra && extra.years }).filter((x) => !(code === "M23" && x.startsWith("digit run")));
+    if (errs.length) { if (!S.tasks.some((t) => t.status === "open" && t.kind === "output_check" && t.engId === e.id && t.code === code)) addTask({ kind: "output_check", reason: "Message blocked: " + errs.join(", "), engId: e.id, code }); audit("message.blocked", code + " for " + c.last + ": " + errs.join(", "), "Tallyhound"); return null; }
+    const H0 = S.firm.hound, comp = COMPLIANCE.includes(code) || code === "M31", it0 = extra && extra.item;
+    // TH-EML-4: approve each letter or send on its own, for the firm and for one client. No model-written text reaches a client of an email-first firm.
+    const H = LETTERS() ? Object.assign({}, H0, { aiLive: false, mode: c.sendMode === "approve" ? "copilot" : c.sendMode === "auto" ? "autopilot" : H0.mode }) : H0;
     let status = "delivered", after = "delivered";
     if (!comp && H.mode === "copilot") { after = "approval"; status = H.aiLive ? "writing" : "approval"; if (PROACTIVE.includes(code)) S.msgs.forEach((x) => { if (x.engId === e.id && x.status === "approval" && PROACTIVE.includes(x.tpl)) { x.status = "discarded"; x.note = "Replaced by a newer draft"; } }); } else if (!comp && H.aiLive) status = "writing";
-    const m = { id: id("m"), engId: e.id, dir: "out", kind: "auto", tpl: code, voice: voiceFor(c), body, base: body, channel: ch, at: new Date(S.now), status, after, itemId: it0 ? it0.id : null, why: (extra && extra.why) || "", ctx: { use: TPL_USE[code] || code, item: it0 ? (it0.custom || FORMS[it0.form].plain) + (it0.payer ? " from " + it0.payer : "") : "", missing: extra && extra.missing, fix: extra && extra.fix, doc_year: extra && extra.doc_year } };
+    const m = { id: id("m"), engId: e.id, dir: "out", kind: "auto", tpl: code, voice: voiceFor(c), body, base: body, channel: ch, at: new Date(S.now), status, after, sender: LETTERS() ? senderOf(c) || "firm" : undefined, itemId: it0 ? it0.id : null, why: (extra && extra.why) || "", ctx: { use: TPL_USE[code] || code, item: it0 ? (it0.custom || FORMS[it0.form].plain) + (it0.payer ? " from " + it0.payer : "") : "", missing: extra && extra.missing, fix: extra && extra.fix, doc_year: extra && extra.doc_year } };
     S.msgs.push(m); e.lastOut = new Date(S.now);
     if (status === "delivered") { meter(ch === "text" ? "segOut" : "email", ch === "text" ? segs(body) : 1); fairCheck(); } if (status === "writing") meter("write");
     hlog(e, "message", (status === "approval" ? "Drafted for approval: " : status === "writing" ? "Writing: " : "Sent: ") + (TPL_USE[code] || code).toLowerCase() + " by " + ch, m.why, status === "writing" ? "Claude" : "Rules");
@@ -635,7 +733,7 @@
   const CALL_OUTCOMES = { reached_will_send: "Reached: will send", reached_has_none: "Reached: does not have some", voicemail: "Left a voicemail", no_answer: "No answer", wrong_number: "Wrong number" }, CALL_FOLLOW_UP_HOUR = 9;
   const BACKED = { question_waiting: "question", review_waiting: "document", client_says_none: "says_none" };
   const askedCount = (e, i) => S.msgs.filter((m) => m.engId === e.id && m.dir === "out" && m.itemId === i.id && !["discarded", "approval", "writing"].includes(m.status)).length;
-  function callScript(e, c) { const open = openItems(e.id); return "Hi " + c.first + ", it's " + ((S.users.find((u) => u.id === c.preparer) || {}).first || "your preparer") + " at " + S.firm.name + ". We're still missing " + open.length + " document" + (open.length === 1 ? "" : "s") + " for your return: " + open.map((i) => (i.custom || FORMS[i.form].plain) + (i.payer ? " from " + i.payer : "")).join(", ") + ". Is there anything making these hard to get? You can text photos to the same number we've been using."; }
+  function callScript(e, c) { const open = openItems(e.id); return "Hi " + c.first + ", it's " + ((S.users.find((u) => u.id === c.preparer) || {}).first || "your preparer") + " at " + S.firm.name + ". We're still missing " + open.length + " document" + (open.length === 1 ? "" : "s") + " for your return: " + open.map((i) => (i.custom || FORMS[i.form].plain) + (i.payer ? " from " + i.payer : "")).join(", ") + ". Is there anything making these hard to get? " + (LETTERS() ? "You can upload them with the link in our emails." : "You can text photos to the same number we've been using."); }
   /* TH-BRK-12: no usable channel is left (texts stopped or failing with no email to fall back on, or email bounced with no texts).
      A STOP that leaves email open is not this: it is a note on the client's activity and nothing more. */
   function cantReach(e, c, reason) {
@@ -663,6 +761,7 @@
      person. A client who already answered the check-in has been asked, so is not asked again. */
   const CLOSING_WAIT_DAYS = 3;
   function finished(e) {
+    if (LETTERS()) { if (e.thanked) return; e.thanked = new Date(S.now); const was = viaPage; viaPage = false; try { send(e, "M13", {}); } finally { viaPage = was; } return; }   // TH-EML-10: once
     if (S.firm.hound.closingQ !== true || e.closing || (e.checkin && e.checkin.doneAt)) { send(e, "M13", {}); return; }
     e.closing = { askedAt: new Date(S.now) }; send(e, "M32", {}); timeline(e, "Asked whether anything else changed this year");
   }
@@ -674,6 +773,7 @@
   function closingSweep() { S.engs.forEach((e) => { if (e.closing && !e.closing.answeredAt && e.status === "complete" && S.now - new Date(e.closing.askedAt) > CLOSING_WAIT_DAYS * DAY) { e.closing.answeredAt = new Date(S.now); e.closing.answer = "none"; send(e, "M13", {}); } }); }
   function checkComplete(e) {
     if (S.tasks.some((t) => t.status === "open" && t.engId === e.id && ["document", "says_none", "change_noted"].includes(t.kind))) return false;   // TH-CMP-6
+    if (S.firm.confirmAll && S.docs.some((d) => d.engId === e.id && d.unconfirmed && d.state === "accepted")) return false;   // the pilot: not finished until a person has confirmed each one
     if (openItems(e.id).length === 0 && itemsOf(e.id).length && !["complete", "closed"].includes(e.status)) {
       e.status = "complete"; e.stuck = null; e.next = null; e.completedAt = new Date(S.now); settleQuiet(e); memoryWrite(e); timeline(e, "All fetched: every document in and verified"); return true;
     }
@@ -715,6 +815,85 @@
   function wakeFile(e) { if (e.status !== "in_progress") return; const c = client(e.clientId); if (nextItem(e)) { if (!e.next) e.next = nextAllowedC(new Date(S.now.getTime() + HOUR), c); } else { const wr = waitingRelease(e); e.next = wr ? nextAllowed(wr) : null; } }
   function waitingRelease(e) { const w = itemsOf(e.id).filter((i) => ["expected", "requested"].includes(i.state)).map((i) => heldUntil(i, e)).filter(Boolean); return w.length ? new Date(Math.min.apply(null, w)) : null; }
 
+
+  /* ---------- v2: the email chase (TH-EML, docs/V2.md) ---------- */
+  function LETTERS() { return !!(S && S.firm && S.firm.letters === true); }
+  const workDays = () => (Array.isArray(S.firm.workDays) && S.firm.workDays.length ? S.firm.workDays : WORKDAYS_DEFAULT);
+  function isWorkDay(d) { return workDays().includes(d.getDay()) && !isHoliday(d) && !(S.firm.closedDays || []).includes(dayKey(d)); }
+  const morningOf = (d) => { const x = new Date(d); x.setHours(S.firm.letterHour || LETTER_HOUR, 0, 0, 0); return x; };
+  const dayAfter = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+  /** The next moment a letter may go, at or after d: that morning, or at once when d is later in a working day; otherwise the next working morning. */
+  function nextMorning(d) { let x = new Date(d); if (isWorkDay(x)) { const m = morningOf(x); return x <= m ? m : x; } for (let i = 0; i < 30; i++) { x = dayAfter(x); if (isWorkDay(x)) return morningOf(x); } return morningOf(x); }
+  /** The morning of the nth working day after the day of d (TH-EML-3). */
+  function addWorkDays(d, n) { let x = new Date(d.getFullYear(), d.getMonth(), d.getDate()), k = 0; for (let i = 0; k < n && i < 400; i++) { x = dayAfter(x); if (isWorkDay(x)) k++; } return n > 0 ? morningOf(x) : nextMorning(d); }
+  function setWorkDays(list) { if (!may("owner")) return "Only an owner can change this"; const L = [...new Set((Array.isArray(list) ? list : []).map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n <= 6))].sort(); if (!L.length) return "Choose at least one working day"; S.firm.workDays = L; audit("settings.workdays", L.map((n) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][n]).join(", ")); S.engs.forEach((e) => { if (e.next && e.status === "in_progress") e.next = nextMorning(e.next); }); return null; }
+  // What a letter may name: asked for or about to be, not held, not waiting on a person, not already in (TH-EML-1).
+  const letterItems = (e) => itemsOf(e.id).filter((i) => ["expected", "requested", "partial"].includes(i.state) && !heldUntil(i, e));
+  // Names only: the form and who issues it. Never a number that could be an identifier, never an amount (TH-NTR-6).
+  const safeTitle = (t) => String(t || "").replace(/\$\s?[\d,.]+/g, "").replace(/\d{3}-\d{2}-\d{4}|\d{2}-\d{7}|\d{5,}/g, "").replace(/\s+/g, " ").trim();
+  function itemTitle(i, lang) { const F = FORMS[i.form] || FORMS.OTHER; return safeTitle(i.custom ? (lang === "es" && i.customEs ? i.customEs : i.custom) : formDisplay(i.form) + (i.payer ? (lang === "es" ? " de " : " from ") + i.payer : " (" + (lang === "es" ? F.es : F.plain) + ")")); }
+  function letterLine(i, lang) { const part = i.state === "partial" && i.missing && i.missing.length ? missText(i.missing, lang, i.form).fix : "", note = part ? (lang === "es" ? "todavía falta " : "we still need ") + part : i.fixNote ? i.fixNote[lang === "es" ? 1 : 0] : ""; return "§- " + itemTitle(i, lang) + (note ? " (" + note + ")" : ""); }
+  /* Who a client's letters come from. With the mail layer, the preparer's own connected mailbox (TH-WLB-2); a preparer with none
+     sends nothing. Without it, Tallyhound's own mail service sends from the firm's Tallyhound address. */
+  function senderFor(c) {
+    if (S.firm.mail !== "mailbox") return { ok: true, id: "firm", cap: Math.min(+S.firm.mailCap || Infinity, MAIL_CAP.own) };
+    const u = S.users.find((x) => x.id === c.preparer), mb = u && u.mailbox;
+    if (mb && mb.status === "active") return { ok: true, id: u.id, cap: Math.min(+S.firm.mailCap || Infinity, MAIL_CAP[mb.provider] || MAIL_CAP.google) };
+    return { ok: false, who: u ? u.name : "This client's preparer" };
+  }
+  const senderOf = (c) => { const w = senderFor(c); return w.ok ? w.id : null; };
+  const sentToday = (sid) => { const k = dayKey(S.now); let n = 0; for (const m of S.msgs) if (m.dir === "out" && m.channel === "email" && (m.sender || "firm") === sid && ["delivered", "approved"].includes(m.status) && dayKey(m.at) === k) n++; return n; };
+  /** The server records a connected or disconnected mailbox here (TH-MBX). Never reachable from a browser. A reconnect wakes the letters that were waiting for it. */
+  function setMailbox(uid, info) {
+    const u = S.users.find((x) => x.id === uid); if (!u) return "Unknown user";
+    if (!info) { if (u.mailbox) { u.mailbox.status = "revoked"; u.mailbox.revokedAt = new Date(S.now); audit("mailbox.disconnected", u.name, u.name); } return null; }
+    u.mailbox = { provider: info.provider === "microsoft" ? "microsoft" : "google", address: String(info.address || "").toLowerCase().slice(0, 254), status: info.status === "error" ? "error" : "active", at: new Date(S.now) }; audit("mailbox.connected", u.name + ": " + u.mailbox.provider, u.name);
+    if (u.mailbox.status === "active") S.engs.forEach((e) => { const c = client(e.clientId); if (c && c.preparer === uid && e.status === "in_progress" && !e.next) { e.runFresh = true; e.next = nextMorning(S.now); } });
+    return null;
+  }
+  function setMailCap(n) { if (!may("owner")) return "Only an owner can change this"; const v = Math.round(+n); if (!(v >= 10 && v <= 5000)) return "Choose a number from 10 to 5,000"; S.firm.mailCap = v; audit("settings.mailcap", v + " letters a day from one mailbox"); return null; }
+  function setClientSendMode(cid, v) { const c = client(cid); if (!c) return "Unknown client"; if (!may()) return "Not allowed"; if (v && !["approve", "auto"].includes(v)) return "Choose: approve each letter, or send on its own"; if (v) c.sendMode = v; else delete c.sendMode; audit("client.send_mode", c.first + " " + c.last + ": " + (v === "approve" ? "approve each letter" : v === "auto" ? "send on its own" : "the firm's setting")); return null; }
+  // A document arrived or the client wrote: the reminders start over from today, and nothing more goes out today because of it.
+  function restartRun(e) { if (!LETTERS() || e.status !== "in_progress") return; const P = CADENCE_PRESETS[cadenceFor(e).key]; e.run = new Date(S.now); e.step = 1; delete e.runFresh; e.next = addWorkDays(S.now, P.days[0]); }
+  // Something a person did calls for a letter now (ask again, restart). It still goes on a working day, one a day.
+  function letterSoon(e) { if (!LETTERS() || e.status !== "in_progress") return; e.runFresh = true; e.next = nextMorning(S.now); }
+  function stepLetter(e) {
+    const c = client(e.clientId), P = CADENCE_PRESETS[cadenceFor(e).key], days = P.days.concat([P.final]);
+    if (halted() || e.status !== "in_progress" || e.takeover) return;
+    if (e.quietUntil && e.quietUntil > S.now) { e.next = nextMorning(e.quietUntil); return; }
+    const list = letterItems(e);
+    if (!list.length) {
+      const wr = waitingRelease(e); if (wr) { e.runFresh = true; e.next = nextMorning(wr); return; }
+      e.next = null; if (checkComplete(e)) finished(e); else { const sn = openItems(e.id).find((i) => i.state === "says_none"); if (sn) setStuck(e, "client_says_none"); } return;
+    }
+    if (!isWorkDay(S.now)) { e.next = nextMorning(S.now); return; }
+    if (e.letterDay === dayKey(S.now)) { e.next = nextMorning(dayAfter(S.now)); return; }   // never two letters to one client in a day
+    const who = senderFor(c);
+    if (!who.ok) { e.next = null; alertx(e, "high", "mailbox", who.who + " has no mailbox connected, so letters to their clients are waiting. Connect it under Settings.", "mbx" + c.preparer + dayKey(S.now)); return; }
+    if (sentToday(who.id) >= who.cap) { e.next = nextMorning(dayAfter(S.now)); if (!e.capped) { e.capped = true; hlog(e, "schedule", "Today's letters are at the daily limit, so " + c.first + "'s goes on the next working day", "A mailbox sends at most " + who.cap + " a day, half of what the mail provider allows", "Rules"); } return; }
+    if (e.run && e.next && S.now - e.next > 2 * DAY) e.runFresh = true;   // held up for days (a stop, a pause, no mailbox): start the reminders over, do not catch up one a day
+    delete e.capped; if (e.runFresh || !e.run) { e.run = new Date(S.now); e.step = 0; delete e.runFresh; }
+    const k = e.step || 0, last = k >= days.length, code = last ? "L3" : e.letters ? "L2" : "L1", lang = c.lang === "es" ? "es" : "en";
+    const m = send(e, code, { items: list.map((i) => letterLine(i, lang)).join("¶"), k: list.length, years: list.map((i) => i.fixYear).filter(Boolean), why: code === "L1" ? "Checklist confirmed; the first letter" : last ? "No reply to " + (days.length - 1) + " follow-ups (" + P.label + ")" : "Follow-up " + (k || 1) + " of " + (days.length - 1) + " (" + P.label + ")" });
+    if (!m) { e.next = nextMorning(dayAfter(S.now)); return; }   // blocked by the output check: a review item is open, and nothing went
+    m.letterItems = list.map((i) => i.id); m.stepIdx = k; m.run = +e.run; m.subject = (LETTER_SUBJECT[lang] || LETTER_SUBJECT.en)[list.length === 1 ? 1 : 0].replace("{k}", list.length).replace("{year}", e.year);
+    list.forEach((i) => { if (i.state === "expected") i.state = "requested"; });
+    e.letters = (e.letters || 0) + 1; e.letterDay = dayKey(S.now); e.step = k + 1;
+    if (last) { setStuck(e, "no_reply"); alertx(e, "medium", "call", c.first + " " + c.last + " has not replied to " + (days.length - 1) + " follow-ups. It is in the review queue with what is still missing.", "call" + e.id); return; }
+    e.next = addWorkDays(e.run, days[k]);
+    hlog(e, "schedule", "Next letter for " + c.first + ": " + dlabel(e.next), "Working day " + days[k] + " of " + P.label, "Rules");
+  }
+  /* TH-EML-5: checked when a letter is about to leave, not only when it was planned. A letter that names a document which has
+     since arrived, been held or been waived, or whose file is no longer being fetched, is thrown away; a fresh one takes its place. */
+  function letterCheck(mid) {
+    const m = S.msgs.find((x) => x.id === mid); if (!m || !LETTER_CODES.includes(m.tpl) || !m.letterItems) return true;
+    const e = eng(m.engId), on = e && (e.status === "in_progress" || (e.status === "stuck" && m.tpl === "L3")) && !halted() && !e.takeover, live = on ? letterItems(e).map((i) => i.id) : [], stale = m.letterItems.some((x) => !live.includes(x));
+    if (on && !stale) return true;
+    m.status = "discarded"; m.note = on ? "The list changed before it went" : "No longer needed";
+    if (on && e.status === "in_progress" && m.run === +e.run && e.step === (m.stepIdx || 0) + 1) { e.letters = Math.max(0, (e.letters || 1) - 1); e.step = m.stepIdx || 0; if (e.letterDay === dayKey(m.at)) e.letterDay = null; e.next = nextMorning(S.now); }
+    return false;
+  }
+
   /* ---------- outreach ---------- */
   function start(eid) {
     const e = eng(eid), c = client(e.clientId);
@@ -723,6 +902,13 @@
     if (S.firm.verified === false) return FIRMCHECK;
     if (e.status !== "not_started") return "Already started";
     if (trialFull(e)) return trialFull(e);
+    if (LETTERS()) {
+      if (!c.email) return "Add an email address for " + c.first + " first";
+      if (c.emailOff || c.emailOk === false) return c.first + "'s email address is not working. Check it on their Details tab";
+      const who = senderFor(c); if (!who.ok) return who.who + " has not connected a mailbox yet. Connect it under Settings";
+      e.startedAt = new Date(S.now); timeline(e, "Go fetch: requests started", S.user.name); audit("engagement.go_fetch", c.first + " " + c.last);
+      e.status = "in_progress"; seasonLink(e); e.run = null; e.step = 0; e.next = nextMorning(S.now); return null;
+    }
     if (!c.email && !c.mobile) return "No contact";
     e.startedAt = new Date(S.now); timeline(e, "Go fetch: requests started", S.user.name); audit("engagement.go_fetch", c.first + " " + c.last);
     if (channelFor(c, e) === "text") { e.status = "in_progress"; e.next = nextAllowed(S.now); }
@@ -781,6 +967,7 @@
     audit("client.cadence_changed", c.first + " " + c.last + ": " + (k ? CADENCE_PRESETS[k].label : "firm default")); return null;
   }
   function step(e) {
+    if (LETTERS()) return stepLetter(e);
     const c = client(e.clientId);
     const GAPS = cadenceFor(e).gaps;
     if (halted() || !["in_progress", "awaiting_consent"].includes(e.status)) return;
@@ -845,7 +1032,7 @@
       if (t.kind === "cant_reach" && e && c && (channelFor(c, e) || ["complete", "closed"].includes(e.status))) { t.status = "decided"; t.decision = "reachable_again"; t.by = "Tallyhound"; t.decidedAt = new Date(S.now); }
       if (t.snoozedUntil && t.snoozedUntil <= S.now) { delete t.snoozedUntil; t.reopenedAt = new Date(S.now); t.escalatedAt = null; (S.barks || []).forEach((b) => { if (b.status === "queued") b.taskIds = b.taskIds.filter((x) => x !== t.id); }); barkQueue(t, false); } });
     S.engs.forEach((e) => { if (e.next && e.next <= S.now) step(e); });
-    S.msgs.forEach((m) => { if (m.status === "approved" && m.sendAt && m.sendAt <= S.now) { const e = eng(m.engId), c = e && client(e.clientId); if (!e || e.takeover || ["closed", "opted_out", "paused"].includes(e.status) || (m.channel === "text" && c.textConsent !== "given")) { m.status = "discarded"; m.note = "No longer needed when sending hours began"; } else if (!allowedC(S.now, c)) m.sendAt = nextAllowedC(S.now, c); else { m.status = "delivered"; m.at = new Date(S.now); e.lastOut = new Date(S.now); } }
+    S.msgs.forEach((m) => { if (m.status === "approved" && m.sendAt && m.sendAt <= S.now) { const e = eng(m.engId), c = e && client(e.clientId); if (!e || e.takeover || ["closed", "opted_out", "paused"].includes(e.status) || (m.channel === "text" && c.textConsent !== "given")) { m.status = "discarded"; m.note = "No longer needed when sending hours began"; } else if (LETTERS() && !letterCheck(m.id)) { /* thrown away; a fresh one follows */ } else if (!allowedC(S.now, c)) m.sendAt = nextAllowedC(S.now, c); else { m.status = "delivered"; m.at = new Date(S.now); e.lastOut = new Date(S.now); } }
       if (m.status === "approval" && S.now - m.at > S.firm.hound.slaHours * HOUR) { const e = eng(m.engId); if (e) alertx(e, "medium", "approval_wait", "A message to " + client(e.clientId).first + " " + client(e.clientId).last + " has waited over " + S.firm.hound.slaHours + " hours for approval. Nothing is sent until someone approves it.", "apw" + m.id); } });
     S.engs.forEach((e) => { const k = e.checkin; if (!k || k.doneAt || !k.afterOptIn || !k.pending || e.status !== "in_progress") return; const c = client(e.clientId); if (allowedC(S.now, c) && !e.takeover) { k.pending = null; k.sentAt = new Date(S.now); if (c.textConsent === "given") send(e, "M28", {}, "text"); } });
     S.engs.forEach((e) => { const k = e.checkin; if (!k || k.doneAt || e.status !== "not_started") return; const c = client(e.clientId);
@@ -944,6 +1131,7 @@
   function setStaffHours(start, end) { if (!may("owner")) return "Only an owner can change this"; start = Math.round(+start); end = Math.round(+end); if (!(start >= 0 && end <= 24 && start < end)) return "Choose a start before the end"; S.firm.staffHours = { start, end }; audit("firm.staff_hours", start + ":00 to " + end + ":00"); return null; }
   function addTask(t) { const x = Object.assign({ id: id("t"), at: new Date(S.now), status: "open" }, t); S.tasks.push(x); barkQueue(x, false); return x; }
   function afterAccept(e, c) {
+    if (LETTERS()) { e.illeg = 0; if (checkComplete(e)) { finished(e); return; } if (e.status === "not_started") return; restartRun(e); return; }
     e.step = 0; e.illeg = 0;
     if (checkComplete(e)) { finished(e); return; }
     if (e.status === "not_started") { send(e, "M27", {}); return; }
@@ -964,8 +1152,14 @@
     if (!e) { d.state = "tray"; S.tray.push({ id: id("y"), docId: d.id, from: spec.from || "(615) 555-0199", at: new Date(S.now), channel: channel || "text" }); audit("inbound.unmatched", "Document from an unknown sender", "Tallyhound"); return d; }
     if (e.status === "closed") { check(d); d.state = "in_review"; d.reasons.push("Arrived after this file was closed."); addTask({ kind: "document", reason: "Arrived after close", engId: e.id, docId: d.id }); if (!(opt && opt.parent)) send(e, "M12", {}); timeline(e, "Document arrived after the file was closed"); return d; }
     e.lastIn = new Date(S.now); unstickOnInbound(e);
-    check(d); decide(d, e, c);
-    if (d.master && d.state === "accepted" && !d.deliveredAt) d.deliveredAt = new Date(S.now);   // accepted: the original is already with the firm and only needs its final name
+    const was = viaPage; viaPage = LETTERS() && (channel === "portal" || channel === "staff");
+    try { check(d); if (confirmNeeded(d.form)) d.unconfirmed = true; decide(d, e, c); } finally { viaPage = was; }
+    if (d.unconfirmed) { if (["accepted", "rejected", "incomplete"].includes(d.state) && !S.tasks.some((t) => t.status === "open" && t.docId === d.id)) { d.sniff = { state: d.state, finding: (d.findings || [])[0] || null }; addTask({ kind: "document", reason: "Confirm the sniff result", engId: e.id, docId: d.id, confirm: true }); } else delete d.unconfirmed; }
+    if (LETTERS()) { const it = (d.itemId && S.items.find((i) => i.id === d.itemId)) || itemsOf(e.id).find((i) => i.form === d.form && ["expected", "requested", "partial"].includes(i.state));
+      if (it && d.state === "rejected") it.fixYear = (d.findings || []).includes("wrong_year") ? d.year : null;
+      if (it && d.state === "rejected") it.fixNote = (d.findings || []).includes("wrong_year") ? ["the copy you sent was for " + d.year, "la copia que envió era de " + d.year] : ["the copy you sent could not be read", "la copia que envió no se podía leer"]; else if (it && d.state === "accepted") { delete it.fixNote; delete it.fixYear; }
+      if (d.state === "rejected" || d.state === "incomplete") restartRun(e); }
+    if (d.master && d.state === "accepted" && !d.deliveredAt && !d.unconfirmed) d.deliveredAt = new Date(S.now);   // accepted: the original is already with the firm and only needs its final name
     const mm = S.msgs.find((m) => m.docId === d.id); if (mm) mm.actions = [d.form + "|" + d.state];
     e.hours = (e.hours || []).concat([S.now.getHours()]).slice(-12);
     hlog(e, "read", c.first + " sent a " + (FORMS[d.form] || FORMS.OTHER).plain + " by " + d.channel, (d.reasons || []).join(" "), d.read ? "Claude" : "Rules");
@@ -1215,6 +1409,11 @@
     m.v2 = { intent: v.intent, itemId: it ? it.id : null, person: v.person || null, date: v.intent === "send_after_date" ? v.date : null, change: v.change || null, by: v.by };
     if (v.intent === "someone_else_has_it") {
       const who = v.person || "other", sp = who === "spouse" ? linked(c) : null, se = sp ? engOf(sp.id) : null, reach = sp && (sp.textConsent === "given" || (sp.email && sp.emailOk));
+      if (it && sp && se && reach && !["closed", "opted_out", "paused"].includes(se.status) && LETTERS() && S.firm.hound.oneClick) {
+        // The pilot: nothing moves until a person clicks (docs/V2.md, the reply table).
+        stepTask(e, c, m, { type: "ask_spouse", itemId: it.id, spouseId: sp.id }, c.first + " says " + sp.first + " has the " + name(it)); it.ownerHint = "spouse";
+        m.line = "Understood: " + sp.first + " has the " + name(it) + ". Suggested: ask " + sp.first + " for it. Waiting for you."; return v.intent;
+      }
       if (it && sp && se && reach && !["closed", "opted_out", "paused"].includes(se.status)) {
         it.engId = se.id; it.state = "expected"; it.ownerHint = "spouse"; it.movedFrom = c.id; delete it.laterUntil;
         timeline(e, "Moved to " + sp.first + "'s list: " + name(it) + " (" + c.first + " says " + sp.first + " has it)"); timeline(se, "Added from " + c.first + "'s list: " + name(it));
@@ -1252,7 +1451,11 @@
         m.line = "Understood: says it was already sent. Found it under " + (from ? name(from) : "another item") + " and moved it here. The reminder is cancelled."; m.found = { docId: other.id, where: "another item", moved: true };
         send(e, "M35Y", {}); e.step = 0; if (checkComplete(e)) finished(e); else next(); return v.intent;
       }
-      m.line = "Understood: says it was already sent. Nothing matching arrived in the last " + ALREADY_SENT_LOOKBACK_DAYS + " days, so it was asked for again with the upload page."; m.found = null;
+      m.found = null;
+      // "Sent", and nothing arrived: the link goes again, once. A second time is a question for a person (docs/V2.md, the reply table).
+      if (LETTERS() && (e.resent || 0) >= 1) { addTask({ kind: "question", reason: "Says it was already sent", category: "other", engId: e.id, itemId: it ? it.id : null, msgId: m.id, summary: c.first + " says again that " + (it ? "the " + name(it) : "a document") + " was sent. Nothing has arrived" }); m.line = "Understood: says again it was already sent. Nothing has arrived, so it is passed to you."; setStuck(e, "question_waiting"); return v.intent; }
+      e.resent = (e.resent || 0) + 1;
+      m.line = "Understood: says it was already sent. Nothing matching arrived in the last " + ALREADY_SENT_LOOKBACK_DAYS + " days, so it was asked for again with the upload page.";
       linkFresh(c); send(e, "M35R", { item: it || { form: "OTHER", custom: c.lang === "es" ? "documento" : "document" } }); next(); return v.intent;
     }
     if (v.intent === "life_change") {
@@ -1263,6 +1466,11 @@
       hlog(e, "decide", "Suggested a checklist change: " + ch.kind + " " + F.plain, "A reply never changes a checklist. A person accepts or dismisses it in the review queue", v.by);
       send(e, "M36", {}); next(); return v.intent;
     }
+    if (v.intent === "send_after_date" && LETTERS() && S.firm.hound.oneClick) {
+      const until = new Date(v.date.getFullYear(), v.date.getMonth(), v.date.getDate() + 1);
+      stepTask(e, c, m, { type: "hold", itemId: it ? it.id : null, until }, c.first + " will send " + (it ? "the " + name(it) : "the documents") + " after " + dateWords(v.date, "en"));
+      m.line = "Understood: will send " + (it ? "the " + name(it) + " " : "") + "after " + dateWords(v.date, "en") + ". Suggested: pause until " + dateWords(until, "en") + ". Waiting for you."; return v.intent;
+    }
     if (v.intent === "send_after_date") {
       // CNV-1: "after the 15th" means the 16th at the earliest. The hold is on the record, with who caused it.
       if (it) { it.laterUntil = new Date(v.date.getFullYear(), v.date.getMonth(), v.date.getDate() + 1); it.state = "expected"; timeline(e, "Reminders for the " + name(it) + " wait until " + dateWords(it.laterUntil, "en") + ": the client named a day", c.first); }
@@ -1271,6 +1479,84 @@
     }
     return null;
   }
+  /* A suggested step from a reply, for one click (docs/V2.md, the reply table). During the pilot Tallyhound proposes and a person
+     decides: pause a document until the day the client named, or ask the linked spouse. Nothing changes until the click. */
+  function stepTask(e, c, m, step, summary) { return addTask({ kind: "step", reason: "A suggested step", engId: e.id, itemId: step.itemId || null, msgId: m ? m.id : null, step, summary }); }
+  function applyStep(t, e, c) {
+    const st = t.step || {}, its = st.itemId ? itemsOf(e.id).filter((i) => i.id === st.itemId && OPEN.includes(i.state)) : letterItems(e);
+    if (st.type === "hold") {
+      const until = new Date(st.until); if (!(until > S.now)) return "That day has passed. Dismiss this, or set a hold on the client's Plan tab"; if (!its.length) return "That document is no longer being asked for";
+      its.forEach((i) => { i.laterUntil = until; i.state = "expected"; timeline(e, "Reminders for the " + itemTitle(i, "en") + " wait until " + dateWords(until, "en") + ": the client named a day", S.user.name); });
+      if (e.status === "in_progress") e.next = nextMorning(S.now); return null;
+    }
+    if (st.type === "ask_spouse") {
+      const it = its[0], sp = client(st.spouseId), se = sp && engOf(sp.id); if (!it || !sp || !se || ["closed", "opted_out", "paused"].includes(se.status)) return "That is no longer possible. Dismiss this and decide by hand";
+      it.engId = se.id; it.state = "expected"; it.ownerHint = "spouse"; it.movedFrom = c.id; delete it.laterUntil;
+      timeline(e, "Moved to " + sp.first + "'s list: " + itemTitle(it, "en") + " (" + c.first + " says " + sp.first + " has it)", S.user.name); timeline(se, "Added from " + c.first + "'s list: " + itemTitle(it, "en"), S.user.name);
+      if (se.status === "complete") { se.status = "in_progress"; se.completedAt = null; } if (se.status === "stuck") unstick(se); if (se.status === "in_progress") letterSoon(se);
+      if (checkComplete(e)) finished(e); return null;
+    }
+    return "Nothing to apply";
+  }
+
+  /* The mirror (TH-NTR-2, 4, 6, 7). What the mail layer should hold for one engagement: one project, and one task per document owed
+     by the client. Tallyhound is the record; the layer's list is a copy, and this is what the copy is repaired to. Only names go:
+     the client's name and email address, the form and who issues it. Never an amount, an identifier or anything from a document. */
+  const MIRROR_STATUS = ["Open", "Completed", "Done", "On hold", "Canceled"];
+  function mirrorWant(eid) {
+    const e = eng(eid), c = e && client(e.clientId); if (!e || !c || !LETTERS() || S.firm.mail !== "mailbox" || !e.startedAt || e.purged) return null;
+    const live = e.status === "in_progress" && !halted() && !e.takeover, owner = senderOf(c) || (e.mirror && e.mirror.owner) || null; if (!owner) return null;
+    const tasks = S.items.filter((i) => i.engId === e.id && (i.state !== "removed" || (e.mirror && e.mirror.tasks && e.mirror.tasks[i.id]))).map((i) => {
+      const d = i.docId ? S.docs.find((x) => x.id === i.docId) : null; let status, note = "";
+      if (i.state === "removed") { status = "Canceled"; note = "Removed from the checklist"; }
+      else if (i.state === "waived") { status = "Canceled"; note = WAIVE_REASONS[i.waiveReason] || "Not needed this year"; }
+      else if (i.state === "received") { status = d && d.unconfirmed ? "Completed" : "Done"; note = status === "Done" ? "Passed the sniff test" : "Arrived. Waiting for a person to confirm"; }
+      else if (i.state === "in_review") { status = "Completed"; note = "Arrived. Waiting for a person"; }
+      else if (i.state === "says_none") { status = "On hold"; note = "The client says they do not have it"; }
+      else if (heldUntil(i, e)) { status = "On hold"; note = "Held until " + dateWords(heldUntil(i, e), "en"); }
+      else if (!live) { status = "On hold"; note = e.status === "stuck" ? "Waiting on the firm" : e.status === "paused" ? "Paused" : "Not being fetched right now"; }
+      else status = "Open";
+      return { key: i.id, title: itemTitle(i, "en"), status, note };
+    });
+    return { key: e.id, owner, name: safeTitle(c.last + ", " + c.first + " " + e.year), email: c.email || "", closed: ["complete", "closed"].includes(e.status), due: e.next && live ? dayKey(e.next) : null, tasks };
+  }
+
+  /* The pilot's human check (docs/V2.md section 6). The sniff test runs and acts as always, and every document it decided also
+     goes to the review queue with the result filled in, for a person to confirm. How often the person agrees is counted by form.
+     Once a form has 200 confirmed documents with 98% agreement, documents of that form that pass stop going to the queue. */
+  const CONFIRM_MIN_DOCS = 200, CONFIRM_MIN_AGREE = 0.98;
+  function agreement(form) { const a = (S.firm.agree || {})[form] || { n: 0, ok: 0 }; return { n: a.n, ok: a.ok, rate: a.n ? a.ok / a.n : null, auto: a.n >= CONFIRM_MIN_DOCS && a.ok / a.n >= CONFIRM_MIN_AGREE }; }
+  const confirmNeeded = (form) => S.firm.confirmAll === true && !agreement(form).auto;
+  function agreeNote(d, yes) { if (!d.unconfirmed) return; const A = (S.firm.agree = S.firm.agree || {}), a = (A[d.form] = A[d.form] || { n: 0, ok: 0 }); a.n++; if (yes) a.ok++; delete d.unconfirmed; d.confirmedBy = S.user.name; d.confirmedAt = new Date(S.now); }
+  function setConfirmAll(on) { if (!may("owner")) return "Only an owner can change this"; S.firm.confirmAll = on === true; audit("settings.confirm_all", on === true ? "A person confirms every document" : "Documents that pass the sniff test are accepted without a person"); return null; }
+  /** What the upload page says about one document the client just sent: a fixed sentence, never the document, never a figure (TH-UPL-4). Null while it is still being read. */
+  function uploadResult(d, lang) {
+    const es = lang === "es", e = d.engId ? eng(d.engId) : null, it = d.itemId ? S.items.find((i) => i.id === d.itemId) : null, F = FORMS[d.form] || FORMS.OTHER, what = it ? itemTitle(it, lang) : d.form === "OTHER" ? (es ? "ese documento" : "that document") : formDisplay(d.form) + (d.payer ? (es ? " de " : " from ") + safeTitle(d.payer) : "");
+    if (d.state === "accepted") return { ok: true, text: (es ? "Recibido: " : "Got it: ") + what + "." };
+    if (d.state === "duplicate") return { ok: true, text: es ? "Ya tenemos ese. No hace falta nada más." : "We already have that one. Nothing more is needed for it." };
+    if (d.state === "in_review" || d.state === "tray") return { ok: true, text: es ? "Recibido. " + S.firm.name + " lo va a revisar." : "Got it. " + S.firm.name + " will take a look at this one." };
+    if (d.state === "incomplete") { const t = missText((it && it.missing) || [], es ? "es" : "en", d.form); return { ok: false, text: es ? "Recibimos su " + what + ", pero " + t.missing + ". Envíe " + t.fix + "." : "We got your " + what + ", but " + t.missing + ". Please send " + t.fix + "." }; }
+    if (d.state === "rejected" && (d.findings || []).includes("wrong_year")) return { ok: false, text: es ? "Ese es de " + d.year + ". Necesitamos el de " + (e ? e.year : "") + "." : "That one is for " + d.year + ". We need the " + (e ? e.year : "") + " version." + (usualIssue(d.form, "en") ? " " + usualIssue(d.form, "en") : "") };
+    if (d.state === "rejected") return { ok: false, text: es ? "No podemos leer parte de ese. Tome la foto de nuevo, plana, con buena luz y con las cuatro esquinas visibles." : "We can't read part of that one. Please take the photo again, flat, in good light, with all four corners showing." };
+    return ["stored", "classified"].includes(d.state) ? null : { ok: true, text: es ? "Recibido." : "Got it." };
+  }
+  /** TH-UPL: "I'll send this later" from the upload page does what the same email reply does. */
+  function portalLater(iid, day) {
+    const it = S.items.find((x) => x.id === iid), e = it && eng(it.engId), c = e && client(e.clientId); if (!it || !e || !["expected", "requested", "partial"].includes(it.state)) return null;
+    const mm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(day || "")), named = mm ? new Date(+mm[1], +mm[2] - 1, +mm[3]) : null, cap = new Date(S.now.getTime() + 30 * DAY), until = named && named > S.now ? new Date(Math.min(+named, +cap)) : new Date(S.now.getTime() + 5 * DAY);
+    const m = { id: id("m"), engId: e.id, dir: "in", kind: "client", body: "(Upload page) I'll send my " + itemTitle(it, "en") + " later", channel: "portal", at: new Date(S.now), intent: "will_send_later" }; S.msgs.push(m); e.lastIn = new Date(S.now); unstickOnInbound(e);
+    if (S.firm.hound.oneClick) { stepTask(e, c, m, { type: "hold", itemId: it.id, until }, c.first + " will send the " + itemTitle(it, "en") + " later"); m.line = "Understood: will send the " + itemTitle(it, "en") + " later. Suggested: pause until " + dateWords(until, "en") + ". Waiting for you."; }
+    else { it.laterUntil = until; it.state = "expected"; timeline(e, "Reminders for the " + itemTitle(it, "en") + " wait until " + dateWords(until, "en") + ": the client said so on the upload page", c.first); }
+    restartRun(e); return m;
+  }
+  /** TH-UPL-5, the fallback: a client emailed a document as an attachment and the mail layer cannot hand it over. A person forwards it or adds it. */
+  function attachmentWaiting(cid, n) { const c = client(cid), e = c && engOf(cid); if (!e) return null; if (S.tasks.some((t) => t.status === "open" && t.engId === e.id && t.reason === "Emailed an attachment")) return null; e.lastIn = new Date(S.now);
+    return addTask({ kind: "question", reason: "Emailed an attachment", category: "other", engId: e.id, summary: c.first + " replied with " + (n > 1 ? n + " files" : "a file") + " attached. It is in your mailbox. Forward that email to " + (S.firm.email || "your Tallyhound address") + ", or add the file on " + c.first + "'s page" }); }
+  /** TH-EML-8: a letter came back. The address is no longer written to, and a person is told there is no way left to reach the client. */
+  function emailBounced(cid) { const c = client(cid), e = c && engOf(cid); if (!c || c.emailOk === false) return null; c.emailOk = false; c.bouncedAt = new Date(S.now); audit("email.bounced", c.first + " " + c.last, "Tallyhound"); if (e) { timeline(e, "A letter to " + c.first + " came back: the address did not accept it"); if (!channelFor(c, e) && !["complete", "closed", "not_started", "paused"].includes(e.status)) setStuck(e, "not_delivering"); } return true; }
+  /** An emailed reply to a letter (TH-EML-9). The same reading as any reply; then the reminders start over, because the client is there. */
+  function inboundReply(cid, text, ai, from) { const c = cid ? client(cid) : null, e = c ? engOf(c.id) : null, r = inboundText(cid, text, ai, from); if (e && r !== "stop") restartRun(e); return r; }
+
   /* The understood panel (TH-CNV-1 to 3). What Tallyhound made of a client's message, for staff, beside the message. Every word is
      a fixed string filled with checked values: never the model's own text. It is worked out from what the engine recorded on the
      message, so the same case always reads the same. Shape version 1. Never shown to a client. */
@@ -1374,13 +1660,17 @@
   function inboundText(cid, text, ai, from) {
     const c = cid ? client(cid) : null, e = c ? engOf(c.id) : null;
     text = scrubIn(text, e);
-    if (!e) { S.tray.push({ id: id("y"), text, from: from || "(615) 555-0199", at: new Date(S.now), channel: "text" }); return "unknown"; }   // the placeholder is the demo's; the pipeline always gives the real sender
+    const EM = LETTERS(), CH = EM ? "email" : "text";
+    if (!e) { S.tray.push({ id: id("y"), text, from: from || "(615) 555-0199", at: new Date(S.now), channel: CH }); return "unknown"; }
+    // TH-EML-7: in an email-first firm a reply that asks to stop is an unsubscribe. It wins over everything else in the message.
+    if (EM && (OPTOUT.test(text) || /\bunsubscribe\b|\bstop (emailing|sending|these)\b|\bremove me\b/i.test(text))) { S.msgs.push({ id: id("m"), engId: e.id, dir: "in", kind: "client", body: text, channel: CH, at: new Date(S.now), intent: "stop", understood: "Asked for no more emails", line: "Understood: asked for no more emails. Every letter to this address has stopped." }); e.lastIn = new Date(S.now); stopEmail(c.id, "reply"); return "stop"; }   // the placeholder is the demo's; the pipeline always gives the real sender
     let k = ai && KLABEL[ai.intent] && !V2.includes(ai.intent) ? ai.intent : ai && V2.includes(ai.intent) && KLABEL[ai.legacy_intent] && !V2.includes(ai.legacy_intent) ? ai.legacy_intent : intent(text);
     if (OPTOUT.test(text)) k = "stop";
-    meter("segIn", segs(text)); if (ai && ai.intent) meter("textRead");
-    if (!access().ok && !["stop", "start", "help"].includes(k)) { S.msgs.push({ id: id("m"), engId: e.id, dir: "in", kind: "client", body: text, channel: "text", at: new Date(S.now), intent: k, understood: "Arrived while the firm was not collecting" }); e.lastIn = new Date(S.now); awayReply(e, c); return "away"; }
+    if (EM && (k === "start" || k === "help" || k === "yes" || k === "no")) k = k === "help" ? "question" : "other_update";   // texting keywords mean nothing in an email
+    if (!EM) meter("segIn", segs(text)); if (ai && ai.intent) meter("textRead");
+    if (!access().ok && !["stop", "start", "help"].includes(k)) { S.msgs.push({ id: id("m"), engId: e.id, dir: "in", kind: "client", body: text, channel: CH, at: new Date(S.now), intent: k, understood: "Arrived while the firm was not collecting" }); e.lastIn = new Date(S.now); awayReply(e, c); return "away"; }
     const cl = classify(text), scope = ai && SCOPE[ai.scope] ? ai.scope : cl.scope, senti = ai && ai.sentiment ? ai.sentiment : cl.sentiment, model = ai && ai.intent ? "Claude" : "Rules";
-    const m = { id: id("m"), engId: e.id, dir: "in", kind: "client", body: text, channel: "text", at: new Date(S.now), intent: k, ai: !!(ai && ai.intent), aiNote: ai && ai.summary, scope, sentiment: senti }; S.msgs.push(m);
+    const m = { id: id("m"), engId: e.id, dir: "in", kind: "client", body: text, channel: CH, at: new Date(S.now), intent: k, ai: !!(ai && ai.intent), aiNote: ai && ai.summary, scope, sentiment: senti }; S.msgs.push(m);
     const v2mode = S.firm.hound.replyV2 === "on" ? "on" : "shadow", v2 = ["stop", "start", "help"].includes(k) ? null : replyV2(text, ai, e);
     if (v2 && v2.intent !== "will_send_later" && v2mode !== "on") { m.shadow = { intent: v2.intent, low: !!v2.low, by: v2.by }; hlog(e, "read", "Shadow: the new reply reading would have understood this as \u201c" + KLABEL[v2.intent].toLowerCase() + "\u201d" + (v2.low ? ", not sure" : ""), "Recorded only. The reply was handled the old way", v2.by); }
     if (v2 && v2mode === "on" && v2.intent === "not_mine" && !v2.low) {
@@ -1392,7 +1682,7 @@
       alertx(e, "high", "not_mine", "A reply on " + c.first + " " + c.last + "'s conversation says the messages are not theirs. Automatic messages have stopped. Check the number and the email address.", "nm" + m.id);
       return "not_mine";
     }
-    if (k !== "stop" && k !== "start" && k !== "help" && WRONGNO.test(text)) {
+    if (!EM && k !== "stop" && k !== "start" && k !== "help" && WRONGNO.test(text)) {
       m.understood = "Says this is the wrong number"; e.lastIn = new Date(S.now); c.mobileBad = true;
       if (c.textConsent === "given") { c.textConsent = "none"; c.consentLog.push({ at: new Date(S.now), what: "Texting stopped: the person at this number says it is the wrong number", channel: "text" }); }
       hlog(e, "guardrail", "Stopped texting " + c.first + "'s number", "The reply says it is the wrong number. Nothing more is sent to it until someone checks the number.");
@@ -1435,7 +1725,8 @@
       if (k === "yes") { q.add.forEach((a) => S.items.push({ id: id("i"), engId: e.id, form: a[0], payer: a[1], state: "expected", source: "question", isNew: true })); timeline(e, "Answered YES: " + q.en.replace("{year}", e.year) + " Items added."); }
       e.qIdx++; e.qAsked = null; e.lastAutoDay = null; step(e); return k;
     }
-    const cur = target || itemsOf(e.id).find((i) => i.state === "requested" || i.state === "partial");
+    // A letter names several documents at once, so "it" means a document only when one is open or the reply names one.
+    const cur = target || (EM && letterItems(e).length !== 1 ? null : itemsOf(e.id).find((i) => i.state === "requested" || i.state === "partial"));
     if (v2 && v2mode === "on" && !e.takeover) {
       if (v2.low) { k = "question"; m.understood = "Not sure what this means"; m.line = "Not sure what this means (" + KLABEL[v2.intent].toLowerCase() + "?). Passed to you."; }   // TH-RPL-4
       else if (v2.intent === "will_send_later") k = "will_send_later";
@@ -1459,6 +1750,7 @@
       const nx = nextItem(e); if (nx) { nx.state = "requested"; send(e, "M19", { item: nx }); e.step = 1; e.next = nextAllowed(new Date(S.now.getTime() + 2 * DAY)); } else { send(e, "M19X", {}); setStuck(e, "client_says_none"); }
       return k;
     }
+    if (k === "will_send_later" && EM && S.firm.hound.oneClick) { const until = new Date(S.now.getTime() + ((ai && +ai.later_days) || 5) * DAY); stepTask(e, c, m, { type: "hold", itemId: cur ? cur.id : null, until }, c.first + " says " + (cur ? "the " + itemTitle(cur, "en") : "the documents") + " will come later"); m.line = "Understood: will send " + (cur ? "the " + itemTitle(cur, "en") : "them") + " later. Suggested: pause until " + dateWords(until, "en") + ". Waiting for you."; return k; }
     if (k === "will_send_later" && !cur) { send(e, "M20", {}); return k; }
     if (k === "will_send_later" && cur) { cur.laterUntil = new Date(S.now.getTime() + ((ai && +ai.later_days) || 5) * DAY); cur.state = "expected"; send(e, "M20", {}); e.step = 0; e.next = nextAllowed(new Date(S.now.getTime() + DAY)); return k; }
     if (k === "thanks") return k;
@@ -1511,6 +1803,7 @@
     if (ai && Array.isArray(ai.items)) ai.items.forEach((x) => { const it = S.items.find((i) => i.id === x.item_id && i.engId === e.id && ["expected", "requested", "partial"].includes(i.state)); if (!it) return; if (x.status === "later") later.push([it, +x.days || 7]); if (x.status === "none") none.push(it); });
     else { const its = formsIn(body, e); if (/later|next week|coming|soon|waiting|haven't (got|received)|not yet/i.test(body)) its.forEach((it) => later.push([it, 7])); else if (/don'?t have|do not have|no longer|closed|didn'?t get/i.test(body)) its.forEach((it) => none.push(it)); }
     question = ai ? !!ai.question : /\?/.test(body) && /(should|can i|do i|deduct|owe)/i.test(body);
+    if (LETTERS() && S.firm.hound.oneClick) { later.forEach(([it, days]) => stepTask(e, c, m, { type: "hold", itemId: it.id, until: new Date(S.now.getTime() + days * DAY) }, c.first + " says the " + itemTitle(it, "en") + " is coming later")); later.length = 0; }   // the pilot: a person clicks
     later.forEach(([it, days]) => { it.laterUntil = new Date(S.now.getTime() + days * DAY); if (it.state === "requested") it.state = "expected"; timeline(e, "Client says " + FORMS[it.form].plain + " is coming later (email)", c.first); });
     none.forEach((it) => { it.state = "says_none"; addTask({ kind: "says_none", reason: "Client says none", engId: e.id, itemId: it.id, msgId: m.id }); });
     if (question) { addTask({ kind: "question", reason: "Question", engId: e.id, msgId: m.id }); }
@@ -1536,12 +1829,14 @@
       none.forEach((it) => parts.push("Noted that you don't have the " + FORMS[it.form].plain + ". " + ((S.users.find((u) => u.id === c.preparer) || {}).first || "Your preparer") + " will confirm."));
       if (question) parts.push("We passed your question to " + ((S.users.find((u) => u.id === c.preparer) || {}).first || "your preparer") + ", who will reply.");
     }
+    // An email-first firm points to the upload page for next time (TH-UPL-5).
+    if (LETTERS() && !via && docs.length && S.firm.linkBase) parts.push(lang === "es" ? "La próxima vez, esta página es la forma más rápida de enviar un documento: " + linkFor(c, "u", e) : "Next time, this page is the quickest way to send a document: " + linkFor(c, "u", e));
     const open = openItems(e.id).filter((i) => ["expected", "requested", "partial"].includes(i.state) && !later.some((l) => l[0] === i));
     if (checkComplete(e)) parts.push(lang === "es" ? "Eso es todo lo que necesitamos para su declaración de " + e.year + "." : "That's everything we need for your " + e.year + " return.");
     else if (open.length) parts.push((lang === "es" ? "Aún necesitamos: " : "Still needed: ") + open.map((i) => (lang === "es" ? FORMS[i.form].es : FORMS[i.form].plain) + (i.payer ? (lang === "es" ? " de " : " from ") + i.payer : "")).join(", ") + ".");
     let summary = parts.join(" ");
     if (via === "text" && summary.length > 290) { const bad = docs.length - got.length; summary = lang === "es" ? "Gracias, " + c.first + ". Recibimos " + got.length + " de " + docs.length + " documentos." + (bad ? " " + bad + " necesitan otra revisión; le escribiremos sobre cada uno." : "") : "Thanks, " + c.first + ". We received " + got.length + " of " + docs.length + " documents." + (bad ? " " + bad + " need another look, and we will follow up on each one." : ""); }
-    send(e, "M23", { summary }, via ? undefined : "email");
+    if (!(LETTERS() && via === "portal")) send(e, "M23", { summary }, via ? undefined : "email");
     m.actions = docs.map((d) => d.form + "|" + d.state).concat(later.map((l) => l[0].form + "|later")).concat(none.map((i) => i.form + "|none")).concat(question ? ["|question"] : []);
     m.understood = (docs.length ? docs.length + " attachment" + (docs.length > 1 ? "s" : "") : "No attachments") + (later.length ? ", " + later.length + " coming later" : "") + (none.length ? ", " + none.length + " not available" : "") + (question ? ", a question" : "");
     timeline(e, "Email with " + docs.length + " attachment" + (docs.length === 1 ? "" : "s") + " read and answered in one reply", c.first);
@@ -1575,6 +1870,8 @@
   function handback(eid, note) { const e = eng(eid), c = client(e.clientId); e.takeover = null; if (note) remember(e, note, S.user.name); S.tasks.filter((t) => t.engId === e.id && t.kind === "question" && t.status === "open").forEach((t) => { t.status = "decided"; t.decision = "handled"; t.by = S.user.name; t.decidedAt = new Date(S.now); }); if (e.stuck === "question_waiting") unstick(e); e.step = 0; if (["in_progress"].includes(e.status)) e.next = nextAllowed(new Date(S.now.getTime() + HOUR)); timeline(e, "Handed back to the Hound", S.user.name); hlog(e, "decide", "Back on the Hound: resumes in about an hour", note ? "Staff note: " + note : "Staff handed the conversation back", "Rules"); }
   function approveMsg(mid, body) { const m = S.msgs.find((x) => x.id === mid), e = eng(m.engId); const errs = outputCheck(body || m.body, m.channel, { year: e.year }).filter((x) => !(x.startsWith("digit run") && (m.base || "").includes(x.split(" ").pop()))); if (errs.length) return errs.join(", "); const c = client(e.clientId);
     if (m.status !== "approval") return "This draft is no longer waiting";
+    if (LETTERS() && !letterCheck(m.id)) return "The list changed while this was waiting, so it was not sent. A new letter replaces it";
+    if (LETTERS() && sentToday(m.sender || "firm") >= (senderFor(c).cap || Infinity)) { if (body) m.body = body; m.approvedBy = S.user.name; m.status = "approved"; m.sendAt = nextMorning(dayAfter(S.now)); return null; }
     if (m.channel === "text" && c.textConsent !== "given") { m.status = "discarded"; m.note = "Client opted out of texts"; return "This client opted out of texts. The draft was discarded"; }
     if (["closed", "opted_out"].includes(e.status)) { m.status = "discarded"; m.note = "File is " + e.status.replace("_", " "); return "This file is " + e.status.replace("_", " ") + ". The draft was discarded"; }
     if (body) m.body = body; m.approvedBy = S.user.name;
@@ -1641,6 +1938,21 @@
     t.status = "decided"; t.decision = decision; t.by = S.user.name; t.decidedAt = new Date(S.now);
     audit("review." + decision, (c ? c.first + " " + c.last : "") + " " + (t.reason || ""));
     if (e && e.stuck === "review_waiting") unstick(e);
+    if (t.kind === "step" && e) {
+      if (decision === "apply_step") { const r = applyStep(t, e, c); if (r) { t.status = "open"; t.decision = null; t.by = null; t.decidedAt = null; return r; } }
+      else if (decision !== "dismiss_step") { t.status = "open"; t.decision = null; t.by = null; t.decidedAt = null; return "Choose: do it, or dismiss it"; }
+      if (e.stuck === "question_waiting") unstick(e); return null;
+    }
+    if (t.kind === "document" && d && t.confirm) {
+      // The pilot's human check: agree with what the sniff test did, or overrule it. Either way it is counted.
+      const passed = d.sniff && d.sniff.state === "accepted", own = () => { const it0 = d.itemId && S.items.find((i) => i.id === d.itemId); if (it0 && it0.docId === d.id) { it0.docId = null; it0.state = "requested"; } };
+      if (decision === "agree" || (decision === "accept" && passed) || (decision === "discard" && !passed)) {
+        agreeNote(d, true); if (decision === "discard") { t.was = d.state; d.state = "discarded"; }
+        if (d.state === "accepted" && d.master && !d.deliveredAt) d.deliveredAt = new Date(S.now);
+        timeline(e, "Confirmed by a person: " + formDisplay(d.form) + (passed ? " passed the sniff test" : " was asked for again"), S.user.name); if (checkComplete(e)) finished(e); return null;
+      }
+      agreeNote(d, false); if (decision === "reask" || decision === "discard") own();
+    }
     if (t.kind === "document" && d) {
       if (decision === "accept" || decision === "correct") {
         if (decision === "correct" && p) { keepTrace(d, "Corrected"); Object.assign(d, { form: p.form || d.form, year: +p.year || d.year, payer: p.payer || d.payer }); d.versions.push({ v: d.versions.length + 1, by: S.user.name, form: d.form, year: d.year, payer: d.payer }); }
@@ -1981,7 +2293,10 @@
     seq = 0; S.now = opt.now || new Date(); S.firm.createdAt = new Date(S.now); S.firm.taxYear = opt.taxYear || S.firm.taxYear || 2026;
     if (opt.plan && PLANS.some((p) => p[0] === opt.plan)) { S.firm.plan = opt.plan; S.firm.billing = { state: "active", plan: opt.plan, since: new Date(S.now) }; } else { S.firm.plan = "Trial"; S.firm.billing = { state: "trial", plan: null, trialEnds: new Date(S.now.getTime() + TRIAL_DAYS * DAY) }; }
     Object.assign(S.firm, { name: opt.name || "New firm", sender: opt.sender || opt.name || "New firm", phone: opt.phone || "", email: opt.email || "", senderStatus: opt.senderStatus || (opt.plan ? "submitted" : "none"), stopped: false, templates: { en: {}, es: {} } });
-    S.firm.hound.mode = opt.mode || "copilot"; S.firm.hound.replyV2 = opt.replyV2 === "on" ? "on" : "shadow";   // a real firm starts in shadow (docs/REBRAND.md): the new reply reading is recorded, not acted on, until an owner switches it on
+    // Email-first (docs/V2.md): every firm made by the service is a letters firm. Texting stays in the code, switched off.
+    S.firm.letters = opt.letters === true; S.firm.mail = opt.mail === "mailbox" ? "mailbox" : "own"; S.firm.confirmAll = S.firm.letters && opt.confirmAll !== false; delete S.firm.workDays; delete S.firm.mailCap; S.firm.agree = {};
+    if (S.firm.letters) { S.firm.askQuestions = false; S.firm.hound.closingQ = false; S.firm.hound.aiWrite = false; S.firm.hound.voicemail = false; S.firm.hound.oneClick = opt.oneClick !== false; }
+    S.firm.hound.mode = opt.mode || "copilot"; S.firm.hound.replyV2 = opt.replyV2 === "on" || (S.firm.letters && opt.replyV2 !== "shadow") ? "on" : "shadow";   // a real firm starts in shadow (docs/REBRAND.md): the new reply reading is recorded, not acted on, until an owner switches it on
     S.users = (opt.users && opt.users.length ? opt.users : [{ id: "u1", first: "Owner", name: "Owner", role: "owner", email: opt.email || "" }]); S.user = S.users[0];
     return S;
   }
@@ -2248,7 +2563,7 @@
     if (e.status === "complete" && open) { e.status = "in_progress"; e.completedAt = null; e.step = 0; if (!e.next) e.next = nextAllowed(S.now); timeline(e, "Reopened: a document is outstanding again"); }
     else if (["in_progress", "stuck"].includes(e.status) && !open && any) { if (checkComplete(e)) finished(e); }
   }
-  window.TH = { released, panelOf, PANEL, traceOf, TRACE_STEPS, keepTrace, activity, LIFE_SUGGEST, suggestFor, dumpOne, setDuty, cantReach, BARK_TARGETS, BARK_DEFAULT, CALL_OUTCOMES, setHold, askNow, holdOf, heldUntil, releaseOf, usualIssue, USUAL, formDisplay, filedName, SEND_HOUR_MIN_REPLIES, bestHour, SLOW_ITEM_ASKS, memoryWrite, memoryOf, clearMemory, setMemory, keepRemoved, confirmRemoved, addTask, BARK_KINDS, BARK_BATCH_MIN, BARK_SETTLE_MIN, REVIEW_OVERDUE_HOURS, barkRoute, barkDue, barkHeld, barkRead, barkWords, setMyBarks, setBarkRules, setStaffHours, staffHours, V2, WAIVE_REASONS, LASTING, CHANGE_WORDS, LATER_MAX_DAYS, ALREADY_SENT_LOOKBACK_DAYS, replyV2, setSpouse, VOICES, VOICE_TPL, VOICE_FIXED, voiceFor, setVoice, setClientVoice, setSignOff, previewVoice, verified, CADENCE_PRESETS, gapsOf, cadenceFor, setIntensity, setClientIntensity, undiscard, setClosedDays, startMany, deletionEvidence, setCallOk, plans, quoteFor, areaZone, zoneFor, addContact, removeContact, planEnded, setLine, isLandline, RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
+  window.TH = { attachmentWaiting, emailBounced, mirrorWant, MIRROR_STATUS, dayKey, sentToday, restartRun, letterSoon, inboundReply, portalLater, uploadResult, agreement, setConfirmAll, CONFIRM_MIN_DOCS, CONFIRM_MIN_AGREE, LETTERS, isWorkDay, nextMorning, addWorkDays, setWorkDays, letterItems, itemTitle, senderFor, setMailbox, setMailCap, setClientSendMode, letterCheck, linkFind, linkState, rotateLink, revokeLink, seasonLink, MAIL_CAP, LETTER, released, panelOf, PANEL, traceOf, TRACE_STEPS, keepTrace, activity, LIFE_SUGGEST, suggestFor, dumpOne, setDuty, cantReach, BARK_TARGETS, BARK_DEFAULT, CALL_OUTCOMES, setHold, askNow, holdOf, heldUntil, releaseOf, usualIssue, USUAL, formDisplay, filedName, SEND_HOUR_MIN_REPLIES, bestHour, SLOW_ITEM_ASKS, memoryWrite, memoryOf, clearMemory, setMemory, keepRemoved, confirmRemoved, addTask, BARK_KINDS, BARK_BATCH_MIN, BARK_SETTLE_MIN, REVIEW_OVERDUE_HOURS, barkRoute, barkDue, barkHeld, barkRead, barkWords, setMyBarks, setBarkRules, setStaffHours, staffHours, V2, WAIVE_REASONS, LASTING, CHANGE_WORDS, LATER_MAX_DAYS, ALREADY_SENT_LOOKBACK_DAYS, replyV2, setSpouse, VOICES, VOICE_TPL, VOICE_FIXED, voiceFor, setVoice, setClientVoice, setSignOff, previewVoice, verified, CADENCE_PRESETS, gapsOf, cadenceFor, setIntensity, setClientIntensity, undiscard, setClosedDays, startMany, deletionEvidence, setCallOk, plans, quoteFor, areaZone, zoneFor, addContact, removeContact, planEnded, setLine, isLandline, RETURNS, returnType, registerSender, markHeadsUp, masterFirst, setVerified, recordConsent, listForms, FIRMCHECK, scrub, retain, setRetain, retentionSweep, deleteDocsNow, dataMap, strip, hasContent, RETAIN_DEFAULT, RETAIN_LIMIT, skipQuestions, CHECKIN_WAIT_DAYS, segs, meter, usage, canRead, pauseLeft, pauseUsed, trialRoom, TRIAL_CLIENTS, TRIAL_DOCS, PAUSE_MAX_DAYS, FAIR, RATES, inboundUnusable, PLANS, TRIAL_DAYS, billing, access, planFor, choosePlan, pauseSeason, resumeNow, staffDoc, inboundBundle, topicsIn, setCustomEs, needsSpanish, rollForward, rollSeason, history, setupTime, bestCustom, customSuggest, PAYERQ, CHECKQ, checkinPrefill, sendCheckin, checkinPlan, checkinDone, applyCheckin, setZone, zoneOf, tzOff, allowedC, ZONES, ZNAME, addFromPrior, templates, saveTemplate, removeTemplate, applyTemplate, addClient, verdict, pipeline, CHECK_TPL,
     dump, load, blank, setNow, setUser, linkFor, linkLive, LINK_DAYS, consentFromPage, declineTexts, stopEmail, unsubscribeLink, CONSENT_WORDING,
     get S() { return S; }, FORMS, TPL, TPL_USE, QUESTIONS, STUCK, DAY, HOUR, MIN,
     client, eng, engOf, itemsOf, openItems, progress, fill, outputCheck, channelFor, allowed, nextAllowed, live, nextItem,

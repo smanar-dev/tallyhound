@@ -13,13 +13,16 @@ const clean = (v: string) => String(v || "").replace(/[<>]/g, "").replace(/\s+/g
 const newId = (p: string) => p + randomBytes(8).toString("hex");
 const engineUser = (u: { id: string; name: string; email: string; role: Role }) => ({ id: u.id, first: u.name.split(" ")[0] || u.name, name: u.name, role: u.role, email: u.email });
 
-export interface NewFirm { name: string; sender?: string; phone?: string; inbox: string; smsNumber?: string; iana: string; ownerEmail: string; ownerName: string; plan?: string; verified?: boolean }
+export interface NewFirm { name: string; sender?: string; phone?: string; inbox: string; smsNumber?: string; iana: string; ownerEmail: string; ownerName: string; plan?: string; verified?: boolean; letters?: boolean }
 
 // "Larkin & Poe CPAs" -> "larkinpoe". Letters only: a digit run in a link would be stopped by the engine's own message check.
 const LETTERS = "abcdefghijkmnpqrstuvwxyz";
 export const slugOf = (name: string) => name.toLowerCase().replace(/&/g, " and ").replace(/\b(cpas?|llc|llp|pllc|pc|inc|and|the|co|company|associates|group)\b/g, " ").replace(/[^a-z]/g, "").slice(0, 24) || "firm";
 
-export function createFirms({ app, auth, linkHost, store, clock }: { app: App; auth: AuthStore; linkHost?: string; clock?: () => Date; store?: { firmIdByNumber(n: string): Promise<string | null>; setNumber(id: string, n: string | null): Promise<void> } }) {
+// v2 (docs/V2.md): every firm made here is email-first. `letters: false` exists for the tests of the texting code, which is kept
+// switched off for a later release. `mail` says who sends a firm's letters: each preparer's own mailbox through the mail layer,
+// or Tallyhound's own mail service from the firm's Tallyhound address.
+export function createFirms({ app, auth, linkHost, store, clock, letters = true, mail = "own" }: { app: App; auth: AuthStore; linkHost?: string; clock?: () => Date; letters?: boolean; mail?: "mailbox" | "own"; store?: { firmIdByNumber(n: string): Promise<string | null>; setNumber(id: string, n: string | null): Promise<void> } }) {
   const now = clock || (() => new Date());
   async function owners(firmId: string) { return (await auth.usersOfFirm(firmId)).filter((u) => u.role === "owner" && !u.leftAt); }
   return {
@@ -31,7 +34,7 @@ export function createFirms({ app, auth, linkHost, store, clock }: { app: App; a
       const sms = String(o.smsNumber || "").replace(/\D/g, "").slice(-10); if (o.smsNumber && sms.length !== 10) throw new FirmError("The text number must have ten digits");
       if (await auth.userByEmail(ownerEmail)) throw new FirmError("That email address already has an account");
       const firmId = newId("f_"), owner = { id: newId("u_"), name: ownerName, email: ownerEmail, role: "owner" as Role };
-      await app.createFirm(firmId, { name, sender: clean(o.sender || "") || name, phone: clean(o.phone || ""), email: inbox, inbox, smsNumber: sms, iana: o.iana, tz: ZONE_OF[o.iana], plan: o.plan, verified: o.verified === true, users: [engineUser(owner)] });
+      await app.createFirm(firmId, { name, sender: clean(o.sender || "") || name, phone: clean(o.phone || ""), email: inbox, inbox, smsNumber: sms, iana: o.iana, tz: ZONE_OF[o.iana], plan: o.plan, verified: o.verified === true, letters: o.letters === undefined ? letters : o.letters, mail, users: [engineUser(owner)] });
       await auth.createUser({ ...owner, firmId });
       // The firm's public short name. A clash gets a few random letters added.
       let slug = slugOf(name); for (let i = 0; !(await auth.setFirmSlug(firmId, slug)); i++) { if (i > 20) throw new FirmError("Could not find a free short name for the firm"); slug = slugOf(name).slice(0, 20) + Array.from(randomBytes(4), (b) => LETTERS[b % LETTERS.length]).join(""); }

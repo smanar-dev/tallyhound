@@ -14,6 +14,10 @@ import { createFirms } from "./firms.ts";
 import { createInbox, postgresQueue } from "./queue.ts";
 import { handlers } from "./hooks.ts";
 import { pdfCut, prepareOpts } from "./files.ts";
+import { guarded, type MailLayer } from "./maillayer.ts";
+import { createMailboxes, layerKeys, postgresMailboxStore } from "./mailbox.ts";
+import { neeter } from "./integrations/neeter/index.ts";
+import { fakeLayer } from "./integrations/neeter/fake.ts";
 import { s3Bucket } from "./bucket.ts";
 import { kmsKeyring } from "./keys.ts";
 import { createClosure } from "./closure.ts";
@@ -27,7 +31,7 @@ import { createDomains } from "./domain.ts";
 import { postgresSignupStore } from "./signup.ts";
 import { createBilling, postgresBillingStore } from "./billing.ts";
 import { createStorage, postgresStorageStore } from "./storage.ts";
-import { createEngine, wallTime } from "./kit.ts";
+import { createEngine, wallTime, type Engine } from "./kit.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const env = (k: string) => (process.env[k] || "").trim();
@@ -69,7 +73,17 @@ export function runtime() {
   const keysOf = (id: string, secret: string) => (env(id) ? { clientId: env(id)!, clientSecret: need(secret) } : undefined), sk = { google: keysOf("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"), microsoft: keysOf("MICROSOFT_CLIENT_ID", "MICROSOFT_CLIENT_SECRET"), dropbox: keysOf("DROPBOX_APP_KEY", "DROPBOX_APP_SECRET") };
   const storage = sk.google || sk.microsoft || sk.dropbox ? createStorage({ store: postgresStorageStore(pool), secrets: firmSecrets(store, keyring, kitCrypto), ...sk, appUrl, stateSecret: need("TH_LINK_SECRET"), clock, log }) : undefined;
   const voice = env("TWILIO_ACCOUNT_SID") && env("TH_VOICE") === "on" ? twilioVoice({ accountSid: env("TWILIO_ACCOUNT_SID")!, authToken: need("TWILIO_AUTH_TOKEN") }) : undefined;   // T-50: off unless TH_VOICE=on
-  const app = createApp({ store, sms, email, ai, clock, log, files: storage ? storage.files : undefined, voice, cut: pdfCut });
+  // v2: the mail layer (docs/V2.md). TH_MAIL_LAYER=neeter sends each firm's letters from its preparers' own mailboxes; it needs the
+  // layer's address and keys and a Google or Microsoft sign-in app. Left unset, letters go from each firm's Tallyhound address
+  // through Tallyhound's own mail service, which needs none of that. "fake" is a stand-in held in memory, for a trial run on one machine.
+  const layerName = env("TH_MAIL_LAYER") || "", mailboxStore = postgresMailboxStore(pool), secrets0 = firmSecrets(store, keyring, kitCrypto);
+  if (layerName && !["neeter", "fake"].includes(layerName)) throw new Error("TH_MAIL_LAYER must be neeter, fake or unset");
+  if (layerName === "fake" && production) throw new Error("TH_MAIL_LAYER=fake is for a trial run on one machine, not for production");
+  if (layerName && !sk.google && !sk.microsoft) throw new Error("TH_MAIL_LAYER needs a sign-in app: set GOOGLE_CLIENT_ID or MICROSOFT_CLIENT_ID with its secret");
+  const layerRaw: MailLayer | undefined = layerName === "neeter" ? neeter({ baseUrl: need("NEETER_BASE_URL"), partnerKey: need("NEETER_PARTNER_KEY"), keys: layerKeys(mailboxStore, secrets0), clock, log }) : layerName === "fake" ? fakeLayer(clock) : undefined;
+  const mailboxes = layerRaw ? createMailboxes({ store: mailboxStore, secrets: secrets0, layer: guarded(layerRaw), google: sk.google, microsoft: sk.microsoft, appUrl, stateSecret: need("TH_LINK_SECRET"), clock, log }) : undefined;
+  const app = createApp({ store, sms, email, ai, clock, log, files: storage ? storage.files : undefined, voice, cut: pdfCut, layer: mailboxes ? mailboxes.pipeline : undefined });
+  if (mailboxes) mailboxes.onChange(async (firmId, userId, info) => { await app.withFirm(firmId, (T: Engine) => T.setMailbox(userId, info)); });
   if (production && !env("POSTMARK_TOKEN")) throw new Error("Set POSTMARK_TOKEN: without it nobody can be sent a sign-in link");
   const mailer: Mailer & StaffMailer = env("POSTMARK_TOKEN")
     ? { async signInLink(to, url) { await email.send({ from: need("TH_SIGNIN_FROM"), fromName: "Tallyhound", to, subject: "Your Tallyhound sign-in link", body: "Open this link to sign in to Tallyhound. It works once and expires in 15 minutes.\n\n" + url + "\n\nIf you did not ask for this, ignore this email." }); },
@@ -77,7 +91,7 @@ export function runtime() {
         async locked(to, minutes) { await email.send({ from: need("TH_SIGNIN_FROM"), fromName: "Tallyhound", to, subject: "Tallyhound sign-in is locked for " + minutes + " minutes", body: "Someone entered the wrong sign-in code for your Tallyhound account several times, so sign-in is locked for " + minutes + " minutes. Nothing else has changed.\n\nIf that was you, wait and then ask for a new sign-in link. If it was not you, tell your firm's owner: someone may have reached your email." }); } }
     : { async signInLink(to, url) { console.log("\n  Sign-in link for " + to + " (development only, no email service connected):\n  " + url + "\n"); }, async locked(to, minutes) { console.log("  Sign-in locked for " + to + " for " + minutes + " minutes"); }, async staff(to, subject) { console.log("  Staff email not sent (no email service connected): " + subject.replace(/^\S+ \S+ /, "")); } };
   const signIn = createSignIn({ auth, secrets: firmSecrets(store, keyring, kitCrypto), mailer, linkSecret: need("TH_LINK_SECRET"), appUrl, clock });
-  const firms = createFirms({ app, auth, store, clock, linkHost: env("LINK_HOST") || new URL(appUrl).host });
+  const firms = createFirms({ app, auth, store, clock, linkHost: env("LINK_HOST") || new URL(appUrl).host, letters: true, mail: mailboxes ? "mailbox" : "own" });
   const prepare = prepareOpts({ clamav: env("CLAMAV_HOST") ? { host: env("CLAMAV_HOST"), port: +(env("CLAMAV_PORT") || 3310) } : undefined });
   if (production && !env("CLAMAV_HOST")) log("warning_no_virus_scanner");
   // Card billing (T-81). On once STRIPE_SECRET_KEY is set, with the webhook secret and one price id per plan on offer.
@@ -89,7 +103,7 @@ export function runtime() {
   // TH-BRK-10: Tallyhound's own number for texting staff who asked for it. A separate number from every firm's client number.
   const systemSms = twilio && env("TH_SYSTEM_NUMBER") ? { number: env("TH_SYSTEM_NUMBER")!, send: async (to: string, body: string) => { await twilio.send({ from: env("TH_SYSTEM_NUMBER")!, to, body, idempotencyKey: "staff:" + to + ":" + Date.now() }); } } : undefined;
   const hooks = { cleanup, store, inbox, twilioAuthToken: env("TWILIO_AUTH_TOKEN") || undefined, postmarkHook: env("POSTMARK_HOOK_PASSWORD") ? { user: env("POSTMARK_HOOK_USER") || "postmark", pass: env("POSTMARK_HOOK_PASSWORD") } : undefined };
-  return { systemSms, production, appUrl, pool, store, auth, app, signIn, firms, inbox, hooks, prepare, clock, log, root: ROOT, bucket, keyring, sms, email, twilioOn: !!twilio, emailOn: !!env("POSTMARK_TOKEN"), mailer, notify: createNotifier({ appUrl }), ops, lookup, storage, billing, cleanup, voiceOn: !!voice,
+  return { systemSms, production, appUrl, pool, store, auth, app, signIn, firms, inbox, hooks, prepare, clock, log, root: ROOT, bucket, keyring, sms, email, twilioOn: !!twilio, emailOn: !!env("POSTMARK_TOKEN"), mailer, notify: createNotifier({ appUrl }), ops, lookup, storage, billing, cleanup, voiceOn: !!voice, mailboxes, layerHook: layerName === "neeter" ? { secret: need("NEETER_WEBHOOK_SECRET") } : undefined,
     prior: ai ? createPrior({ read: (firmId, prompt, images) => forFirm(firmId, () => ai.json(prompt, { images, tier: "default" })), prompt: () => kitPrompts.priorReturn(), forms: () => createEngine().FORMS }) : undefined,   // T-46
     domains: env("POSTMARK_ACCOUNT_TOKEN") ? createDomains({ app, accountToken: env("POSTMARK_ACCOUNT_TOKEN")!, log }) : undefined,   // T-110
     // Public sign-up (TH_SIGNUP=on) and the price page. New sign-ups go on the second price list when TH_PRICE_TEST=on (T-97).
